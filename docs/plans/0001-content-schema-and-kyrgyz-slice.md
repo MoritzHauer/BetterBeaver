@@ -1,6 +1,6 @@
 # Plan 0001: Content schema and Kyrgyz vertical slice
 
-Status: approved after 5 adversarial review rounds (round-5 verdict: APPROVE conditional on 3 fixes, all applied) · Owner: Moe · Date: 2026-07-03
+Status: approved after 5 adversarial review rounds (round-5 verdict: APPROVE conditional on 3 fixes, all applied) · Owner: Moe · Date: 2026-07-03 · Amended 2026-07-04: validator classes (j)–(l) and two structure rules added from step-2 code-review findings (see storage layout)
 
 ## Purpose
 
@@ -82,7 +82,7 @@ Presentation rules (used by tasks; content never duplicates payload fields):
 |---|---|---|
 | `id` | slug | |
 | `type` | `"recognize"` \| `"recall"` | |
-| `itemIds` | slug[] | each itemId yields exactly one question in the session |
+| `itemIds` | slug[] | non-empty; each itemId yields exactly one question in the session |
 | `instructions` | string, optional | |
 
 Recognize mechanics: one question per item; 3 distractors sampled at random from other same-kind items of the same unit (validator enforces, per recognize task, ≥4 items **of that task's item kind** in the owning unit, and that `gloss`/`definition` display texts are unique per kind within a unit, so distractors can never collide with the correct answer). All `itemIds` of a task must be the same kind and belong to the task's owning unit.
@@ -106,7 +106,7 @@ Recognize mechanics: one question per item; 3 distractors sampled at random from
 - quality ≥ 3: `reps += 1`; `intervalDays` = 1 if `reps` is 1, 6 if `reps` is 2, else `round(previous intervalDays × ease)`; then `ease += 0.1 − (5 − q) × (0.08 + (5 − q) × 0.02)`, floored at 1.3.
 - Expected sequences (step 3's test oracle): grades 4,4,4 from new → intervals 1, 6, 15 with ease staying 2.5; grades 2 then 4 from new → interval 1 (reps 1), then 6 (reps 2), ease unchanged by the 2 and unchanged by the 4.
 
-**Storage layout.** Content is JSON/MD in the repo under `content/<topicId>/`: `topic.json`, `units/*.json`, `items/*.json`, `tasks/*.json`, `notes/*.md`, `resources.json`. A slug matches `/^[a-z0-9]+(-[a-z0-9]+)*$/`; non-Topic ids must additionally start with `<topic.code>-` (e.g. `ky-item-salamatsyzby`, `ky-note-vowel-harmony`). The validator fails on exactly these classes: (a) dangling references (including `taskIds`, `noteIds`, `sourceRef`), (b) bad slug, (c) missing `<code>-` prefix, (d) orphaned or multiply-owned items/tasks/notes, (e) mixed-kind task items, (f) task items not owned by the task's unit, (g) a recognize task whose owning unit has <4 items of the task's kind, (h) duplicate `gloss`/`definition` per kind within a unit, (i) a unit with zero tasks.
+**Storage layout.** Content is JSON/MD in the repo under `content/<topicId>/`: `topic.json`, `units/*.json`, `items/*.json`, `tasks/*.json`, `notes/*.md`, `resources.json`. A slug matches `/^[a-z0-9]+(-[a-z0-9]+)*$/`; non-Topic ids must additionally start with `<topic.code>-` (e.g. `ky-item-salamatsyzby`, `ky-note-vowel-harmony`). The validator fails on exactly these classes: (a) dangling references (including `taskIds`, `noteIds`, `sourceRef`), (b) bad slug, (c) missing `<code>-` prefix, (d) orphaned or multiply-owned items/tasks/notes, (e) mixed-kind task items, (f) task items not owned by the task's unit, (g) a recognize task whose owning unit has <4 items of the task's kind, (h) duplicate `gloss`/`definition` per kind within a unit, (i) a unit with zero tasks, (j) duplicate entity ids — a unit/item/task/resource id or derived note id declared twice (includes duplicate `noteStems`), (k) duplicate entries within one id list (`topic.unitIds`, a unit's `itemIds`/`taskIds`/`noteIds`, a task's `itemIds`), (l) an `unlocksAfterUnitId` cycle (a unit whose unlock chain returns to itself). Two structure rules round this out (added with the 2026-07-04 amendment): a task's `itemIds` must be non-empty (enforced at the schema-shape level: an empty task has no well-defined kind and yields no questions), and every unit must appear in `topic.unitIds` (reported under class (a): a unit absent from the topic's ordered list is unreachable).
 
 ## Tech stack
 
@@ -133,7 +133,7 @@ Content steps are **authored by the orchestrator via the `/author` workflow** (d
 ## Implementation order (steps 4 and 8 are orchestrator-authored content; every other step = one delegable spec)
 
 1. Repo scaffold: pnpm workspace with the four package skeletons (`packages/schema`, `packages/srs`, `packages/engine`, `apps/web` as an empty Vite React app), tsconfig, eslint/prettier, vitest wired for the three pure packages with `passWithNoTests: true`, `pnpm check` script. Done: `pnpm check` passes.
-2. `packages/schema`: zod entities per the field tables, `validateContent` with the signature above + fixture tests only (the disk-loading test over real `content/` arrives in step 4 — `content/` doesn't exist yet and `pnpm check` must stay green after every step). Done: validator catches one seeded fixture per violation class (a)–(i) from the storage-layout list.
+2. `packages/schema`: zod entities per the field tables, `validateContent` with the signature above + fixture tests only (the disk-loading test over real `content/` arrives in step 4 — `content/` doesn't exist yet and `pnpm check` must stay green after every step). Done: validator catches one seeded fixture per violation class (a)–(l) from the storage-layout list.
 3. `packages/srs`: SM-2 state type + scheduling function implementing the pinned semantics and grade-mapping constants. Done: tests assert both pinned expected sequences.
 4. Slice content for unit 1 (orchestrator-authored, see above) + create the disk-loading validation test in `packages/schema` (this test part is delegable). Done: that test green in `pnpm check`.
 5. `packages/engine`: the pinned interfaces, queue/completion/gating/grading functions, and session construction (question building per presentation rules, distractor sampling with injected RNG), with clock- and RNG-injected tests. Done: engine tests green, including the two-unit unlock-gating fixture and the clock-injected test showing an item reviewed today reappearing per schedule.
