@@ -1,0 +1,9 @@
+{
+  "id": "ky-item-letter-o",
+  "kind": "concept",
+  "payload": {
+    "term": "О о",
+    "definition": "Back vowel [o], like 'o' in English 'wrong'."
+  },
+  "sourceRef": "ky-resource-manual"
+}

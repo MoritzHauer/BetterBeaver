@@ -1,0 +1,33 @@
+{
+  "id": "ky-unit-script-survival",
+  "topicId": "kyrgyz",
+  "title": "Script and sound survival",
+  "goal": "Sound out Kyrgyz words written in Cyrillic, with special attention to the letters most likely to mislead.",
+  "itemIds": [
+    "ky-item-letter-a",
+    "ky-item-letter-ye",
+    "ky-item-letter-yo",
+    "ky-item-letter-zhe",
+    "ky-item-letter-i",
+    "ky-item-letter-ka",
+    "ky-item-letter-en",
+    "ky-item-letter-ng",
+    "ky-item-letter-o",
+    "ky-item-letter-oe",
+    "ky-item-letter-er",
+    "ky-item-letter-es",
+    "ky-item-letter-u",
+    "ky-item-letter-ue",
+    "ky-item-letter-ha",
+    "ky-item-letter-y",
+    "ky-item-letter-e",
+    "ky-item-letter-yu",
+    "ky-item-letter-ya"
+  ],
+  "taskIds": [
+    "ky-task-script-vowels",
+    "ky-task-script-kyrgyz-letters",
+    "ky-task-script-consonants"
+  ],
+  "noteIds": ["ky-note-alphabet-map"]
+}

@@ -1,0 +1,9 @@
+{
+  "id": "ky-item-letter-yo",
+  "kind": "concept",
+  "payload": {
+    "term": "Ё ё",
+    "definition": "Vowel [yo], like 'yo' in English 'yoke'."
+  },
+  "sourceRef": "ky-resource-manual"
+}

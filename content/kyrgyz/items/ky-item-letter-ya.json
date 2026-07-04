@@ -1,0 +1,9 @@
+{
+  "id": "ky-item-letter-ya",
+  "kind": "concept",
+  "payload": {
+    "term": "Я я",
+    "definition": "Vowel [ya], like 'ya' in English 'yard'."
+  },
+  "sourceRef": "ky-resource-manual"
+}

@@ -1,0 +1,9 @@
+{
+  "id": "ky-item-letter-e",
+  "kind": "concept",
+  "payload": {
+    "term": "Э э",
+    "definition": "Front vowel [e] that only ever appears at the start of a word."
+  },
+  "sourceRef": "ky-resource-manual"
+}
