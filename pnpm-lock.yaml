@@ -29,6 +29,15 @@ importers:
 
   apps/web:
     dependencies:
+      '@betterbeaver/engine':
+        specifier: workspace:*
+        version: link:../../packages/engine
+      '@betterbeaver/schema':
+        specifier: workspace:*
+        version: link:../../packages/schema
+      '@betterbeaver/srs':
+        specifier: workspace:*
+        version: link:../../packages/srs
       react:
         specifier: ^19.2.7
         version: 19.2.7
