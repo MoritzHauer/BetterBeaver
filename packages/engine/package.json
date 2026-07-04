@@ -7,5 +7,9 @@
   "types": "src/index.ts",
   "scripts": {
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@betterbeaver/schema": "workspace:*",
+    "@betterbeaver/srs": "workspace:*"
   }
 }

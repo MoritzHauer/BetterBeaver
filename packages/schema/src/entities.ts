@@ -77,6 +77,36 @@ export function itemDisplayText(item: Item): string {
   }
 }
 
+/** Prompt shown for the recognize presentation, per item kind (plan's presentation rules). */
+export function recognizePrompt(item: Item): string {
+  switch (item.kind) {
+    case "lexeme":
+      return item.payload.script;
+    case "concept":
+      return item.payload.term;
+  }
+}
+
+/** Prompt shown for the recall presentation, per item kind (plan's presentation rules). */
+export function recallPrompt(item: Item): string {
+  switch (item.kind) {
+    case "lexeme":
+      return item.payload.gloss;
+    case "concept":
+      return item.payload.term;
+  }
+}
+
+/** Reveal shown after a recall self-grade, per item kind (plan's presentation rules). */
+export function recallReveal(item: Item): string[] {
+  switch (item.kind) {
+    case "lexeme":
+      return [item.payload.script, item.payload.transliteration];
+    case "concept":
+      return [item.payload.definition];
+  }
+}
+
 /** Recognize-task distractor count; a recognize task's unit needs this many + 1 same-kind items. */
 export const RECOGNIZE_DISTRACTOR_COUNT = 3;
 

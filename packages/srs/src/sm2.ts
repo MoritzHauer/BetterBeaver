@@ -91,3 +91,13 @@ export function schedule(
     reps: nextReps,
   };
 }
+
+/**
+ * True when `state` is due at `at`. An unparseable `due` counts as due, so
+ * corrupted state resurfaces for review and gets repaired by the next grade
+ * instead of being silently unreachable.
+ */
+export function isDue(state: SrsState, at: Date): boolean {
+  const t = new Date(state.due).getTime();
+  return Number.isNaN(t) || t <= at.getTime();
+}

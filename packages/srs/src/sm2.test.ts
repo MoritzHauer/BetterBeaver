@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  isDue,
   recallQuality,
   recognizeQuality,
   schedule,
@@ -58,6 +59,32 @@ describe("due date, day granularity", () => {
   it("due is the start of the UTC day of gradedAt plus intervalDays days", () => {
     const state = schedule(null, 4, new Date("2026-07-03T15:30:00Z"));
     expect(state.due).toBe("2026-07-04T00:00:00.000Z");
+  });
+});
+
+describe("isDue", () => {
+  const state: SrsState = {
+    due: "2026-07-05T00:00:00.000Z",
+    intervalDays: 1,
+    ease: 2.5,
+    reps: 1,
+  };
+
+  it("is true when due is strictly before `at`", () => {
+    expect(isDue(state, new Date("2026-07-06T00:00:00Z"))).toBe(true);
+  });
+
+  it("is true when due is exactly equal to `at` (inclusive boundary)", () => {
+    expect(isDue(state, new Date("2026-07-05T00:00:00.000Z"))).toBe(true);
+  });
+
+  it("is false when due is strictly after `at`", () => {
+    expect(isDue(state, new Date("2026-07-04T00:00:00Z"))).toBe(false);
+  });
+
+  it("is true for an unparseable due string", () => {
+    const corrupted: SrsState = { ...state, due: "not-a-date" };
+    expect(isDue(corrupted, new Date("2026-07-04T00:00:00Z"))).toBe(true);
   });
 });
 
