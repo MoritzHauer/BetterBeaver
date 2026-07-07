@@ -1,18 +1,48 @@
+import { useEffect, useState } from "react";
 import type { Content } from "@betterbeaver/schema";
-import { isUnitComplete, isUnitUnlocked } from "@betterbeaver/engine";
+import type { ProgressStore } from "@betterbeaver/engine";
+import {
+  collectItemStates,
+  isUnitComplete,
+  isUnitUnlocked,
+  reviewQueue,
+} from "@betterbeaver/engine";
 
 export function TopicScreen({
   content,
   attemptedTaskIds,
+  store,
+  epoch,
   onSelectUnit,
+  onReview,
   onBack,
 }: {
   content: Content;
   attemptedTaskIds: ReadonlySet<string>;
+  store: ProgressStore;
+  /** Bumped by the caller on every navigation to this screen, so the due
+   * count is recomputed after sessions elsewhere may have changed it. */
+  epoch: number;
   onSelectUnit: (unitId: string) => void;
+  onReview: () => void;
   onBack: () => void;
 }) {
   const unitById = new Map(content.units.map((unit) => [unit.id, unit]));
+  const [dueCount, setDueCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const itemIds = content.items.map((item) => item.id);
+    collectItemStates(itemIds, store).then((states) => {
+      if (cancelled) {
+        return;
+      }
+      setDueCount(reviewQueue(content.items, states, new Date()).length);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [content, store, epoch]);
 
   return (
     <main>
@@ -20,6 +50,18 @@ export function TopicScreen({
       <h1>{content.topic.title}</h1>
       <p>{content.topic.description}</p>
       <ul className="card-list">
+        <li className="card">
+          <button onClick={onReview} disabled={dueCount === 0}>
+            <strong>Review</strong>
+            <p className="status">
+              {dueCount === null
+                ? "Loading…"
+                : dueCount === 0
+                  ? "Nothing due"
+                  : `${dueCount} due`}
+            </p>
+          </button>
+        </li>
         {content.topic.unitIds.map((unitId) => {
           const unit = unitById.get(unitId);
           if (unit === undefined) {

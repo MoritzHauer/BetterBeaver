@@ -38,12 +38,23 @@ function ItemCard({ item }: { item: Item }) {
   );
 }
 
-function TaskCard({ task }: { task: Task }) {
+function TaskCard({
+  task,
+  attempted,
+  onPractice,
+}: {
+  task: Task;
+  attempted: boolean;
+  onPractice: () => void;
+}) {
   return (
     <li className="card">
       <strong>{task.type}</strong>
+      {attempted ? <span className="done-mark"> &#10003; done</span> : null}
       {task.instructions !== undefined ? <p>{task.instructions}</p> : null}
-      <button disabled>Practice (coming in step 7)</button>
+      <button onClick={onPractice}>
+        {task.type === "recognize" ? "Practice" : "Recall practice"}
+      </button>
     </li>
   );
 }
@@ -51,10 +62,14 @@ function TaskCard({ task }: { task: Task }) {
 export function UnitScreen({
   content,
   unitId,
+  attemptedTaskIds,
+  onPractice,
   onBack,
 }: {
   content: Content;
   unitId: string;
+  attemptedTaskIds: ReadonlySet<string>;
+  onPractice: (taskId: string) => void;
   onBack: () => void;
 }) {
   const unit = content.units.find((u) => u.id === unitId);
@@ -112,7 +127,12 @@ export function UnitScreen({
         {unit.taskIds.map((taskId) => {
           const task = taskById.get(taskId);
           return task === undefined ? null : (
-            <TaskCard key={taskId} task={task} />
+            <TaskCard
+              key={taskId}
+              task={task}
+              attempted={attemptedTaskIds.has(taskId)}
+              onPractice={() => onPractice(taskId)}
+            />
           );
         })}
       </ul>

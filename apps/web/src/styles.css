@@ -5,6 +5,10 @@
   --card-bg: #f7f7f7;
   --card-border: #d8d8d8;
   --locked-fg: #999999;
+  --correct-border: #2e7d32;
+  --correct-bg: rgba(46, 125, 50, 0.12);
+  --incorrect-border: #c62828;
+  --incorrect-bg: rgba(198, 40, 40, 0.12);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -14,6 +18,10 @@
     --card-bg: #232427;
     --card-border: #3a3b3e;
     --locked-fg: #6a6b6e;
+    --correct-border: #4caf50;
+    --correct-bg: rgba(76, 175, 80, 0.15);
+    --incorrect-border: #ef5350;
+    --incorrect-bg: rgba(239, 83, 80, 0.15);
   }
 }
 
@@ -104,4 +112,41 @@ button {
 
 .usage-note {
   font-style: italic;
+}
+
+.done-mark {
+  color: var(--correct-border);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.prompt {
+  font-size: 1.5rem;
+  margin: 1.5rem 0;
+}
+
+.card.correct {
+  border-color: var(--correct-border);
+  background: var(--correct-bg);
+}
+
+.card.incorrect {
+  border-color: var(--incorrect-border);
+  background: var(--incorrect-bg);
+}
+
+.grade-buttons {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.grade-buttons button {
+  flex: 1;
+  padding: 0.75rem;
+  border: 1px solid var(--card-border);
+  border-radius: 0.5rem;
+  background: var(--card-bg);
+  cursor: pointer;
 }

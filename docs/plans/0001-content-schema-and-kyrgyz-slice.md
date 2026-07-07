@@ -153,7 +153,7 @@ Content steps are **authored by the orchestrator via the `/author` workflow** (d
 
 - **M2 — `/ingest` skill**: source md/pdf in `~/vault/sources/` → proposed units/items/tasks in this schema, validated and human-reviewed before commit. Gated on the schema having survived real content (M1).
 - **M3 — Topic distribution**: remote catalog (topics in a database / static pack hosting — decision then), download + local cache behind a `RemoteContentSource`, user picks which topics to load. Offline behavior unchanged.
-- **M4 — Second topic** (mushroom ID or software architecture): new item kinds (e.g. `species` with images), image-based tasks land here with their first consumer.
+- **M4 — Second topic** (mushroom ID or software architecture): new item kinds (e.g. `species` with images). *Amended 2026-07-06 by [plan 0002](0002-exercise-type-showcase.md): image/audio task types land earlier, with a demo topic as their first consumer; plan 0002 also amends the one-question-per-item and review-presentation rules above — see its "Amendments to plan 0001" section.*
 - **M5 — Optional accounts + sync**: opt-in only; without opt-in no data leaves the device. Design must not require migration of local-only users.
 - **Contingency — native app (Expo)**: only if the PWA proves insufficient (e.g. audio latency, notifications); consumes `schema`/`srs`/`engine` unchanged.
 - Audio and Cyrillic text input attach to whichever milestone first needs them (retro decision).
