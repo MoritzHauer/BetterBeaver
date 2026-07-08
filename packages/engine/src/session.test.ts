@@ -1,6 +1,14 @@
 import { describe, it, expect } from "vitest";
 import type { Content, Item, Task, Unit } from "@betterbeaver/schema";
-import { buildTaskSession, buildReviewSession, type Rng } from "./session.js";
+import {
+  buildTaskSession,
+  buildReviewSession,
+  checkScrambleAnswer,
+  checkMatchingPair,
+  matchingOutcomes,
+  type MatchingQuestion,
+  type Rng,
+} from "./session.js";
 
 /** Returns an Rng that yields the given values in order; throws if exhausted. */
 function queueRng(values: number[]): Rng {
@@ -96,7 +104,7 @@ describe("buildTaskSession: recognize", () => {
     expect(questions).toEqual([
       {
         kind: "recognize",
-        itemId: c1.id,
+        unitId: c1.id,
         prompt: "Term 1",
         choices: [
           "Definition 3",
@@ -108,7 +116,7 @@ describe("buildTaskSession: recognize", () => {
       },
       {
         kind: "recognize",
-        itemId: c2.id,
+        unitId: c2.id,
         prompt: "Term 2",
         choices: [
           "Definition 3",
@@ -192,7 +200,7 @@ describe("buildTaskSession: recall", () => {
     expect(questions).toEqual([
       {
         kind: "recall",
-        itemId: l1.id,
+        unitId: l1.id,
         prompt: "hello",
         reveal: ["Салам", "Salam"],
       },
@@ -271,18 +279,19 @@ describe("buildTaskSession: recognize over lexeme items", () => {
       rl4.payload.gloss,
     ]);
 
-    expect(questions[0]?.prompt).toBe(rl1.payload.script);
-    expect(questions[1]?.prompt).toBe(rl2.payload.script);
-
-    for (const question of questions) {
+    const prompts = ["", ""];
+    for (const [index, question] of questions.entries()) {
       if (question.kind !== "recognize") {
         throw new Error("expected a recognize question");
       }
+      prompts[index] = question.prompt;
       expect(question.choices).toHaveLength(4);
       question.choices.forEach((choice) => {
         expect(allGlosses.has(choice)).toBe(true);
       });
     }
+    expect(prompts[0]).toBe(rl1.payload.script);
+    expect(prompts[1]).toBe(rl2.payload.script);
     expect(questions[0]).toMatchObject({
       choices: expect.arrayContaining([rl1.payload.gloss]),
     });
@@ -292,22 +301,621 @@ describe("buildTaskSession: recognize over lexeme items", () => {
   });
 });
 
+const clozeSentence1: Item = {
+  id: "t-item-cloze-1",
+  kind: "sentence",
+  payload: {
+    text: "The {{c2::mat}} holds the {{c1::cat}}.",
+    translation: "translation",
+  },
+  sourceRef: "t-resource-1",
+};
+const clozeSentence2: Item = {
+  id: "t-item-cloze-2",
+  kind: "sentence",
+  payload: { text: "Only {{c1::one}} blank here.", translation: "translation" },
+  sourceRef: "t-resource-1",
+};
+const clozeTask: Task = {
+  id: "t-task-cloze",
+  type: "cloze",
+  itemIds: [clozeSentence1.id, clozeSentence2.id],
+};
+const clozeUnit: Unit = {
+  id: "t-unit-cloze",
+  topicId: "t-topic",
+  title: "Cloze",
+  goal: "Goal",
+  itemIds: [clozeSentence1.id, clozeSentence2.id],
+  taskIds: [clozeTask.id],
+  noteIds: [],
+};
+const clozeContent: Content = {
+  topic: {
+    id: "t-topic",
+    code: "t",
+    title: "Topic",
+    description: "",
+    unitIds: [clozeUnit.id],
+  },
+  units: [clozeUnit],
+  items: [clozeSentence1, clozeSentence2],
+  tasks: [clozeTask],
+  resources: [],
+  notes: [],
+};
+
+describe("buildTaskSession: cloze", () => {
+  it("fans out one question per blank, in blank-number order, items in task.itemIds order, filling the other blanks", () => {
+    const questions = buildTaskSession(clozeTask, clozeContent, queueRng([]));
+
+    expect(questions).toEqual([
+      {
+        kind: "cloze",
+        unitId: `${clozeSentence1.id}::c1`,
+        prompt: "The mat holds the ___.",
+        target: "cat",
+      },
+      {
+        kind: "cloze",
+        unitId: `${clozeSentence1.id}::c2`,
+        prompt: "The ___ holds the cat.",
+        target: "mat",
+      },
+      {
+        kind: "cloze",
+        unitId: `${clozeSentence2.id}::c1`,
+        prompt: "Only ___ blank here.",
+        target: "one",
+      },
+    ]);
+  });
+});
+
+const matchM1: Item = {
+  id: "t-item-match-1",
+  kind: "concept",
+  payload: { term: "T1", definition: "D1" },
+  sourceRef: "t-resource-1",
+};
+const matchM2: Item = {
+  id: "t-item-match-2",
+  kind: "concept",
+  payload: { term: "T2", definition: "D2" },
+  sourceRef: "t-resource-1",
+};
+const matchM3: Item = {
+  id: "t-item-match-3",
+  kind: "concept",
+  payload: { term: "T3", definition: "D3" },
+  sourceRef: "t-resource-1",
+};
+const matchingTask: Task = {
+  id: "t-task-matching",
+  type: "matching",
+  itemIds: [matchM1.id, matchM2.id, matchM3.id],
+};
+const matchingUnit: Unit = {
+  id: "t-unit-matching",
+  topicId: "t-topic",
+  title: "Matching",
+  goal: "Goal",
+  itemIds: [matchM1.id, matchM2.id, matchM3.id],
+  taskIds: [matchingTask.id],
+  noteIds: [],
+};
+const matchingContent: Content = {
+  topic: {
+    id: "t-topic",
+    code: "t",
+    title: "Topic",
+    description: "",
+    unitIds: [matchingUnit.id],
+  },
+  units: [matchingUnit],
+  items: [matchM1, matchM2, matchM3],
+  tasks: [matchingTask],
+  resources: [],
+  notes: [],
+};
+
+describe("buildTaskSession: matching", () => {
+  it("shuffles the prompt side and the answer side independently with the injected RNG", () => {
+    // prompts shuffle: i=2 j=floor(0.9*3)=2 (noop), i=1 j=floor(0.1*2)=0 -> [m2,m1,m3]
+    // answers shuffle: i=2 j=floor(0.1*3)=0 -> [m3,m2,m1], i=1 j=floor(0.9*2)=1 (noop)
+    const rng = queueRng([0.9, 0.1, 0.1, 0.9]);
+    const questions = buildTaskSession(matchingTask, matchingContent, rng);
+
+    expect(questions).toEqual([
+      {
+        kind: "matching",
+        prompts: [
+          { text: "T2", unitId: matchM2.id },
+          { text: "T1", unitId: matchM1.id },
+          { text: "T3", unitId: matchM3.id },
+        ],
+        answers: [
+          { text: "D3", unitId: matchM3.id },
+          { text: "D2", unitId: matchM2.id },
+          { text: "D1", unitId: matchM1.id },
+        ],
+      },
+    ]);
+  });
+});
+
+describe("matchingOutcomes: first-selection-decides + board-clear semantics", () => {
+  const question: MatchingQuestion = {
+    kind: "matching",
+    prompts: [
+      { text: "T1", unitId: "item-1" },
+      { text: "T2", unitId: "item-2" },
+    ],
+    answers: [
+      { text: "D1", unitId: "item-1" },
+      { text: "D2", unitId: "item-2" },
+    ],
+  };
+
+  it("checkMatchingPair is correct only when the prompt/answer unit ids match", () => {
+    expect(checkMatchingPair(question, 0, 0)).toBe(true);
+    expect(checkMatchingPair(question, 0, 1)).toBe(false);
+  });
+
+  it("out-of-range indices are never a correct pair (and never clear the board)", () => {
+    expect(checkMatchingPair(question, -1, -1)).toBe(false);
+    expect(checkMatchingPair(question, 0, 9)).toBe(false);
+    // A phantom selection must not count toward clearing the board.
+    expect(
+      matchingOutcomes(question, [
+        { promptIndex: 0, answerIndex: 0 },
+        { promptIndex: 9, answerIndex: 9 },
+      ]),
+    ).toBeNull();
+  });
+
+  it("returns null (grades nothing) until the board clears", () => {
+    // item-1's first (and only, so far) selection is wrong.
+    expect(
+      matchingOutcomes(question, [{ promptIndex: 0, answerIndex: 1 }]),
+    ).toBeNull();
+  });
+
+  it("the first selection decides the grade even if a later retry corrects it, and outcomes emit only once the whole board clears", () => {
+    const outcomes = matchingOutcomes(question, [
+      { promptIndex: 0, answerIndex: 1 }, // item-1: wrong first attempt -> quality 2, fixed
+      { promptIndex: 0, answerIndex: 0 }, // item-1: retry correct -> clears the pair, grade unchanged
+      { promptIndex: 1, answerIndex: 1 }, // item-2: correct first attempt -> quality 4, clears
+    ]);
+
+    expect(outcomes).toEqual([
+      ["item-1", 2],
+      ["item-2", 4],
+    ]);
+  });
+});
+
+const scrambleSentence: Item = {
+  id: "t-item-scramble",
+  kind: "sentence",
+  payload: { text: "the cat and the dog", translation: "translation" },
+  sourceRef: "t-resource-1",
+};
+const scrambleTask: Task = {
+  id: "t-task-scramble",
+  type: "scramble",
+  itemIds: [scrambleSentence.id],
+};
+const scrambleUnit: Unit = {
+  id: "t-unit-scramble",
+  topicId: "t-topic",
+  title: "Scramble",
+  goal: "Goal",
+  itemIds: [scrambleSentence.id],
+  taskIds: [scrambleTask.id],
+  noteIds: [],
+};
+const scrambleContent: Content = {
+  topic: {
+    id: "t-topic",
+    code: "t",
+    title: "Topic",
+    description: "",
+    unitIds: [scrambleUnit.id],
+  },
+  units: [scrambleUnit],
+  items: [scrambleSentence],
+  tasks: [scrambleTask],
+  resources: [],
+  notes: [],
+};
+
+describe("buildTaskSession: scramble", () => {
+  it("shuffles the markup-stripped whitespace tokens with the injected RNG", () => {
+    // 5 tokens: i=4..1, j=floor(rng()*(i+1)) with rng always 0 -> j=0 each
+    // step, walking the last element to the front repeatedly.
+    const questions = buildTaskSession(
+      scrambleTask,
+      scrambleContent,
+      queueRng([0, 0, 0, 0]),
+    );
+
+    expect(questions).toEqual([
+      {
+        kind: "scramble",
+        unitId: scrambleSentence.id,
+        tokens: ["cat", "and", "the", "dog", "the"],
+        targetTokens: ["the", "cat", "and", "the", "dog"],
+      },
+    ]);
+  });
+
+  it('join-equality: a duplicate token ("the") is interchangeable with its twin', () => {
+    const question = {
+      kind: "scramble" as const,
+      unitId: scrambleSentence.id,
+      tokens: ["cat", "and", "the", "dog", "the"],
+      targetTokens: ["the", "cat", "and", "the", "dog"],
+    };
+    // A correct reordering, picking the *other* "the" instance than the
+    // shuffle order implies, still joins to the same string.
+    expect(
+      checkScrambleAnswer(question, ["the", "cat", "and", "the", "dog"]),
+    ).toBe(true);
+    expect(
+      checkScrambleAnswer(question, ["the", "cat", "and", "dog", "the"]),
+    ).toBe(false);
+  });
+});
+
+const audioC1: Item = {
+  id: "t-item-audio-c1",
+  kind: "concept",
+  payload: { term: "Term 1", definition: "Definition 1", audioRef: "a1" },
+  sourceRef: "t-resource-1",
+};
+const audioC2: Item = {
+  id: "t-item-audio-c2",
+  kind: "concept",
+  payload: { term: "Term 2", definition: "Definition 2", audioRef: "a2" },
+  sourceRef: "t-resource-1",
+};
+const audioC3: Item = {
+  id: "t-item-audio-c3",
+  kind: "concept",
+  payload: { term: "Term 3", definition: "Definition 3", audioRef: "a3" },
+  sourceRef: "t-resource-1",
+};
+const audioC4: Item = {
+  id: "t-item-audio-c4",
+  kind: "concept",
+  payload: { term: "Term 4", definition: "Definition 4", audioRef: "a4" },
+  sourceRef: "t-resource-1",
+};
+const listenTask: Task = {
+  id: "t-task-listen",
+  type: "listen",
+  itemIds: [audioC1.id, audioC2.id],
+};
+const listenUnit: Unit = {
+  id: "t-unit-listen",
+  topicId: "t-topic",
+  title: "Listen",
+  goal: "Goal",
+  itemIds: [audioC1.id, audioC2.id, audioC3.id, audioC4.id],
+  taskIds: [listenTask.id],
+  noteIds: [],
+};
+const listenContent: Content = {
+  topic: {
+    id: "t-topic",
+    code: "t",
+    title: "Topic",
+    description: "",
+    unitIds: [listenUnit.id],
+  },
+  units: [listenUnit],
+  items: [audioC1, audioC2, audioC3, audioC4],
+  tasks: [listenTask],
+  resources: [],
+  notes: [],
+};
+
+describe("buildTaskSession: listen", () => {
+  it("reuses the pinned shuffle-and-insert distractor algorithm over display texts, prompted by the audio stem", () => {
+    // Same rng script and same algorithm as the recognize test above.
+    const rng = queueRng([0.9, 0.1, 0.5, 0.9, 0.1, 0.5]);
+    const questions = buildTaskSession(listenTask, listenContent, rng);
+
+    expect(questions).toEqual([
+      {
+        kind: "listen",
+        unitId: audioC1.id,
+        audioStem: "a1",
+        choices: [
+          "Definition 3",
+          "Definition 2",
+          "Definition 1",
+          "Definition 4",
+        ],
+        correctIndex: 2,
+      },
+      {
+        kind: "listen",
+        unitId: audioC2.id,
+        audioStem: "a2",
+        choices: [
+          "Definition 3",
+          "Definition 1",
+          "Definition 2",
+          "Definition 4",
+        ],
+        correctIndex: 2,
+      },
+    ]);
+  });
+});
+
+const imageL1: Item = {
+  id: "t-item-image-l1",
+  kind: "lexeme",
+  payload: {
+    script: "A",
+    transliteration: "a",
+    gloss: "Gloss 1",
+    imageRef: "i1",
+  },
+  sourceRef: "t-resource-1",
+};
+const imageL2: Item = {
+  id: "t-item-image-l2",
+  kind: "lexeme",
+  payload: {
+    script: "B",
+    transliteration: "b",
+    gloss: "Gloss 2",
+    imageRef: "i2",
+  },
+  sourceRef: "t-resource-1",
+};
+const imageL3: Item = {
+  id: "t-item-image-l3",
+  kind: "lexeme",
+  payload: {
+    script: "C",
+    transliteration: "c",
+    gloss: "Gloss 3",
+    imageRef: "i3",
+  },
+  sourceRef: "t-resource-1",
+};
+const imageL4: Item = {
+  id: "t-item-image-l4",
+  kind: "lexeme",
+  payload: {
+    script: "D",
+    transliteration: "d",
+    gloss: "Gloss 4",
+    imageRef: "i4",
+  },
+  sourceRef: "t-resource-1",
+};
+const pictureTask: Task = {
+  id: "t-task-picture",
+  type: "picture",
+  itemIds: [imageL1.id],
+};
+const pictureUnit: Unit = {
+  id: "t-unit-picture",
+  topicId: "t-topic",
+  title: "Picture",
+  goal: "Goal",
+  itemIds: [imageL1.id, imageL2.id, imageL3.id, imageL4.id],
+  taskIds: [pictureTask.id],
+  noteIds: [],
+};
+const pictureContent: Content = {
+  topic: {
+    id: "t-topic",
+    code: "t",
+    title: "Topic",
+    description: "",
+    unitIds: [pictureUnit.id],
+  },
+  units: [pictureUnit],
+  items: [imageL1, imageL2, imageL3, imageL4],
+  tasks: [pictureTask],
+  resources: [],
+  notes: [],
+};
+
+describe("buildTaskSession: picture", () => {
+  it("reuses the pinned shuffle-and-insert distractor algorithm over display texts, prompted by the image stem", () => {
+    const rng = queueRng([0.9, 0.1, 0.5]);
+    const questions = buildTaskSession(pictureTask, pictureContent, rng);
+
+    expect(questions).toEqual([
+      {
+        kind: "picture",
+        unitId: imageL1.id,
+        imageStem: "i1",
+        choices: ["Gloss 3", "Gloss 2", "Gloss 1", "Gloss 4"],
+        correctIndex: 2,
+      },
+    ]);
+  });
+});
+
+const pairItem: Item = {
+  id: "t-item-pair-mp",
+  kind: "pair",
+  payload: {
+    a: { script: "шым", audioRef: "shym" },
+    b: { script: "чым", audioRef: "chym" },
+    contrast: "ш/ч",
+  },
+  sourceRef: "t-resource-1",
+};
+const minimalPairTask: Task = {
+  id: "t-task-minimal-pair",
+  type: "minimal-pair",
+  itemIds: [pairItem.id],
+};
+const minimalPairUnit: Unit = {
+  id: "t-unit-minimal-pair",
+  topicId: "t-topic",
+  title: "Minimal pair",
+  goal: "Goal",
+  itemIds: [pairItem.id],
+  taskIds: [minimalPairTask.id],
+  noteIds: [],
+};
+const minimalPairContent: Content = {
+  topic: {
+    id: "t-topic",
+    code: "t",
+    title: "Topic",
+    description: "",
+    unitIds: [minimalPairUnit.id],
+  },
+  units: [minimalPairUnit],
+  items: [pairItem],
+  tasks: [minimalPairTask],
+  resources: [],
+  notes: [],
+};
+
+describe("buildTaskSession: minimal-pair", () => {
+  it("plays side a when the coin flip is < 0.5", () => {
+    const questions = buildTaskSession(
+      minimalPairTask,
+      minimalPairContent,
+      queueRng([0.1]),
+    );
+    expect(questions).toEqual([
+      {
+        kind: "minimal-pair",
+        unitId: pairItem.id,
+        audioStem: "shym",
+        choices: ["шым", "чым"],
+        correctIndex: 0,
+      },
+    ]);
+  });
+
+  it("plays side b when the coin flip is >= 0.5", () => {
+    const questions = buildTaskSession(
+      minimalPairTask,
+      minimalPairContent,
+      queueRng([0.9]),
+    );
+    expect(questions).toEqual([
+      {
+        kind: "minimal-pair",
+        unitId: pairItem.id,
+        audioStem: "chym",
+        choices: ["шым", "чым"],
+        correctIndex: 1,
+      },
+    ]);
+  });
+});
+
 describe("buildReviewSession", () => {
-  it("always uses the recall presentation, regardless of item kind", () => {
-    const questions = buildReviewSession([c1, l1]);
+  it("uses the recall presentation for lexeme/concept units, regardless of kind", () => {
+    const units = [
+      { id: c1.id, item: c1 },
+      { id: l1.id, item: l1 },
+    ];
+    const questions = buildReviewSession(units, conceptContent, queueRng([]));
 
     expect(questions).toEqual([
       {
         kind: "recall",
-        itemId: c1.id,
+        unitId: c1.id,
         prompt: "Term 1",
         reveal: ["Definition 1"],
       },
       {
         kind: "recall",
-        itemId: l1.id,
+        unitId: l1.id,
         prompt: "hello",
         reveal: ["Салам", "Salam"],
+      },
+    ]);
+  });
+
+  it("uses the recall presentation for a plain-sentence unit (blankNumber undefined)", () => {
+    const sentence: Item = {
+      id: "t-item-sentence-plain",
+      kind: "sentence",
+      payload: {
+        text: "The {{c1::cat}} sat.",
+        translation: "the translation",
+      },
+      sourceRef: "t-resource-1",
+    };
+
+    const questions = buildReviewSession(
+      [{ id: sentence.id, item: sentence }],
+      conceptContent,
+      queueRng([]),
+    );
+
+    expect(questions).toEqual([
+      {
+        kind: "recall",
+        unitId: sentence.id,
+        prompt: "the translation",
+        reveal: ["The cat sat."],
+      },
+    ]);
+  });
+
+  it("builds the cloze question for a due blank unit, and a minimal-pair question for a due pair unit", () => {
+    const sentence: Item = {
+      id: "t-item-sentence-cloze",
+      kind: "sentence",
+      payload: {
+        text: "The {{c1::cat}} sat on the {{c2::mat}}.",
+        translation: "translation",
+      },
+      sourceRef: "t-resource-1",
+    };
+    const pair: Item = {
+      id: "t-item-pair-1",
+      kind: "pair",
+      payload: {
+        a: { script: "шым", audioRef: "shym" },
+        b: { script: "чым", audioRef: "chym" },
+        contrast: "ш/ч",
+      },
+      sourceRef: "t-resource-1",
+    };
+    const units = [
+      { id: `${sentence.id}::c2`, item: sentence, blankNumber: 2 },
+      { id: pair.id, item: pair },
+    ];
+
+    const questions = buildReviewSession(
+      units,
+      conceptContent,
+      queueRng([0.9]),
+    );
+
+    expect(questions).toEqual([
+      {
+        kind: "cloze",
+        unitId: `${sentence.id}::c2`,
+        prompt: "The cat sat on the ___.",
+        target: "mat",
+      },
+      {
+        kind: "minimal-pair",
+        unitId: pair.id,
+        audioStem: "chym",
+        choices: ["шым", "чым"],
+        correctIndex: 1,
       },
     ]);
   });

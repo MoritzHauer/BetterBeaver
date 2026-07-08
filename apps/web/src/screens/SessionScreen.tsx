@@ -38,7 +38,7 @@ export function SessionScreen({
 }: {
   title: string;
   questions: Question[];
-  onGrade: (itemId: string, quality: Quality) => Promise<void>;
+  onGrade: (unitId: string, quality: Quality) => Promise<void>;
   onFinished: (summary: SessionSummary) => void;
   onExit: () => void;
 }) {
@@ -48,7 +48,19 @@ export function SessionScreen({
   const [summary, setSummary] = useState<SessionSummary>(emptySummary);
   const [done, setDone] = useState(false);
 
-  const question = questions[index];
+  const rawQuestion = questions[index];
+  // New question kinds from plan 0002 (cloze, matching, scramble, listen,
+  // dictation, shadowing, minimal-pair, picture); their interaction
+  // components land in step 4. Narrowing here keeps the rest of this
+  // component typed against the two kinds it actually renders.
+  const question: RecognizeQuestion | RecallQuestion | undefined =
+    rawQuestion === undefined
+      ? undefined
+      : rawQuestion.kind === "recognize" || rawQuestion.kind === "recall"
+        ? rawQuestion
+        : (() => {
+            throw new Error("not implemented: plan 0002 step 4");
+          })();
 
   function advance() {
     if (index + 1 >= questions.length) {
@@ -71,7 +83,7 @@ export function SessionScreen({
       recognizeCorrect: s.recognizeCorrect + (correct ? 1 : 0),
       recognizeTotal: s.recognizeTotal + 1,
     }));
-    await onGrade(q.itemId, recognizeQuality(correct));
+    await onGrade(q.unitId, recognizeQuality(correct));
   }
 
   async function handleRecallGrade(q: RecallQuestion, grade: SelfGrade) {
@@ -79,7 +91,7 @@ export function SessionScreen({
       ...s,
       recallCounts: { ...s.recallCounts, [grade]: s.recallCounts[grade] + 1 },
     }));
-    await onGrade(q.itemId, recallQuality(grade));
+    await onGrade(q.unitId, recallQuality(grade));
     advance();
   }
 

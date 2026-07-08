@@ -1,12 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Content } from "@betterbeaver/schema";
 import type { ProgressStore } from "@betterbeaver/engine";
-import {
-  collectItemStates,
-  isUnitComplete,
-  isUnitUnlocked,
-  reviewQueue,
-} from "@betterbeaver/engine";
+import { dueUnits, isUnitComplete, isUnitUnlocked } from "@betterbeaver/engine";
 
 export function TopicScreen({
   content,
@@ -32,12 +27,11 @@ export function TopicScreen({
 
   useEffect(() => {
     let cancelled = false;
-    const itemIds = content.items.map((item) => item.id);
-    collectItemStates(itemIds, store).then((states) => {
+    dueUnits(content, store, new Date()).then((due) => {
       if (cancelled) {
         return;
       }
-      setDueCount(reviewQueue(content.items, states, new Date()).length);
+      setDueCount(due.length);
     });
     return () => {
       cancelled = true;

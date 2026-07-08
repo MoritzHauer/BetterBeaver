@@ -463,6 +463,31 @@ describe("validateContent", () => {
     ).toBe(true);
   });
 
+  it("(m) reports an empty cloze blank (an empty typed answer would auto-grade correct)", () => {
+    const { input, unit, resource } = makeFixture();
+    const badSentence: SentenceItemLike = {
+      id: "ky-item-sentence-empty-blank",
+      kind: "sentence",
+      payload: {
+        text: "The {{c1::}} sat.",
+        translation: "the cat sat",
+      },
+      sourceRef: resource.id,
+    };
+    input.items.push(badSentence);
+    unit.itemIds.push(badSentence.id);
+
+    const errors = expectErrors(validateContent(input));
+
+    expect(
+      errors.some(
+        (e) =>
+          e.includes("ky-item-sentence-empty-blank") &&
+          e.includes("invalid cloze markup"),
+      ),
+    ).toBe(true);
+  });
+
   it("(n) reports a dangling audioRef", () => {
     const { input, itemA } = makeFixture();
     itemA.payload.audioRef = "missing-audio";

@@ -9,9 +9,8 @@ import {
   ContentValidationError,
   buildReviewSession,
   buildTaskSession,
-  collectItemStates,
+  dueUnits,
   recordGrade,
-  reviewQueue,
 } from "@betterbeaver/engine";
 import type { Quality } from "@betterbeaver/srs";
 import { createBundledContentSource } from "./content/bundled";
@@ -54,8 +53,8 @@ function TaskSession({
   );
   const answeredCount = useRef(0);
 
-  async function handleGrade(itemId: string, quality: Quality) {
-    await recordGrade(progressStore, itemId, quality, new Date());
+  async function handleGrade(unitId: string, quality: Quality) {
+    await recordGrade(progressStore, unitId, quality, new Date());
     answeredCount.current += 1;
     if (answeredCount.current === questions.length) {
       await progressStore.markTaskAttempted(task.id);
@@ -91,21 +90,19 @@ function ReviewSession({
 
   useEffect(() => {
     let cancelled = false;
-    const itemIds = content.items.map((item) => item.id);
-    collectItemStates(itemIds, store).then((states) => {
+    dueUnits(content, store, new Date()).then((due) => {
       if (cancelled) {
         return;
       }
-      const dueItems = reviewQueue(content.items, states, new Date());
-      setQuestions(buildReviewSession(dueItems));
+      setQuestions(buildReviewSession(due, content, Math.random));
     });
     return () => {
       cancelled = true;
     };
   }, [content, store]);
 
-  function handleGrade(itemId: string, quality: Quality) {
-    return recordGrade(store, itemId, quality, new Date()).then(
+  function handleGrade(unitId: string, quality: Quality) {
+    return recordGrade(store, unitId, quality, new Date()).then(
       () => undefined,
     );
   }

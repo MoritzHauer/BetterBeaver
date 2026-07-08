@@ -123,9 +123,10 @@ const CLOZE_TOKEN_PATTERN = /\{\{([^{}]*)\}\}/g;
 /**
  * Parses Anki-style cloze markup (`{{c1::word}}`, `{{c2::word}}`, …) out of
  * a sentence's `text`. Valid markup: every `{{...}}` token is `cN::text`
- * with N a positive integer (Anki's `::hint` suffix is unsupported), and
- * the blank numbers used across the sentence are exactly `1..N`, each
- * appearing exactly once. A sentence with no cloze tokens at all parses as
+ * with N a positive integer and non-blank text (Anki's `::hint` suffix is
+ * unsupported), and the blank numbers used across the sentence are exactly
+ * `1..N`, each appearing exactly once. A sentence with no cloze tokens at
+ * all parses as
  * `{ valid: true, blanks: [] }`. Returns `{ valid: false }` for anything
  * malformed or non-contiguous — including stray `{{`/`}}` outside a
  * well-formed token (e.g. an unclosed `{{c1::hi}`) — never throws; the
@@ -146,7 +147,12 @@ export function parseClozeMarkup(text: string): ClozeParseResult {
     if (numberMatch === null || numberMatch[1] === undefined) {
       return { valid: false };
     }
-    blanks.push({ number: Number(numberMatch[1]), text: parts[1] ?? "" });
+    const blankText = parts[1] ?? "";
+    if (blankText.trim() === "") {
+      // An empty blank would auto-grade an empty typed answer as correct.
+      return { valid: false };
+    }
+    blanks.push({ number: Number(numberMatch[1]), text: blankText });
   }
   const numbers = blanks.map((b) => b.number).sort((a, b) => a - b);
   for (const [index, number] of numbers.entries()) {
@@ -163,6 +169,45 @@ export function stripClozeMarkup(text: string): string {
     const parts = inner.split("::");
     return parts.length === 2 ? (parts[1] ?? "") : token;
   });
+}
+
+/**
+ * Renders `text` for one cloze question: blank `targetBlankNumber` becomes a
+ * `"___"` gap, every other blank is filled in, and the gapped blank's text is
+ * returned as `target`. Assumes valid markup containing that blank (validator
+ * class (m) plus derivation from `parseClozeMarkup`'s own blanks); `target`
+ * stays `""` if the blank is absent.
+ */
+export function gapClozeMarkup(
+  text: string,
+  targetBlankNumber: number,
+): { prompt: string; target: string } {
+  let target = "";
+  const prompt = text.replace(CLOZE_TOKEN_PATTERN, (token, inner: string) => {
+    const parts = inner.split("::");
+    if (parts.length !== 2) {
+      return token;
+    }
+    const blankText = parts[1] ?? "";
+    if (parts[0] === `c${targetBlankNumber}`) {
+      target = blankText;
+      return "___";
+    }
+    return blankText;
+  });
+  return { prompt, target };
+}
+
+/**
+ * A sentence's whitespace tokens after stripping cloze markup — the single
+ * tokenization shared by the validator's `scramble` guarantee (class (q),
+ * >= 3 tokens) and the engine's scramble question construction.
+ */
+export function sentenceTokens(text: string): string[] {
+  return stripClozeMarkup(text)
+    .trim()
+    .split(/\s+/)
+    .filter((token) => token.length > 0);
 }
 
 /** `pair` items only ever feed the `minimal-pair` task; every other presentation is unreachable by construction (validator class (o)) and permanently throws. */

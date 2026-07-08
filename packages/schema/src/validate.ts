@@ -9,7 +9,7 @@ import {
   itemDisplayText,
   recognizePrompt,
   parseClozeMarkup,
-  stripClozeMarkup,
+  sentenceTokens,
   RECOGNIZE_DISTRACTOR_COUNT,
   TASK_ALLOWED_ITEM_KINDS,
   TASK_NEEDS_DISTRACTORS,
@@ -459,10 +459,7 @@ export function validateContent(
         if (item.kind !== "sentence") {
           continue; // kind mismatch already reported under class (o).
         }
-        const tokenCount = stripClozeMarkup(item.payload.text)
-          .trim()
-          .split(/\s+/)
-          .filter((token) => token.length > 0).length;
+        const tokenCount = sentenceTokens(item.payload.text).length;
         if (tokenCount < 3) {
           errors.push(
             `${task.id}: scramble item "${item.id}" has only ${tokenCount} token(s) (needs >= 3)`,

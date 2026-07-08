@@ -1,6 +1,7 @@
-import type { Item, Unit } from "@betterbeaver/schema";
+import type { Unit } from "@betterbeaver/schema";
 import type { Quality, SrsState } from "@betterbeaver/srs";
 import { isDue, schedule } from "@betterbeaver/srs";
+import type { SchedulingUnit } from "./units.js";
 
 /** True when every task id of `unit` has been attempted at least once. */
 export function isUnitComplete(
@@ -32,28 +33,29 @@ export function isUnitUnlocked(
 }
 
 /**
- * Items whose SRS state is due (`isDue`), sorted by due ascending. Items
- * without state are excluded. An unparseable `due` sorts first (treated as
- * negative infinity), surfacing corrupted state for repair.
+ * Scheduling units whose SRS state is due (`isDue`), sorted by due
+ * ascending, keyed by unit id. Units without state are excluded. An
+ * unparseable `due` sorts first (treated as negative infinity), surfacing
+ * corrupted state for repair.
  */
 export function reviewQueue(
-  items: Item[],
+  units: SchedulingUnit[],
   states: ReadonlyMap<string, SrsState>,
   now: Date,
-): Item[] {
-  const due: { item: Item; dueMs: number }[] = [];
-  for (const item of items) {
-    const state = states.get(item.id);
+): SchedulingUnit[] {
+  const due: { unit: SchedulingUnit; dueMs: number }[] = [];
+  for (const unit of units) {
+    const state = states.get(unit.id);
     if (state === undefined || !isDue(state, now)) {
       continue;
     }
     const dueMs = new Date(state.due).getTime();
     due.push({
-      item,
+      unit,
       dueMs: Number.isNaN(dueMs) ? Number.NEGATIVE_INFINITY : dueMs,
     });
   }
-  return due.sort((a, b) => a.dueMs - b.dueMs).map((entry) => entry.item);
+  return due.sort((a, b) => a.dueMs - b.dueMs).map((entry) => entry.unit);
 }
 
 /**

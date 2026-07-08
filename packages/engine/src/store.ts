@@ -1,6 +1,8 @@
+import type { Content } from "@betterbeaver/schema";
 import type { Quality, SrsState } from "@betterbeaver/srs";
 import type { ProgressStore } from "./interfaces.js";
-import { applyGrade } from "./progress.js";
+import { applyGrade, reviewQueue } from "./progress.js";
+import { schedulingUnits, type SchedulingUnit } from "./units.js";
 
 /**
  * Fetches SRS state for each item id from `store`, in parallel. Items with
@@ -23,6 +25,25 @@ export async function collectItemStates(
     }
   }
   return states;
+}
+
+/**
+ * The full "what is due" pipeline: derives `content`'s scheduling units,
+ * fetches their SRS states from `store`, and returns the due units sorted by
+ * due ascending (`reviewQueue`). The one entry point every screen should use
+ * so the due-count badge and the review session can't diverge.
+ */
+export async function dueUnits(
+  content: Content,
+  store: ProgressStore,
+  now: Date,
+): Promise<SchedulingUnit[]> {
+  const units = schedulingUnits(content);
+  const states = await collectItemStates(
+    units.map((unit) => unit.id),
+    store,
+  );
+  return reviewQueue(units, states, now);
 }
 
 /**
