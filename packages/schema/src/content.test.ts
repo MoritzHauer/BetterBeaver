@@ -31,6 +31,14 @@ function readNoteStems(dir: string): string[] {
     .map((name) => name.slice(0, -".md".length));
 }
 
+/** Basenames (without extension) of every file in `dir`. Returns `[]` if `dir` doesn't exist. */
+function readAssetStems(dir: string): string[] {
+  if (!existsSync(dir)) {
+    return [];
+  }
+  return readdirSync(dir).map((name) => name.replace(/\.[^.]+$/, ""));
+}
+
 const topicDirNames = existsSync(CONTENT_DIR)
   ? readdirSync(CONTENT_DIR, { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
@@ -55,6 +63,8 @@ describe("content on disk", () => {
       const tasks = readJsonFilesIn(join(dir, "tasks"));
       const resources = readJson(join(dir, "resources.json")) as unknown[];
       const noteStems = readNoteStems(join(dir, "notes"));
+      const audioStems = readAssetStems(join(dir, "assets", "audio"));
+      const imageStems = readAssetStems(join(dir, "assets", "img"));
 
       const result = validateContent({
         topic,
@@ -63,6 +73,8 @@ describe("content on disk", () => {
         tasks,
         resources,
         noteStems,
+        audioStems,
+        imageStems,
       });
 
       if ("errors" in result) {

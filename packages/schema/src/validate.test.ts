@@ -4,16 +4,50 @@ import { validateContent, type ValidateContentResult } from "./validate.js";
 type ConceptItemLike = {
   id: string;
   kind: "concept";
-  payload: { term: string; definition: string };
+  payload: {
+    term: string;
+    definition: string;
+    audioRef?: string;
+    imageRef?: string;
+  };
   sourceRef: string;
 };
 type LexemeItemLike = {
   id: string;
   kind: "lexeme";
-  payload: { script: string; transliteration: string; gloss: string };
+  payload: {
+    script: string;
+    transliteration: string;
+    gloss: string;
+    audioRef?: string;
+    imageRef?: string;
+  };
   sourceRef: string;
 };
-type ItemLike = ConceptItemLike | LexemeItemLike;
+type SentenceItemLike = {
+  id: string;
+  kind: "sentence";
+  payload: { text: string; translation: string; audioRef?: string };
+  sourceRef: string;
+};
+type PairItemLike = {
+  id: string;
+  kind: "pair";
+  payload: {
+    a: { script: string; audioRef: string };
+    b: { script: string; audioRef: string };
+    contrast: string;
+  };
+  sourceRef: string;
+};
+type ItemLike =
+  ConceptItemLike | LexemeItemLike | SentenceItemLike | PairItemLike;
+/** A task's `type` covers plan 0001's `recognize`/`recall` plus plan 0002's new types. */
+type TaskLike = {
+  id: string;
+  type: string;
+  itemIds: string[];
+};
 
 /**
  * Builds a fresh, fully valid fixture: topic "kyrgyz" (code "ky"), one unit
@@ -56,12 +90,12 @@ function makeFixture() {
   };
   const items: ItemLike[] = [itemA, itemB, itemC, itemD];
 
-  const taskRecognize = {
+  const taskRecognize: TaskLike = {
     id: "ky-task-recognize-1",
     type: "recognize",
     itemIds: [itemA.id, itemB.id, itemC.id, itemD.id],
   };
-  const taskRecall = {
+  const taskRecall: TaskLike = {
     id: "ky-task-recall-1",
     type: "recall",
     itemIds: [itemA.id, itemB.id],
@@ -101,6 +135,8 @@ function makeFixture() {
     tasks: [taskRecognize, taskRecall],
     resources: [resource],
     noteStems: ["intro"],
+    audioStems: [] as string[],
+    imageStems: [] as string[],
   };
 
   return {
@@ -381,5 +417,152 @@ describe("validateContent", () => {
 
     expect(errors.some((e) => e.includes("ky-unit-1"))).toBe(true);
     expect(errors.some((e) => e.includes("ky-unit-2"))).toBe(true);
+  });
+
+  it("(m) reports invalid cloze markup (Anki's ::hint suffix is unsupported)", () => {
+    const { input, unit, resource } = makeFixture();
+    const badSentence: SentenceItemLike = {
+      id: "ky-item-sentence-bad",
+      kind: "sentence",
+      payload: {
+        text: "Hello {{c1::world::hint}}.",
+        translation: "Hello world.",
+      },
+      sourceRef: resource.id,
+    };
+    input.items.push(badSentence);
+    unit.itemIds.push(badSentence.id);
+
+    const errors = expectErrors(validateContent(input));
+
+    expect(errors.some((e) => e.includes("ky-item-sentence-bad"))).toBe(true);
+  });
+
+  it("(m) reports unclosed cloze markup, even on an item of a non-cloze task", () => {
+    const { input, unit, resource } = makeFixture();
+    const badSentence: SentenceItemLike = {
+      id: "ky-item-sentence-unclosed",
+      kind: "sentence",
+      payload: {
+        text: "say {{c1::hi}",
+        translation: "say hi",
+      },
+      sourceRef: resource.id,
+    };
+    input.items.push(badSentence);
+    unit.itemIds.push(badSentence.id);
+
+    const errors = expectErrors(validateContent(input));
+
+    expect(
+      errors.some(
+        (e) =>
+          e.includes("ky-item-sentence-unclosed") &&
+          e.includes("invalid cloze markup"),
+      ),
+    ).toBe(true);
+  });
+
+  it("(n) reports a dangling audioRef", () => {
+    const { input, itemA } = makeFixture();
+    itemA.payload.audioRef = "missing-audio";
+
+    const errors = expectErrors(validateContent(input));
+
+    expect(errors.some((e) => e.includes("ky-item-a"))).toBe(true);
+  });
+
+  it("(o) reports a task/kind mismatch (a non-minimal-pair task over a pair item)", () => {
+    const { input, unit, resource } = makeFixture();
+    const pairItem: PairItemLike = {
+      id: "ky-item-pair-1",
+      kind: "pair",
+      payload: {
+        a: { script: "шым", audioRef: "shym" },
+        b: { script: "чым", audioRef: "chym" },
+        contrast: "ш vs ч",
+      },
+      sourceRef: resource.id,
+    };
+    input.items.push(pairItem);
+    unit.itemIds.push(pairItem.id);
+    input.audioStems.push("shym", "chym");
+    const badTask: TaskLike = {
+      id: "ky-task-recall-pair",
+      type: "recall",
+      itemIds: [pairItem.id],
+    };
+    input.tasks.push(badTask);
+    unit.taskIds.push(badTask.id);
+
+    const errors = expectErrors(validateContent(input));
+
+    expect(errors.some((e) => e.includes("ky-task-recall-pair"))).toBe(true);
+  });
+
+  it("(p) reports a matching task with fewer than 2 items", () => {
+    const { input, unit, itemA } = makeFixture();
+    const matchingTask: TaskLike = {
+      id: "ky-task-matching-1",
+      type: "matching",
+      itemIds: [itemA.id],
+    };
+    input.tasks.push(matchingTask);
+    unit.taskIds.push(matchingTask.id);
+
+    const errors = expectErrors(validateContent(input));
+
+    expect(errors.some((e) => e.includes("ky-task-matching-1"))).toBe(true);
+  });
+
+  it("(q) reports a scramble item whose stripped text has fewer than 3 tokens", () => {
+    const { input, unit, resource } = makeFixture();
+    const shortSentence: SentenceItemLike = {
+      id: "ky-item-sentence-short",
+      kind: "sentence",
+      payload: { text: "Hi there", translation: "Hi there" },
+      sourceRef: resource.id,
+    };
+    input.items.push(shortSentence);
+    unit.itemIds.push(shortSentence.id);
+    const scrambleTask: TaskLike = {
+      id: "ky-task-scramble-1",
+      type: "scramble",
+      itemIds: [shortSentence.id],
+    };
+    input.tasks.push(scrambleTask);
+    unit.taskIds.push(scrambleTask.id);
+
+    const errors = expectErrors(validateContent(input));
+
+    expect(errors.some((e) => e.includes("ky-task-scramble-1"))).toBe(true);
+  });
+
+  it("(r) reports a listen task whose owning unit has fewer than 4 same-kind items", () => {
+    const { input, unit, resource } = makeFixture();
+    const sentenceItem: SentenceItemLike = {
+      id: "ky-item-sentence-1",
+      kind: "sentence",
+      payload: {
+        text: "One two three",
+        translation: "One two three",
+        audioRef: "s1",
+      },
+      sourceRef: resource.id,
+    };
+    input.items.push(sentenceItem);
+    unit.itemIds.push(sentenceItem.id);
+    input.audioStems.push("s1");
+    const listenTask: TaskLike = {
+      id: "ky-task-listen-1",
+      type: "listen",
+      itemIds: [sentenceItem.id],
+    };
+    input.tasks.push(listenTask);
+    unit.taskIds.push(listenTask.id);
+
+    const errors = expectErrors(validateContent(input));
+
+    expect(errors.some((e) => e.includes("ky-task-listen-1"))).toBe(true);
   });
 });

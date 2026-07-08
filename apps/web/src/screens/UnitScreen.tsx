@@ -17,25 +17,31 @@ function parseNote(markdown: string): { title: string; paragraphs: string[] } {
 }
 
 function ItemCard({ item }: { item: Item }) {
-  return (
-    <li className="card">
-      {item.kind === "concept" ? (
-        <>
+  switch (item.kind) {
+    case "concept":
+      return (
+        <li className="card">
           <strong>{item.payload.term}</strong>
           <p>{item.payload.definition}</p>
-        </>
-      ) : (
-        <>
+        </li>
+      );
+    case "lexeme":
+      return (
+        <li className="card">
           <strong>{item.payload.script}</strong>
           <p>{item.payload.transliteration}</p>
           <p>{item.payload.gloss}</p>
           {item.payload.usageNote !== undefined ? (
             <p className="usage-note">{item.payload.usageNote}</p>
           ) : null}
-        </>
-      )}
-    </li>
-  );
+        </li>
+      );
+    case "sentence":
+    case "pair":
+      // New item kinds from plan 0002; a rendering component lands in plan
+      // 0002 step 4.
+      throw new Error("not implemented: plan 0002 step 4");
+  }
 }
 
 function TaskCard({

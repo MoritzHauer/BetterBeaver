@@ -7,7 +7,13 @@ import {
   taskSchema,
   resourceSchema,
   itemDisplayText,
+  recognizePrompt,
+  parseClozeMarkup,
+  stripClozeMarkup,
   RECOGNIZE_DISTRACTOR_COUNT,
+  TASK_ALLOWED_ITEM_KINDS,
+  TASK_NEEDS_DISTRACTORS,
+  TASK_REQUIRED_ASSET,
   type Topic,
   type Unit,
   type Item,
@@ -31,6 +37,9 @@ export interface ValidateContentInput {
   tasks: unknown[];
   resources: unknown[];
   noteStems: string[];
+  /** Two separate stem lists (never cross-checked) so an `imageRef` can never validate against an audio file. */
+  audioStems: string[];
+  imageStems: string[];
 }
 
 export type ValidateContentResult = { content: Content } | { errors: string[] };
@@ -170,9 +179,15 @@ export function validateContent(
     phase1Errors,
   );
 
-  for (const [index, stem] of input.noteStems.entries()) {
-    if (!slugPattern.test(stem)) {
-      phase1Errors.push(`noteStems[${index}] ("${stem}"): invalid slug`);
+  for (const [name, stems] of [
+    ["noteStems", input.noteStems],
+    ["audioStems", input.audioStems],
+    ["imageStems", input.imageStems],
+  ] as const) {
+    for (const [index, stem] of stems.entries()) {
+      if (!slugPattern.test(stem)) {
+        phase1Errors.push(`${name}[${index}] ("${stem}"): invalid slug`);
+      }
     }
   }
 
@@ -360,6 +375,19 @@ export function validateContent(
     }
     const taskKind = taskItems[0]?.kind;
 
+    // class (o): task/kind mismatch — a type given an item kind outside its
+    // catalogue row (this is what makes `pair` unreachable everywhere but
+    // `minimal-pair`).
+    if (
+      taskKind !== undefined &&
+      !TASK_ALLOWED_ITEM_KINDS[task.type].includes(taskKind)
+    ) {
+      errors.push(
+        `${task.id}: task type "${task.type}" does not accept item kind "${taskKind}"`,
+      );
+      continue;
+    }
+
     const owningUnit = taskOwningUnit.get(task.id);
     if (owningUnit === undefined) {
       // Ownership already reported under class (d); "the task's unit" is
@@ -382,16 +410,144 @@ export function validateContent(
       continue;
     }
 
-    // class (g): a recognize task's owning unit must have enough items of the task's kind
-    // to sample RECOGNIZE_DISTRACTOR_COUNT distractors plus the correct answer.
-    if (task.type === "recognize") {
+    // class (g)/(r): an MCQ-presentation task's owning unit must have
+    // enough items of the task's kind to sample RECOGNIZE_DISTRACTOR_COUNT
+    // distractors plus the correct answer (listen/picture reuse the
+    // recognize distractor sampler over display texts, so the requirement
+    // is identical).
+    if (TASK_NEEDS_DISTRACTORS[task.type]) {
       const requiredCount = RECOGNIZE_DISTRACTOR_COUNT + 1;
       const sameKindCount = owningUnit.itemIds.filter(
         (id) => itemById.get(id)?.kind === taskKind,
       ).length;
       if (sameKindCount < requiredCount) {
         errors.push(
-          `${task.id}: recognize task's owning unit "${owningUnit.id}" has only ${sameKindCount} item(s) of kind "${taskKind}" (needs >= ${requiredCount})`,
+          `${task.id}: ${task.type} task's owning unit "${owningUnit.id}" has only ${sameKindCount} item(s) of kind "${taskKind}" (needs >= ${requiredCount})`,
+        );
+      }
+    }
+
+    // class (p): a matching task must have 2..8 items, and no two items
+    // sharing a prompt-side text (two identical prompt cards would make the
+    // pairing undecidable).
+    if (task.type === "matching") {
+      if (taskItems.length < 2 || taskItems.length > 8) {
+        errors.push(
+          `${task.id}: matching task has ${taskItems.length} item(s) (needs 2..8)`,
+        );
+      }
+      const idsByPrompt = new Map<string, string[]>();
+      for (const item of taskItems) {
+        const prompt = recognizePrompt(item);
+        const ids = idsByPrompt.get(prompt) ?? [];
+        ids.push(item.id);
+        idsByPrompt.set(prompt, ids);
+      }
+      for (const [prompt, ids] of idsByPrompt) {
+        if (ids.length > 1) {
+          errors.push(
+            `${task.id}: duplicate matching prompt text "${prompt}" among items ${ids.join(", ")}`,
+          );
+        }
+      }
+    }
+
+    // class (q): a scramble item's stripped text needs >= 3 whitespace
+    // tokens to reorder (nothing to reorder otherwise).
+    if (task.type === "scramble") {
+      for (const item of taskItems) {
+        if (item.kind !== "sentence") {
+          continue; // kind mismatch already reported under class (o).
+        }
+        const tokenCount = stripClozeMarkup(item.payload.text)
+          .trim()
+          .split(/\s+/)
+          .filter((token) => token.length > 0).length;
+        if (tokenCount < 3) {
+          errors.push(
+            `${task.id}: scramble item "${item.id}" has only ${tokenCount} token(s) (needs >= 3)`,
+          );
+        }
+      }
+    }
+
+    // class (m), continued: a cloze task item with zero blanks (malformed
+    // markup itself is checked below, over every sentence item).
+    if (task.type === "cloze") {
+      for (const item of taskItems) {
+        if (item.kind !== "sentence") {
+          continue; // kind mismatch already reported under class (o).
+        }
+        const parsed = parseClozeMarkup(item.payload.text);
+        if (parsed.valid && parsed.blanks.length === 0) {
+          errors.push(
+            `${task.id}: cloze task item "${item.id}" has zero blanks`,
+          );
+        }
+      }
+    }
+  }
+
+  // --- classes (m) and (n), per item: invalid cloze markup on sentence
+  // text (the zero-blanks-for-a-cloze-task sub-case lives in the task loop
+  // above) and dangling audioRef/imageRef ---
+  const audioStemSet = new Set(input.audioStems);
+  const imageStemSet = new Set(input.imageStems);
+  for (const item of items) {
+    if (item.kind === "pair") {
+      for (const side of ["a", "b"] as const) {
+        if (!audioStemSet.has(item.payload[side].audioRef)) {
+          errors.push(
+            `${item.id}: dangling audioRef "${item.payload[side].audioRef}" in payload.${side}`,
+          );
+        }
+      }
+      continue;
+    }
+    if (
+      item.payload.audioRef !== undefined &&
+      !audioStemSet.has(item.payload.audioRef)
+    ) {
+      errors.push(`${item.id}: dangling audioRef "${item.payload.audioRef}"`);
+    }
+    if (
+      item.kind !== "sentence" &&
+      item.payload.imageRef !== undefined &&
+      !imageStemSet.has(item.payload.imageRef)
+    ) {
+      errors.push(`${item.id}: dangling imageRef "${item.payload.imageRef}"`);
+    }
+    if (
+      item.kind === "sentence" &&
+      !parseClozeMarkup(item.payload.text).valid
+    ) {
+      errors.push(`${item.id}: invalid cloze markup in text`);
+    }
+  }
+
+  // --- class (n), per task: task items missing the ref their type needs ---
+  for (const task of tasks) {
+    const requiredAsset = TASK_REQUIRED_ASSET[task.type];
+    if (requiredAsset === null) {
+      continue;
+    }
+    for (const id of task.itemIds) {
+      const item = itemById.get(id);
+      if (item === undefined || item.kind === "pair") {
+        continue; // dangling ref (a) or kind mismatch (o) already reported.
+      }
+      if (requiredAsset === "audio" && item.payload.audioRef === undefined) {
+        errors.push(
+          `${task.id}: item "${id}" is missing audioRef required by task type "${task.type}"`,
+        );
+      }
+      if (
+        requiredAsset === "image" &&
+        item.kind !== "sentence" &&
+        item.payload.imageRef === undefined
+      ) {
+        errors.push(
+          `${task.id}: item "${id}" is missing imageRef required by task type "${task.type}"`,
         );
       }
     }
@@ -402,7 +558,11 @@ export function validateContent(
     const itemIdsByKindAndText = new Map<string, Map<string, string[]>>();
     for (const id of unit.itemIds) {
       const item = itemById.get(id);
-      if (item === undefined) {
+      // `pair` items have no display text (they only ever feed
+      // `minimal-pair`, which doesn't use `itemDisplayText`) — skip them so
+      // this loop, which runs over every item unconditionally, doesn't hit
+      // itemDisplayText's permanent throw for that kind.
+      if (item === undefined || item.kind === "pair") {
         continue;
       }
       const text = itemDisplayText(item);

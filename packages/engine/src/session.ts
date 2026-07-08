@@ -110,6 +110,18 @@ export function buildTaskSession(
       });
     }
 
+    // New task types from plan 0002; session construction for these lands
+    // in plan 0002 step 2.
+    case "cloze":
+    case "matching":
+    case "scramble":
+    case "listen":
+    case "dictation":
+    case "shadowing":
+    case "minimal-pair":
+    case "picture":
+      throw new Error("not implemented: plan 0002 step 2");
+
     default:
       task.type satisfies never;
       throw new Error(`unknown task type: ${task.type as string}`);
