@@ -74,21 +74,30 @@ function groupByTopicDir<V>(
 
 const identity = (_path: string, value: unknown): unknown => value;
 
+/** Groups glob entries by topic directory into stem -> string maps (glob
+ * values are raw strings for notes, URL strings for assets). The single
+ * source for both stem lists (validation) and lookups (rendering). */
+function stemMapByTopicDir(
+  files: Record<string, unknown>,
+): Map<string, Map<string, string>> {
+  return new Map(
+    [
+      ...groupByTopicDir(
+        files,
+        (path, value) => [stemOf(path), value as string] as const,
+      ),
+    ].map(([dir, entries]) => [dir, new Map(entries)]),
+  );
+}
+
 const topicsByDir = groupByTopicDir(topicFiles, identity);
 const unitsByDir = groupByTopicDir(unitFiles, identity);
 const itemsByDir = groupByTopicDir(itemFiles, identity);
 const tasksByDir = groupByTopicDir(taskFiles, identity);
 const resourcesByDir = groupByTopicDir(resourceFiles, identity);
-const notesByDir = new Map(
-  [
-    ...groupByTopicDir(
-      noteFiles,
-      (path, value) => [stemOf(path), value as string] as const,
-    ),
-  ].map(([dir, entries]) => [dir, new Map(entries)]),
-);
-const audioStemsByDir = groupByTopicDir(audioFiles, (path) => stemOf(path));
-const imageStemsByDir = groupByTopicDir(imageFiles, (path) => stemOf(path));
+const notesByDir = stemMapByTopicDir(noteFiles);
+const audioUrlsByDir = stemMapByTopicDir(audioFiles);
+const imageUrlsByDir = stemMapByTopicDir(imageFiles);
 
 /**
  * Creates a `ContentSource` backed by content bundled into the app at build
@@ -115,11 +124,19 @@ export function createBundledContentSource(): ContentSource {
       // so the grouped glob value is one level too deep — flatten it.
       resources: (resourcesByDir.get(dir) ?? []).flat(),
       noteStems: [...noteStemMap.keys()],
-      audioStems: audioStemsByDir.get(dir) ?? [],
-      imageStems: imageStemsByDir.get(dir) ?? [],
+      audioStems: [...(audioUrlsByDir.get(dir)?.keys() ?? [])],
+      imageStems: [...(imageUrlsByDir.get(dir)?.keys() ?? [])],
     });
     if ("errors" in result) {
       allErrors.push(...result.errors.map((error) => `${dir}: ${error}`));
+      continue;
+    }
+    // Note/asset lookups are keyed by directory name but called with the
+    // topic id (getNoteMarkdown/getAssetUrl), so the two must coincide.
+    if (result.content.topic.id !== dir) {
+      allErrors.push(
+        `${dir}: topic id "${result.content.topic.id}" must equal its directory name`,
+      );
       continue;
     }
     contentByTopicId.set(result.content.topic.id, result.content);
@@ -160,4 +177,18 @@ export function getNoteMarkdown(
   stem: string,
 ): string | undefined {
   return notesByDir.get(topicDir)?.get(stem);
+}
+
+/**
+ * Returns the URL for a bundled asset, given the topic's directory name
+ * (equal to the topic id in bundled content), its kind, and the asset's
+ * file stem. `undefined` if no such asset was bundled.
+ */
+export function getAssetUrl(
+  topicDir: string,
+  kind: "audio" | "img",
+  stem: string,
+): string | undefined {
+  const byDir = kind === "audio" ? audioUrlsByDir : imageUrlsByDir;
+  return byDir.get(topicDir)?.get(stem);
 }

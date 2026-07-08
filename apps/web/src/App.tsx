@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Content, Task } from "@betterbeaver/schema";
 import type {
   ContentSource,
@@ -51,21 +51,17 @@ function TaskSession({
     // screen change, but the session must not reshuffle across re-renders.
     [task.id],
   );
-  const answeredCount = useRef(0);
-
   async function handleGrade(unitId: string, quality: Quality) {
     await recordGrade(progressStore, unitId, quality, new Date());
-    answeredCount.current += 1;
-    if (answeredCount.current === questions.length) {
-      await progressStore.markTaskAttempted(task.id);
-    }
   }
 
   return (
     <SessionScreen
       title={task.instructions ?? `${task.type} practice`}
       questions={questions}
+      topicId={content.topic.id}
       onGrade={handleGrade}
+      onAllAnswered={() => void progressStore.markTaskAttempted(task.id)}
       onFinished={onDone}
       onExit={onDone}
     />
@@ -124,6 +120,7 @@ function ReviewSession({
     <SessionScreen
       title="Review"
       questions={questions}
+      topicId={content.topic.id}
       onGrade={handleGrade}
       onFinished={onDone}
       onExit={onDone}

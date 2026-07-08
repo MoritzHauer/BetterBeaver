@@ -1,4 +1,5 @@
 import type { Content, Item, Task } from "@betterbeaver/schema";
+import { stripClozeMarkup } from "@betterbeaver/schema";
 import { getNoteMarkdown } from "../content/bundled";
 
 /** Splits a note's raw markdown into its display title and body paragraphs. */
@@ -37,10 +38,21 @@ function ItemCard({ item }: { item: Item }) {
         </li>
       );
     case "sentence":
+      return (
+        <li className="card">
+          <strong>{item.payload.translation}</strong>
+          <p>{stripClozeMarkup(item.payload.text)}</p>
+        </li>
+      );
     case "pair":
-      // New item kinds from plan 0002; a rendering component lands in plan
-      // 0002 step 4.
-      throw new Error("not implemented: plan 0002 step 4");
+      return (
+        <li className="card">
+          <strong>
+            {item.payload.a.script} / {item.payload.b.script}
+          </strong>
+          <p>{item.payload.contrast}</p>
+        </li>
+      );
   }
 }
 
@@ -58,9 +70,7 @@ function TaskCard({
       <strong>{task.type}</strong>
       {attempted ? <span className="done-mark"> &#10003; done</span> : null}
       {task.instructions !== undefined ? <p>{task.instructions}</p> : null}
-      <button onClick={onPractice}>
-        {task.type === "recognize" ? "Practice" : "Recall practice"}
-      </button>
+      <button onClick={onPractice}>{task.type} practice</button>
     </li>
   );
 }
