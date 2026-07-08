@@ -1,0 +1,10 @@
+{
+  "id": "dx-item-word-thanks",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Thank you",
+    "transliteration": "thank-you",
+    "gloss": "thank you (gratitude)"
+  },
+  "sourceRef": "dx-resource-placeholder"
+}

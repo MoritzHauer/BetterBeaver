@@ -1,0 +1,6 @@
+{
+  "id": "dx-task-dictation-sentences",
+  "type": "dictation",
+  "itemIds": ["dx-item-sentence-shared"],
+  "instructions": "Listen and type what you heard."
+}

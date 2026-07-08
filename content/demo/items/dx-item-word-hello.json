@@ -1,0 +1,10 @@
+{
+  "id": "dx-item-word-hello",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Hello",
+    "transliteration": "heh-loh",
+    "gloss": "hello (greeting)"
+  },
+  "sourceRef": "dx-resource-placeholder"
+}

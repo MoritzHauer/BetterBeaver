@@ -1,0 +1,6 @@
+{
+  "id": "dx-task-shadowing-words",
+  "type": "shadowing",
+  "itemIds": ["dx-item-word-sun"],
+  "instructions": "Listen, repeat aloud, then reveal the transcript and self-grade."
+}

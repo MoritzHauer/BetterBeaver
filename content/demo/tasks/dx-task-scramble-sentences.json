@@ -1,0 +1,6 @@
+{
+  "id": "dx-task-scramble-sentences",
+  "type": "scramble",
+  "itemIds": ["dx-item-sentence-scramble"],
+  "instructions": "Reorder the words into the correct sentence."
+}

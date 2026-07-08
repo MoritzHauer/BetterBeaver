@@ -1,0 +1,6 @@
+{
+  "id": "dx-task-listen-words",
+  "type": "listen",
+  "itemIds": ["dx-item-word-sun"],
+  "instructions": "Listen and pick what you heard."
+}

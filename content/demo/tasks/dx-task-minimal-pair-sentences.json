@@ -1,0 +1,6 @@
+{
+  "id": "dx-task-minimal-pair-sentences",
+  "type": "minimal-pair",
+  "itemIds": ["dx-item-pair-ship-sheep"],
+  "instructions": "Listen and choose which word you heard."
+}

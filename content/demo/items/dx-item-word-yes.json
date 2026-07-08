@@ -1,0 +1,10 @@
+{
+  "id": "dx-item-word-yes",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Yes",
+    "transliteration": "yes",
+    "gloss": "yes (affirmative)"
+  },
+  "sourceRef": "dx-resource-placeholder"
+}

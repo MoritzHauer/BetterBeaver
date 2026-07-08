@@ -1,0 +1,12 @@
+{
+  "id": "dx-task-recognize-words",
+  "type": "recognize",
+  "itemIds": [
+    "dx-item-word-hello",
+    "dx-item-word-yes",
+    "dx-item-word-thanks",
+    "dx-item-word-sun",
+    "dx-item-word-house"
+  ],
+  "instructions": "Pick the correct meaning for each word."
+}

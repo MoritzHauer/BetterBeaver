@@ -1,0 +1,10 @@
+{
+  "id": "dx-item-sentence-shared",
+  "kind": "sentence",
+  "payload": {
+    "text": "{{c1::I}} {{c2::like}} tea.",
+    "translation": "I like tea.",
+    "audioRef": "dx-audio-sentence-shared"
+  },
+  "sourceRef": "dx-resource-placeholder"
+}
