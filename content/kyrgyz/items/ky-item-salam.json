@@ -1,0 +1,11 @@
+{
+  "id": "ky-item-salam",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Салам!",
+    "transliteration": "salam",
+    "gloss": "Hi! (informal greeting)",
+    "usageNote": "Between friends and people your age. The reply is the same: Салам!"
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

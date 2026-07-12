@@ -1,0 +1,31 @@
+{
+  "id": "ky-unit-greetings",
+  "topicId": "kyrgyz",
+  "title": "Greetings and introductions",
+  "goal": "Greet someone appropriately for their age and status, respond to a greeting, and introduce yourself by name.",
+  "unlocksAfterUnitId": "ky-unit-script-survival",
+  "itemIds": [
+    "ky-item-salam",
+    "ky-item-salamatsyzby",
+    "ky-item-salamatchylyk",
+    "ky-item-assalom-aleikum",
+    "ky-item-aleikum-assalom",
+    "ky-item-ishter-kanday",
+    "ky-item-rakhmat",
+    "ky-item-jakshy",
+    "ky-item-jaman-emes",
+    "ky-item-menin-atym",
+    "ky-item-senin-atyng-kim",
+    "ky-item-sen",
+    "ky-item-siz",
+    "ky-item-agai",
+    "ky-item-ejeke",
+    "ky-item-aksakal"
+  ],
+  "taskIds": [
+    "ky-task-greet-recognize",
+    "ky-task-people-recognize",
+    "ky-task-greet-recall"
+  ],
+  "noteIds": ["ky-note-greeting-register", "ky-note-introducing-yourself"]
+}

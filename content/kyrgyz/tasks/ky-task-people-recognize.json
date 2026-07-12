@@ -1,0 +1,14 @@
+{
+  "id": "ky-task-people-recognize",
+  "type": "recognize",
+  "itemIds": [
+    "ky-item-menin-atym",
+    "ky-item-senin-atyng-kim",
+    "ky-item-sen",
+    "ky-item-siz",
+    "ky-item-agai",
+    "ky-item-ejeke",
+    "ky-item-aksakal"
+  ],
+  "instructions": "Pick the correct meaning for each introduction phrase or form of address."
+}

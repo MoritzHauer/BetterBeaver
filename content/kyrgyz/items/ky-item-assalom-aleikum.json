@@ -1,0 +1,11 @@
+{
+  "id": "ky-item-assalom-aleikum",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Ассалом алейкум!",
+    "transliteration": "assalom aleikum",
+    "gloss": "Peace be with you (greeting for an elder man)",
+    "usageNote": "From Arabic. Traditionally addressed to an elderly or respected man."
+  },
+  "sourceRef": "ky-resource-competencies"
+}

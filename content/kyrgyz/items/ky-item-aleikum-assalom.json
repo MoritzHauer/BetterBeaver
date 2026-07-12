@@ -1,0 +1,10 @@
+{
+  "id": "ky-item-aleikum-assalom",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Алейкум ассалом!",
+    "transliteration": "aleikum assalom",
+    "gloss": "And peace be with you (reply to the elder greeting)"
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

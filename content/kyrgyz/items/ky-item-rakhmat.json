@@ -1,0 +1,10 @@
+{
+  "id": "ky-item-rakhmat",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Рахмат",
+    "transliteration": "rahmat",
+    "gloss": "Thanks"
+  },
+  "sourceRef": "ky-resource-competencies"
+}

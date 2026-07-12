@@ -1,0 +1,11 @@
+{
+  "id": "ky-item-sen",
+  "kind": "lexeme",
+  "payload": {
+    "script": "сен",
+    "transliteration": "sen",
+    "gloss": "you (informal singular)",
+    "usageNote": "For friends, children, and people younger than you. When unsure, use сиз."
+  },
+  "sourceRef": "ky-resource-competencies"
+}

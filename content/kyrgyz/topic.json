@@ -3,5 +3,5 @@
   "code": "ky",
   "title": "Kyrgyz",
   "description": "Kyrgyz language survival basics: read the Cyrillic script, greet people, and introduce yourself.",
-  "unitIds": ["ky-unit-script-survival"]
+  "unitIds": ["ky-unit-script-survival", "ky-unit-greetings"]
 }

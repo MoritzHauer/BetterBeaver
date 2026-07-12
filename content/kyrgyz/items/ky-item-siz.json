@@ -1,0 +1,11 @@
+{
+  "id": "ky-item-siz",
+  "kind": "lexeme",
+  "payload": {
+    "script": "сиз",
+    "transliteration": "siz",
+    "gloss": "you (polite singular)",
+    "usageNote": "For elders, teachers, superiors, and new acquaintances. Proverb: «Сиз» деген сылык сөз, «сен» деген сенек сөз — 'Siz is a polite word, sen is a blunt word.'"
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

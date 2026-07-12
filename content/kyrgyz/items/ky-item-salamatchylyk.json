@@ -1,0 +1,10 @@
+{
+  "id": "ky-item-salamatchylyk",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Саламатчылык!",
+    "transliteration": "salamatchylyk",
+    "gloss": "I am well (reply to the polite greeting; literally 'health')"
+  },
+  "sourceRef": "ky-resource-competencies"
+}
