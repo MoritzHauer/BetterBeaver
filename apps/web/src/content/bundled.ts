@@ -32,7 +32,9 @@ const noteFiles = import.meta.glob("../../../../content/*/notes/*.md", {
   import: "default",
 });
 // Extension lists only (`.wav`/`.svg` for now) — real content later adds
-// more (png/jpg/opus/…) additively; see plan 0002.
+// more (png/jpg/opus/…) additively; see plan 0002. Any new extension must
+// also be added to the PWA precache globPatterns in vite.config.ts, or the
+// asset won't be available offline.
 const audioFiles = import.meta.glob("../../../../content/*/assets/audio/*", {
   eager: true,
   import: "default",
