@@ -1,6 +1,6 @@
 # Plan 0003: UI/UX polish (feel + streak)
 
-Status: pinned in a grilling session (2026-07-14) — scope, brand, typography, bottom action bar, synth sound, stat-tile session end, streak rule, card-list home, press-feedback buttons · Owner: Moe · Date: 2026-07-14 · Prerequisite: plans 0001 and 0002 complete (they are).
+Status: implemented (2026-07-14, steps 1–5; browser-verified per step 5) · Owner: Moe · Date: 2026-07-14 · Prerequisite: plans 0001 and 0002 complete (they are).
 
 ## Purpose
 
