@@ -1,5 +1,5 @@
-import { useRef, useState } from "react";
-import type { FormEvent } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import type { FormEvent, ReactNode } from "react";
 import type {
   MatchingQuestion,
   Question,
@@ -15,6 +15,7 @@ import {
 import type { Quality, SelfGrade } from "@betterbeaver/srs";
 import { recallQuality, recognizeQuality } from "@betterbeaver/srs";
 import { getAssetUrl } from "../content/bundled";
+import { playCorrect, playFanfare, playWrong } from "../sounds";
 
 /** Tally of results across a session; only the fields for the task type(s)
  * actually encountered end up non-zero. Every auto-graded kind (recognize,
@@ -32,6 +33,46 @@ function emptySummary(): SessionSummary {
     autoTotal: 0,
     recallCounts: { again: 0, hard: 0, good: 0 },
   };
+}
+
+type Verdict = "correct" | "incorrect";
+
+/** The fixed bottom action bar (plan 0003): the single action zone of the
+ * session screen. Neutral while answering; verdict-filled after. */
+function ActionBar({
+  verdict,
+  children,
+}: {
+  verdict?: Verdict;
+  children: ReactNode;
+}) {
+  return (
+    <div className={`action-bar${verdict !== undefined ? ` ${verdict}` : ""}`}>
+      <div className="action-bar-inner">{children}</div>
+    </div>
+  );
+}
+
+/** Post-answer state of the bar: verdict text plus a full-width Continue.
+ * The Continue button is auto-focused so Enter continues (preserving the
+ * form-submit-then-Enter flow of typed questions). */
+function VerdictBar({
+  verdict,
+  detail,
+  advance,
+}: {
+  verdict: Verdict;
+  detail: string;
+  advance: () => void;
+}) {
+  return (
+    <ActionBar verdict={verdict}>
+      <p className="verdict">{verdict === "correct" ? "Correct!" : detail}</p>
+      <button autoFocus onClick={advance}>
+        Continue
+      </button>
+    </ActionBar>
+  );
 }
 
 /** Native audio element; unlimited replays for free, no custom player. */
@@ -60,7 +101,8 @@ function ImageDisplay({
 }
 
 /** Shared MCQ choice list: recognize, listen, minimal-pair, and picture all
- * pick one of N choices against a known correct index. */
+ * pick one of N choices against a known correct index. Tap-to-answer, so the
+ * action bar holds nothing until the verdict. */
 function ChoiceList({
   choices,
   correctIndex,
@@ -108,14 +150,20 @@ function ChoiceList({
           );
         })}
       </ul>
-      {picked !== null ? <button onClick={advance}>Next</button> : null}
+      {picked !== null ? (
+        <VerdictBar
+          verdict={picked === correctIndex ? "correct" : "incorrect"}
+          detail={`Answer: ${choices[correctIndex]}`}
+          advance={advance}
+        />
+      ) : null}
     </>
   );
 }
 
 /** Shared reveal + self-grade: recall (reveal the answer) and shadowing
- * (reveal the transcript) both show lines behind a reveal button, then
- * grade themselves via the existing again/hard/good buttons. */
+ * (reveal the transcript) both show lines behind a reveal action, then grade
+ * themselves via Again/Hard/Good — all in the action bar (plan 0003). */
 function SelfGradeReveal({
   lines,
   revealLabel,
@@ -143,13 +191,15 @@ function SelfGradeReveal({
 
   return (
     <div>
-      {!revealed ? (
-        <button onClick={() => setRevealed(true)}>{revealLabel}</button>
-      ) : (
-        <>
-          {lines.map((line, lineIndex) => (
-            <p key={lineIndex}>{line}</p>
-          ))}
+      {revealed
+        ? lines.map((line, lineIndex) => <p key={lineIndex}>{line}</p>)
+        : null}
+      <ActionBar>
+        {!revealed ? (
+          <button className="primary" onClick={() => setRevealed(true)}>
+            {revealLabel}
+          </button>
+        ) : (
           <div className="grade-buttons">
             <button disabled={graded} onClick={() => grade("again")}>
               Again
@@ -161,15 +211,16 @@ function SelfGradeReveal({
               Good
             </button>
           </div>
-        </>
-      )}
+        )}
+      </ActionBar>
     </div>
   );
 }
 
 /** Shared typed-input form: cloze and dictation both type an answer, checked
- * via `checkTypedAnswer`, and reveal the target on submit. Form submit (not
- * a bare button) so Enter works. */
+ * via `checkTypedAnswer`, and reveal the target on submit. The Check button
+ * lives in the action bar, tied to the form via the native `form` attribute
+ * so Enter still submits. */
 function TypedInput({
   target,
   unitId,
@@ -181,8 +232,9 @@ function TypedInput({
   applyAuto: (unitId: string, correct: boolean) => Promise<void>;
   advance: () => void;
 }) {
+  const formId = useId();
   const [value, setValue] = useState("");
-  const [result, setResult] = useState<"correct" | "incorrect" | null>(null);
+  const [result, setResult] = useState<Verdict | null>(null);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -196,25 +248,28 @@ function TypedInput({
 
   return (
     <div>
-      <form onSubmit={handleSubmit}>
+      <form id={formId} onSubmit={handleSubmit}>
         <input
           type="text"
+          autoFocus
           value={value}
           disabled={result !== null}
           onChange={(event) => setValue(event.target.value)}
         />
-        <button type="submit" disabled={result !== null}>
-          Submit
-        </button>
       </form>
-      {result !== null ? (
-        <>
-          <div className={`card ${result}`}>
-            <div>{result === "correct" ? "Correct!" : `Answer: ${target}`}</div>
-          </div>
-          <button onClick={advance}>Next</button>
-        </>
-      ) : null}
+      {result === null ? (
+        <ActionBar>
+          <button className="primary" type="submit" form={formId}>
+            Check
+          </button>
+        </ActionBar>
+      ) : (
+        <VerdictBar
+          verdict={result}
+          detail={`Answer: ${target}`}
+          advance={advance}
+        />
+      )}
     </div>
   );
 }
@@ -235,7 +290,7 @@ function ScrambleInteraction({
     question.tokens.map((token, key) => ({ token, key })),
   );
   const [answer, setAnswer] = useState<{ token: string; key: number }[]>([]);
-  const [result, setResult] = useState<"correct" | "incorrect" | null>(null);
+  const [result, setResult] = useState<Verdict | null>(null);
 
   function moveToAnswer(poolIndex: number) {
     if (result !== null) {
@@ -298,20 +353,21 @@ function ScrambleInteraction({
         ))}
       </div>
       {result === null ? (
-        <button onClick={submit} disabled={pool.length > 0}>
-          Submit
-        </button>
+        <ActionBar>
+          <button
+            className="primary"
+            onClick={submit}
+            disabled={pool.length > 0}
+          >
+            Check
+          </button>
+        </ActionBar>
       ) : (
-        <>
-          <div className={`card ${result}`}>
-            <div>
-              {result === "correct"
-                ? "Correct!"
-                : `Answer: ${question.targetTokens.join(" ")}`}
-            </div>
-          </div>
-          <button onClick={advance}>Next</button>
-        </>
+        <VerdictBar
+          verdict={result}
+          detail={`Answer: ${question.targetTokens.join(" ")}`}
+          advance={advance}
+        />
       )}
     </div>
   );
@@ -319,7 +375,8 @@ function ScrambleInteraction({
 
 /** Two columns (prompts, answers); every selection-pair is appended to a
  * history array and re-checked via `matchingOutcomes` — a non-null result
- * clears the board and applies every outcome at once. */
+ * clears the board and applies every outcome at once. Per-pair feedback is
+ * sound + card color; the action bar appears once the board clears. */
 function MatchingBoard({
   question,
   applyMatchingOutcomes,
@@ -341,9 +398,13 @@ function MatchingBoard({
   async function resolvePair(promptIndex: number, answerIndex: number) {
     const newHistory = [...history, { promptIndex, answerIndex }];
     setHistory(newHistory);
-    if (checkMatchingPair(question, promptIndex, answerIndex)) {
+    const correct = checkMatchingPair(question, promptIndex, answerIndex);
+    if (correct) {
+      playCorrect();
       setClearedPrompts((cleared) => new Set(cleared).add(promptIndex));
       setClearedAnswers((cleared) => new Set(cleared).add(answerIndex));
+    } else {
+      playWrong();
     }
     setSelectedPrompt(null);
     setSelectedAnswer(null);
@@ -420,7 +481,9 @@ function MatchingBoard({
           ))}
         </ul>
       </div>
-      {finished ? <button onClick={advance}>Next</button> : null}
+      {finished ? (
+        <VerdictBar verdict="correct" detail="" advance={advance} />
+      ) : null}
     </div>
   );
 }
@@ -562,6 +625,50 @@ function renderInteraction(
   }
 }
 
+/** Plays the summary fanfare once when the summary panel mounts. */
+function SummaryPanel({
+  summary,
+  onFinished,
+}: {
+  summary: SessionSummary;
+  onFinished: (summary: SessionSummary) => void;
+}) {
+  useEffect(() => {
+    playFanfare();
+  }, []);
+
+  const recallTotal =
+    summary.recallCounts.again +
+    summary.recallCounts.hard +
+    summary.recallCounts.good;
+
+  return (
+    <section>
+      {summary.autoTotal > 0 ? (
+        <p>
+          {summary.autoCorrect} of {summary.autoTotal} correct
+        </p>
+      ) : null}
+      {recallTotal > 0 ? (
+        <ul>
+          <li>Again: {summary.recallCounts.again}</li>
+          <li>Hard: {summary.recallCounts.hard}</li>
+          <li>Good: {summary.recallCounts.good}</li>
+        </ul>
+      ) : null}
+      <ActionBar>
+        <button
+          className="primary"
+          autoFocus
+          onClick={() => onFinished(summary)}
+        >
+          Done
+        </button>
+      </ActionBar>
+    </section>
+  );
+}
+
 /**
  * Runs one task or review session: presents `questions` one at a time,
  * grades each answer via `onGrade`, and shows a summary panel after the
@@ -629,6 +736,11 @@ export function SessionScreen({
   async function applyAuto(unitId: string, correct: boolean) {
     noteAnswered();
     tallyAuto([correct]);
+    if (correct) {
+      playCorrect();
+    } else {
+      playWrong();
+    }
     await onGrade(unitId, recognizeQuality(correct));
   }
 
@@ -651,37 +763,33 @@ export function SessionScreen({
     }
   }
 
-  const recallTotal =
-    summary.recallCounts.again +
-    summary.recallCounts.hard +
-    summary.recallCounts.good;
-
   return (
-    <main>
-      <button onClick={onExit}>&larr; Exit</button>
+    <main className="session">
+      <header className="session-header">
+        <button className="plain exit" aria-label="Exit" onClick={onExit}>
+          &#10005;
+        </button>
+        <div
+          className="progress-track"
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={questions.length}
+          aria-valuenow={done ? questions.length : index}
+        >
+          <div
+            className="progress-fill"
+            style={{
+              width: `${((done ? questions.length : index) / Math.max(questions.length, 1)) * 100}%`,
+            }}
+          />
+        </div>
+      </header>
       <h1>{title}</h1>
 
       {done ? (
-        <section>
-          {summary.autoTotal > 0 ? (
-            <p>
-              {summary.autoCorrect} of {summary.autoTotal} correct
-            </p>
-          ) : null}
-          {recallTotal > 0 ? (
-            <ul>
-              <li>Again: {summary.recallCounts.again}</li>
-              <li>Hard: {summary.recallCounts.hard}</li>
-              <li>Good: {summary.recallCounts.good}</li>
-            </ul>
-          ) : null}
-          <button onClick={() => onFinished(summary)}>Done</button>
-        </section>
+        <SummaryPanel summary={summary} onFinished={onFinished} />
       ) : question === undefined ? null : (
-        <div key={index}>
-          <p className="status">
-            Question {index + 1} of {questions.length}
-          </p>
+        <div key={index} className="question">
           {renderInteraction(
             question,
             topicId,

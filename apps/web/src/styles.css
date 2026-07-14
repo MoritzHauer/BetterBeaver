@@ -271,6 +271,137 @@ button.plain {
   border-color: var(--primary);
 }
 
+/* Session screen (plan 0003 step 3): fixed bottom action bar is the single
+ * action zone, thin top progress bar with an ✕ exit beside it, and a
+ * slide-in on question advance (the key={index} remount). */
+main.session {
+  padding-bottom: 9rem;
+}
+
+.session-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+}
+
+.exit {
+  min-width: 44px;
+  padding: 0.6rem;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.progress-track {
+  flex: 1;
+  height: 0.6rem;
+  border-radius: 999px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--primary);
+  transition: width 250ms ease;
+}
+
+.question {
+  animation: slide-in 250ms ease;
+}
+
+@keyframes slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(2rem);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.action-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--bg);
+  border-top: 1px solid var(--card-border);
+  animation: bar-up 200ms ease;
+}
+
+@keyframes bar-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: none;
+  }
+}
+
+.action-bar-inner {
+  max-width: 60ch;
+  margin: 0 auto;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.action-bar button {
+  width: 100%;
+}
+
+.action-bar .grade-buttons {
+  margin-top: 0;
+}
+
+.action-bar .verdict {
+  margin: 0;
+  font-weight: 800;
+  font-size: 1.1rem;
+}
+
+.action-bar.correct {
+  background: var(--correct-fill);
+  border-color: var(--correct-fill);
+  color: var(--on-fill);
+}
+
+.action-bar.incorrect {
+  background: var(--incorrect-fill);
+  border-color: var(--incorrect-fill);
+  color: var(--on-fill);
+}
+
+.action-bar.correct button,
+.action-bar.incorrect button {
+  background: var(--on-fill);
+  border-color: transparent;
+}
+
+.action-bar.correct button {
+  color: var(--correct-fill);
+}
+
+.action-bar.incorrect button {
+  color: var(--incorrect-fill);
+}
+
+input[type="text"] {
+  font: inherit;
+  color: inherit;
+  width: 100%;
+  min-height: 44px;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--card-border);
+  border-radius: 0.75rem;
+  background: var(--card-bg);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
