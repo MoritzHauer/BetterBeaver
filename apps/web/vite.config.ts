@@ -51,7 +51,7 @@ export default defineConfig({
         // drop out of the offline precache — extend both together (plan 0002).
         // Workbox also skips files over 2 MiB by default; raise
         // maximumFileSizeToCacheInBytes when content audio grows past that.
-        globPatterns: ["**/*.{js,css,html,png,svg,wav,webmanifest}"],
+        globPatterns: ["**/*.{js,css,html,png,svg,wav,woff2,webmanifest}"],
       },
     }),
   ],
