@@ -1,13 +1,16 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import type { SrsState } from "@betterbeaver/srs";
 import type { ProgressStore } from "./interfaces.js";
+import type { Streak } from "./streak.js";
 import { collectItemStates, recordGrade } from "./store.js";
 
 /** Minimal in-memory ProgressStore, satisfying the interface types. */
 class InMemoryProgressStore implements ProgressStore {
   private readonly states = new Map<string, SrsState>();
   private readonly attempted = new Set<string>();
+  streak: Streak | null = null;
   setItemStateCalls = 0;
+  setStreakCalls = 0;
 
   async getItemState(itemId: string): Promise<SrsState | null> {
     return this.states.get(itemId) ?? null;
@@ -24,6 +27,15 @@ class InMemoryProgressStore implements ProgressStore {
 
   async markTaskAttempted(taskId: string): Promise<void> {
     this.attempted.add(taskId);
+  }
+
+  async getStreak(): Promise<Streak | null> {
+    return this.streak;
+  }
+
+  async setStreak(streak: Streak): Promise<void> {
+    this.setStreakCalls++;
+    this.streak = streak;
   }
 }
 
@@ -104,5 +116,28 @@ describe("recordGrade", () => {
     expect(result).toBeNull();
     expect(store.setItemStateCalls).toBe(0);
     expect(await store.getItemState("t-item-not-due")).toEqual(notDueState);
+  });
+
+  it("marks the local day streak-active on every grade, practice-only included", async () => {
+    await store.setItemState("t-item-not-due", notDueState);
+
+    await recordGrade(
+      store,
+      "t-item-not-due",
+      4,
+      new Date(2026, 6, 5, 10, 0), // local time; practice-only grade
+    );
+
+    expect(store.streak).toEqual({ lastActiveDay: "2026-07-05", length: 1 });
+  });
+
+  it("does not rewrite the streak on a same-day repeat grade", async () => {
+    await recordGrade(store, "t-item-a", 4, new Date(2026, 6, 5, 10, 0));
+    expect(store.setStreakCalls).toBe(1);
+
+    await recordGrade(store, "t-item-b", 4, new Date(2026, 6, 5, 11, 0));
+
+    expect(store.setStreakCalls).toBe(1);
+    expect(store.streak).toEqual({ lastActiveDay: "2026-07-05", length: 1 });
   });
 });

@@ -3,4 +3,5 @@ export * from "./normalize.js";
 export * from "./progress.js";
 export * from "./session.js";
 export * from "./store.js";
+export * from "./streak.js";
 export * from "./units.js";

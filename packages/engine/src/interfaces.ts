@@ -1,5 +1,6 @@
 import type { Content } from "@betterbeaver/schema";
 import type { SrsState } from "@betterbeaver/srs";
+import type { Streak } from "./streak.js";
 
 /** Thrown by `ContentSource.loadTopic` when the loaded content fails validation. */
 export class ContentValidationError extends Error {
@@ -38,4 +39,6 @@ export interface ProgressStore {
   setItemState(itemId: string, state: SrsState): Promise<void>;
   getAttemptedTaskIds(): Promise<string[]>;
   markTaskAttempted(taskId: string): Promise<void>;
+  getStreak(): Promise<Streak | null>;
+  setStreak(streak: Streak): Promise<void>;
 }

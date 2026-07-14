@@ -1,8 +1,9 @@
 import type { SrsState } from "@betterbeaver/srs";
-import type { ProgressStore } from "@betterbeaver/engine";
+import type { ProgressStore, Streak } from "@betterbeaver/engine";
 
 const ITEM_STATE_PREFIX = "bb.item.";
 const ATTEMPTED_KEY = "bb.attempted";
+const STREAK_KEY = "bb.streak";
 
 /** Parses JSON from `localStorage`, treating a corrupt/missing value as absent. */
 function readJson<T>(key: string): T | null {
@@ -43,6 +44,13 @@ export function createLocalStorageProgressStore(): ProgressStore {
       const attempted = new Set(readJson<string[]>(ATTEMPTED_KEY) ?? []);
       attempted.add(taskId);
       localStorage.setItem(ATTEMPTED_KEY, JSON.stringify([...attempted]));
+      return Promise.resolve();
+    },
+    getStreak(): Promise<Streak | null> {
+      return Promise.resolve(readJson<Streak>(STREAK_KEY));
+    },
+    setStreak(streak: Streak): Promise<void> {
+      localStorage.setItem(STREAK_KEY, JSON.stringify(streak));
       return Promise.resolve();
     },
   };

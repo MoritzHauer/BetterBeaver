@@ -2,6 +2,7 @@ import type { Content } from "@betterbeaver/schema";
 import type { Quality, SrsState } from "@betterbeaver/srs";
 import type { ProgressStore } from "./interfaces.js";
 import { applyGrade, reviewQueue } from "./progress.js";
+import { advanceStreak } from "./streak.js";
 import { schedulingUnits, type SchedulingUnit } from "./units.js";
 
 /**
@@ -50,6 +51,10 @@ export async function dueUnits(
  * Grades an item against `store`'s current state, persisting the result
  * only when it actually advances scheduling (new or due item). Returns the
  * new state, or `null` if the grading was practice-only (nothing persisted).
+ *
+ * Every recorded grade — practice-only included — also marks the local day
+ * active for the streak (plan 0003); the streak is persisted only when it
+ * actually changed (same-day repeats are no-ops).
  */
 export async function recordGrade(
   store: ProgressStore,
@@ -61,6 +66,11 @@ export async function recordGrade(
   const next = applyGrade(previous, quality, gradedAt);
   if (next !== null) {
     await store.setItemState(itemId, next);
+  }
+  const prevStreak = await store.getStreak();
+  const streak = advanceStreak(prevStreak, gradedAt);
+  if (streak !== prevStreak) {
+    await store.setStreak(streak);
   }
   return next;
 }
