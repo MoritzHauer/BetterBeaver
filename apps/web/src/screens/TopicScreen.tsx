@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Content } from "@betterbeaver/schema";
-import type { ProgressStore } from "@betterbeaver/engine";
+import type { ProgressStore, Streak } from "@betterbeaver/engine";
 import { dueUnits, isUnitComplete, isUnitUnlocked } from "@betterbeaver/engine";
 
 export function TopicScreen({
@@ -24,6 +24,7 @@ export function TopicScreen({
 }) {
   const unitById = new Map(content.units.map((unit) => [unit.id, unit]));
   const [dueCount, setDueCount] = useState<number | null>(null);
+  const [streak, setStreak] = useState<Streak | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -33,6 +34,11 @@ export function TopicScreen({
       }
       setDueCount(due.length);
     });
+    void store.getStreak().then((current) => {
+      if (!cancelled) {
+        setStreak(current);
+      }
+    });
     return () => {
       cancelled = true;
     };
@@ -40,13 +46,25 @@ export function TopicScreen({
 
   return (
     <main>
-      <button onClick={onBack}>&larr; Topics</button>
+      <header className="screen-header">
+        <button className="plain" onClick={onBack}>
+          &larr; Topics
+        </button>
+        {streak !== null && streak.length > 0 ? (
+          <span className="streak" title="Day streak">
+            &#128293; {streak.length}
+          </span>
+        ) : null}
+      </header>
       <h1>{content.topic.title}</h1>
       <p>{content.topic.description}</p>
       <ul className="card-list">
-        <li className="card">
+        <li className={`card review${dueCount !== 0 ? " primary" : ""}`}>
           <button onClick={onReview} disabled={dueCount === 0}>
             <strong>Review</strong>
+            {dueCount !== null && dueCount > 0 ? (
+              <span className="badge">{dueCount}</span>
+            ) : null}
             <p className="status">
               {dueCount === null
                 ? "Loading…"
@@ -67,20 +85,26 @@ export function TopicScreen({
             attemptedTaskIds,
           );
           const complete = isUnitComplete(unit, attemptedTaskIds);
-          const status = !unlocked ? "locked" : complete ? "completed" : "open";
+          const attemptedCount = unit.taskIds.filter((id) =>
+            attemptedTaskIds.has(id),
+          ).length;
+          const progress = `${attemptedCount} of ${unit.taskIds.length} tasks`;
           return (
             <li key={unit.id} className={`card${unlocked ? "" : " locked"}`}>
               {unlocked ? (
                 <button onClick={() => onSelectUnit(unit.id)}>
                   <strong>{unit.title}</strong>
+                  {complete ? (
+                    <span className="done-mark"> &#10003;</span>
+                  ) : null}
                   <p>{unit.goal}</p>
-                  <p className="status">{status}</p>
+                  <p className="status">{progress}</p>
                 </button>
               ) : (
                 <div>
-                  <strong>{unit.title}</strong>
+                  <strong>&#128274; {unit.title}</strong>
                   <p>{unit.goal}</p>
-                  <p className="status">{status}</p>
+                  <p className="status">locked</p>
                 </div>
               )}
             </li>

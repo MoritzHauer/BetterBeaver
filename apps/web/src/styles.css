@@ -173,7 +173,9 @@ button.plain {
   background: var(--card-bg);
 }
 
-.card button {
+/* Direct child only: a whole-card tap target. Buttons nested deeper in a
+ * card (e.g. a task card's Practice button) keep the normal button system. */
+.card > button {
   display: block;
   width: 100%;
   padding: 1rem;
@@ -400,6 +402,96 @@ input[type="text"] {
   border: 1px solid var(--card-border);
   border-radius: 0.75rem;
   background: var(--card-bg);
+}
+
+/* Topic / unit / summary chrome (plan 0003 step 4). */
+.screen-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.streak {
+  margin-left: auto;
+  font-weight: 800;
+  color: var(--accent);
+}
+
+.badge {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 800;
+  background: var(--fg);
+  color: var(--bg);
+}
+
+.badge.done {
+  background: var(--correct-bg);
+  color: var(--correct-border);
+}
+
+.card.review.primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--on-primary);
+}
+
+.topic-glyph {
+  display: block;
+  font-size: 1.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.stat-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 1.5rem 0;
+}
+
+.stat-tile {
+  flex: 1 1 8rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 1rem;
+  border: 1px solid var(--card-border);
+  border-radius: 0.75rem;
+  background: var(--card-bg);
+  animation: tile-pop 300ms ease;
+}
+
+.stat-value {
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--accent);
+}
+
+@keyframes tile-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+}
+
+.flame-tick {
+  animation: flame-tick 600ms ease 300ms backwards;
+}
+
+@keyframes flame-tick {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.35);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

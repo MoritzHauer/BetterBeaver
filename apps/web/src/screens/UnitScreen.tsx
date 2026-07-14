@@ -67,10 +67,14 @@ function TaskCard({
 }) {
   return (
     <li className="card">
-      <strong>{task.type}</strong>
-      {attempted ? <span className="done-mark"> &#10003; done</span> : null}
-      {task.instructions !== undefined ? <p>{task.instructions}</p> : null}
-      <button onClick={onPractice}>{task.type} practice</button>
+      <div>
+        <strong>{task.type}</strong>
+        {attempted ? <span className="badge done"> &#10003; done</span> : null}
+        {task.instructions !== undefined ? <p>{task.instructions}</p> : null}
+        <button className="primary" onClick={onPractice}>
+          Practice
+        </button>
+      </div>
     </li>
   );
 }

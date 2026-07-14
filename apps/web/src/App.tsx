@@ -32,6 +32,9 @@ type ContentSourceResult = { source: ContentSource } | { errors: string[] };
 
 const progressStore = createLocalStorageProgressStore();
 
+// Stable identity: SessionScreen's summary panel keys an effect on it.
+const loadStreak = () => progressStore.getStreak();
+
 /** Wires the engine's task-session building and grading to `SessionScreen`.
  * Questions are built once per mount (keyed by `task.id` via `useMemo`), so
  * they don't reshuffle across re-renders. An attempt is recorded only once
@@ -64,6 +67,7 @@ function TaskSession({
       onAllAnswered={() => void progressStore.markTaskAttempted(task.id)}
       onFinished={onDone}
       onExit={onDone}
+      loadStreak={loadStreak}
     />
   );
 }
@@ -124,6 +128,7 @@ function ReviewSession({
       onGrade={handleGrade}
       onFinished={onDone}
       onExit={onDone}
+      loadStreak={loadStreak}
     />
   );
 }

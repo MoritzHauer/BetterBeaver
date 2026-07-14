@@ -6,10 +6,12 @@ import type {
   QuestionOutcome,
   ScrambleQuestion,
 } from "@betterbeaver/engine";
+import type { Streak } from "@betterbeaver/engine";
 import {
   checkMatchingPair,
   checkScrambleAnswer,
   checkTypedAnswer,
+  localDay,
   matchingOutcomes,
 } from "@betterbeaver/engine";
 import type { Quality, SelfGrade } from "@betterbeaver/srs";
@@ -625,37 +627,71 @@ function renderInteraction(
   }
 }
 
-/** Plays the summary fanfare once when the summary panel mounts. */
+/** Celebration panel (plan 0003 step 4): fanfare on mount, stat tiles for
+ * the accuracy (auto-graded) or again/hard/good tallies (self-graded), and
+ * the streak flame — animated when today's session extended it. */
 function SummaryPanel({
   summary,
+  loadStreak,
   onFinished,
 }: {
   summary: SessionSummary;
+  loadStreak?: () => Promise<Streak | null>;
   onFinished: (summary: SessionSummary) => void;
 }) {
+  const [streak, setStreak] = useState<Streak | null>(null);
+
   useEffect(() => {
     playFanfare();
-  }, []);
+    void loadStreak?.().then(setStreak);
+  }, [loadStreak]);
 
   const recallTotal =
     summary.recallCounts.again +
     summary.recallCounts.hard +
     summary.recallCounts.good;
+  const extendedToday =
+    streak !== null && streak.lastActiveDay === localDay(new Date());
 
   return (
     <section>
-      {summary.autoTotal > 0 ? (
-        <p>
-          {summary.autoCorrect} of {summary.autoTotal} correct
-        </p>
-      ) : null}
-      {recallTotal > 0 ? (
-        <ul>
-          <li>Again: {summary.recallCounts.again}</li>
-          <li>Hard: {summary.recallCounts.hard}</li>
-          <li>Good: {summary.recallCounts.good}</li>
-        </ul>
-      ) : null}
+      <h2>Session complete!</h2>
+      <div className="stat-tiles">
+        {summary.autoTotal > 0 ? (
+          <div className="stat-tile">
+            <span className="stat-value">
+              {Math.round((summary.autoCorrect / summary.autoTotal) * 100)}%
+            </span>
+            <span className="status">
+              {summary.autoCorrect} of {summary.autoTotal} correct
+            </span>
+          </div>
+        ) : null}
+        {recallTotal > 0 ? (
+          <>
+            <div className="stat-tile">
+              <span className="stat-value">{summary.recallCounts.again}</span>
+              <span className="status">Again</span>
+            </div>
+            <div className="stat-tile">
+              <span className="stat-value">{summary.recallCounts.hard}</span>
+              <span className="status">Hard</span>
+            </div>
+            <div className="stat-tile">
+              <span className="stat-value">{summary.recallCounts.good}</span>
+              <span className="status">Good</span>
+            </div>
+          </>
+        ) : null}
+        {streak !== null ? (
+          <div className="stat-tile">
+            <span className={`stat-value${extendedToday ? " flame-tick" : ""}`}>
+              &#128293; {streak.length}
+            </span>
+            <span className="status">Day streak</span>
+          </div>
+        ) : null}
+      </div>
       <ActionBar>
         <button
           className="primary"
@@ -690,6 +726,7 @@ export function SessionScreen({
   onAllAnswered,
   onFinished,
   onExit,
+  loadStreak,
 }: {
   title: string;
   questions: Question[];
@@ -698,6 +735,8 @@ export function SessionScreen({
   onAllAnswered?: () => void;
   onFinished: (summary: SessionSummary) => void;
   onExit: () => void;
+  /** Fetches the current streak for the summary panel (plan 0003). */
+  loadStreak?: () => Promise<Streak | null>;
 }) {
   const [index, setIndex] = useState(0);
   const [summary, setSummary] = useState<SessionSummary>(emptySummary);
@@ -787,7 +826,11 @@ export function SessionScreen({
       <h1>{title}</h1>
 
       {done ? (
-        <SummaryPanel summary={summary} onFinished={onFinished} />
+        <SummaryPanel
+          summary={summary}
+          loadStreak={loadStreak}
+          onFinished={onFinished}
+        />
       ) : question === undefined ? null : (
         <div key={index} className="question">
           {renderInteraction(

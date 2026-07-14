@@ -23,7 +23,7 @@ export default defineConfig({
         name: "BetterBeaver",
         short_name: "BetterBeaver",
         description: "Spaced-repetition learning, offline-first.",
-        theme_color: "#2e7d32",
+        theme_color: "#e08820",
         icons: [
           {
             src: "pwa-192x192.png",
