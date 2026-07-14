@@ -37,3 +37,10 @@ Gotchas:
 - Demo topic answers: cloze blanks are "I" / "like" from "I like tea.";
   dictation target "I like tea."; scramble target "The cat sleeps quietly.";
   matching pairs can be brute-forced (wrong pairs just don't clear).
+- Session UI (plan 0003): every post-answer flow goes through the fixed
+  bottom action bar — wait for `.action-bar.correct|.incorrect`, then click
+  "Continue"; typed/scramble submit is the "Check" button in the bar; the
+  summary screen is `text=Session complete!` with `.stat-tile`s and a "Done"
+  button. Streak is `localStorage` `bb.streak`
+  (`{lastActiveDay: "YYYY-MM-DD" local, length}`); flame shows in the topic
+  `.streak` header and a summary tile.
