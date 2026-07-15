@@ -42,3 +42,21 @@ export interface ProgressStore {
   getStreak(): Promise<Streak | null>;
   setStreak(streak: Streak): Promise<void>;
 }
+
+/** A learner-authored named word list (plan 0004): itemIds reference lexeme items of one topic. */
+export interface VocabList {
+  id: string;
+  name: string;
+  itemIds: string[];
+}
+
+/**
+ * Store of learner vocab lists, keyed by topic (a list never spans topics).
+ * The web layer prunes dangling itemIds on load — content can change
+ * between releases.
+ */
+export interface VocabListStore {
+  getLists(topicId: string): Promise<VocabList[]>;
+  saveList(topicId: string, list: VocabList): Promise<void>;
+  deleteList(topicId: string, listId: string): Promise<void>;
+}

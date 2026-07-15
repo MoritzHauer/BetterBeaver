@@ -740,7 +740,7 @@ describe("buildTaskSession: listen", () => {
       {
         kind: "listen",
         unitId: audioC1.id,
-        audioStem: "a1",
+        audio: { kind: "stem", stem: "a1" },
         choices: [
           "Definition 3",
           "Definition 2",
@@ -752,7 +752,7 @@ describe("buildTaskSession: listen", () => {
       {
         kind: "listen",
         unitId: audioC2.id,
-        audioStem: "a2",
+        audio: { kind: "stem", stem: "a2" },
         choices: [
           "Definition 3",
           "Definition 1",

@@ -52,11 +52,18 @@ export interface ScrambleQuestion {
   targetTokens: string[];
 }
 
+/** How a listen question's prompt is played: a bundled audio asset (`stem`),
+ * or live TTS over the item's script (`speak`, ad-hoc sessions only — plan
+ * 0004). Task construction always emits `stem` (class (n) guarantees the
+ * asset). */
+export type ListenAudio =
+  { kind: "stem"; stem: string } | { kind: "speak"; text: string };
+
 /** MCQ over same-kind display texts, prompted by an audio clip. Auto-graded like `RecognizeQuestion`. */
 export interface ListenQuestion {
   kind: "listen";
   unitId: string;
-  audioStem: string;
+  audio: ListenAudio;
   choices: string[];
   correctIndex: number;
 }
@@ -141,9 +148,10 @@ function recallQuestion(item: Item): RecallQuestion {
 /**
  * Fisher-Yates shuffle of a copy of `items`, using `rng` for the swap index
  * at each step. Pinned algorithm: iterate `i` from `length - 1` down to 1,
- * `j = Math.floor(rng() * (i + 1))`, swap `i` and `j`.
+ * `j = Math.floor(rng() * (i + 1))`, swap `i` and `j`. Exported for the
+ * ad-hoc session builder (plan 0004) — the one shuffle everywhere.
  */
-function shuffle<T>(items: T[], rng: Rng): T[] {
+export function shuffle<T>(items: T[], rng: Rng): T[] {
   const result = [...items];
   for (let i = result.length - 1; i >= 1; i--) {
     const j = Math.floor(rng() * (i + 1));
@@ -407,7 +415,7 @@ export function buildTaskSession(
         return {
           kind: "listen",
           unitId: itemId,
-          audioStem: requiredAudioStem(item),
+          audio: { kind: "stem", stem: requiredAudioStem(item) },
           choices,
           correctIndex,
         };

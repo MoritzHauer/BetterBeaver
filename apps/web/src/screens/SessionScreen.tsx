@@ -18,6 +18,7 @@ import {
 import type { Quality, SelfGrade } from "@betterbeaver/srs";
 import { recallQuality, recognizeQuality } from "@betterbeaver/srs";
 import { getAssetUrl } from "../content/bundled";
+import { SpeakerButton } from "../tts";
 import { playCorrect, playFanfare, playWrong } from "../sounds";
 
 /** Tally of results across a session; only the fields for the task type(s)
@@ -503,6 +504,7 @@ function MatchingBoard({
 function renderInteraction(
   question: Question,
   topicId: string,
+  readAloudLang: string | undefined,
   applyAuto: (unitId: string, correct: boolean) => Promise<void>,
   applySelf: (unitId: string, grade: SelfGrade) => Promise<void>,
   applyMatchingOutcomes: (outcomes: QuestionOutcome[]) => Promise<void>,
@@ -589,7 +591,11 @@ function renderInteraction(
     case "listen":
       return (
         <>
-          <AudioPlayer topicId={topicId} stem={question.audioStem} />
+          {question.audio.kind === "stem" ? (
+            <AudioPlayer topicId={topicId} stem={question.audio.stem} />
+          ) : (
+            <SpeakerButton text={question.audio.text} lang={readAloudLang} />
+          )}
           <ChoiceList
             choices={question.choices}
             correctIndex={question.correctIndex}
@@ -739,6 +745,7 @@ export function SessionScreen({
   title,
   questions,
   topicId,
+  readAloudLang,
   onGrade,
   onAllAnswered,
   onFinished,
@@ -748,6 +755,8 @@ export function SessionScreen({
   title: string;
   questions: Question[];
   topicId: string;
+  /** The topic's `readAloudLang`, for TTS-backed listen questions (plan 0004). */
+  readAloudLang?: string | undefined;
   onGrade: (unitId: string, quality: Quality) => Promise<void>;
   onAllAnswered?: () => void;
   onFinished: (summary: SessionSummary) => void;
@@ -853,6 +862,7 @@ export function SessionScreen({
           {renderInteraction(
             question,
             topicId,
+            readAloudLang,
             applyAuto,
             applySelf,
             applyMatchingOutcomes,
