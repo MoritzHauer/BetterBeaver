@@ -1,0 +1,11 @@
+{
+  "id": "ky-fam-greetings",
+  "name": "Greetings",
+  "entryIds": [
+    "ky-item-salam",
+    "ky-item-salamatsyzby",
+    "ky-item-assalom-aleikum",
+    "ky-item-aleikum-assalom",
+    "ky-item-salamatchylyk"
+  ]
+}

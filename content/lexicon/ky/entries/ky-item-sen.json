@@ -5,7 +5,8 @@
     "script": "сен",
     "transliteration": "sen",
     "gloss": "you (informal singular)",
-    "usageNote": "For friends, children, and people younger than you. When unsure, use сиз."
+    "usageNote": "For friends, children, and people younger than you. When unsure, use сиз.",
+    "links": [{ "type": "synonym", "entryId": "ky-item-siz" }]
   },
   "sourceRef": "ky-resource-competencies"
 }

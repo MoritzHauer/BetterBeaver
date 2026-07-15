@@ -1,0 +1,12 @@
+{
+  "id": "ky-item-jakshy",
+  "kind": "lexeme",
+  "payload": {
+    "script": "жакшы",
+    "transliteration": "jakshy",
+    "gloss": "fine, good",
+    "usageNote": "The standard answer to 'How are you?': Рахмат, жакшы — 'Thanks, fine.' Also: мыкты, сонун.",
+    "links": [{ "type": "synonym", "entryId": "ky-item-jaman-emes" }]
+  },
+  "sourceRef": "ky-resource-competencies"
+}
