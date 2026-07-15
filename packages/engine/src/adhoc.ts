@@ -1,4 +1,4 @@
-import type { Item } from "@betterbeaver/schema";
+import type { Item, LinkType } from "@betterbeaver/schema";
 import {
   itemDisplayText,
   recallPrompt,
@@ -7,6 +7,10 @@ import {
   RECOGNIZE_DISTRACTOR_COUNT,
 } from "@betterbeaver/schema";
 import { shuffle, type Question, type Rng } from "./session.js";
+
+/** One link resolved to its target's displayable script (plan 0006): the
+ * web layer fills this from `ContentSource.loadDomain`'s merged entry pool. */
+export type ResolvedItemLink = { type: LinkType; script: string };
 
 /** The learner-choosable exercise modes of an ad-hoc vocabulary session (plan 0004). */
 export const ADHOC_MODES = [
@@ -110,7 +114,8 @@ function sampleAdhocMcq(
  * Builds an ad-hoc vocabulary session over `items` (plan 0004): the four
  * mode floors are re-checked (throws on violation — the UI greys out
  * unavailable modes via `availableModes` first), distractors come from the
- * given set, a lexeme's synonyms are appended to its recall reveal, and a
+ * given set, an item's `synonym`-type links (plan 0006; re-based from the
+ * deleted `payload.synonyms`) are appended to its recall reveal, and a
  * listen question falls back to TTS (`audio.kind === "speak"`) when the item
  * has no `audioRef`. Grading is identical to tasks (outcome-list contract);
  * per the plan's amendment, an ad-hoc answer on a stateless item schedules
@@ -120,6 +125,13 @@ export function buildAdhocSession(
   mode: AdhocMode,
   items: Item[],
   rng: Rng,
+  /**
+   * Pre-resolved links per item id, keyed by the domain's merged entry pool
+   * (plan 0006). The engine never resolves `entryId`s itself — the web layer
+   * fills this from `ContentSource.loadDomain`; only `synonym`-type links
+   * feed the recall reveal's "also:" line.
+   */
+  resolvedLinks?: Map<string, ResolvedItemLink[]>,
 ): Question[] {
   // ttsAvailable: true — playability is the web layer's runtime gate; the
   // builder can always fall back to a `speak` question.
@@ -132,12 +144,11 @@ export function buildAdhocSession(
     case "recall":
       return items.map((item): Question => {
         const reveal = recallReveal(item);
-        if (
-          item.kind === "lexeme" &&
-          item.payload.synonyms !== undefined &&
-          item.payload.synonyms.length > 0
-        ) {
-          reveal.push(`also: ${item.payload.synonyms.join(", ")}`);
+        const synonyms = (resolvedLinks?.get(item.id) ?? []).filter(
+          (link) => link.type === "synonym",
+        );
+        if (synonyms.length > 0) {
+          reveal.push(`also: ${synonyms.map((s) => s.script).join(", ")}`);
         }
         return {
           kind: "recall",

@@ -61,3 +61,33 @@ export function schedulingUnits(content: Content): SchedulingUnit[] {
   }
   return units;
 }
+
+/**
+ * Scheduling units for an entire domain (plan 0006, pinned rule): the union
+ * of `schedulingUnits(content)` over every topic belonging to the domain,
+ * plus one unit per lexicon `entry` referenced by none of those topics —
+ * deduplicated by scheduling-unit id, so an entry shared by several topics
+ * (or a topic's own referenced-entry duplicate) is one review item.
+ */
+export function domainSchedulingUnits(
+  topicContents: Content[],
+  entries: Item[],
+): SchedulingUnit[] {
+  const seen = new Set<string>();
+  const units: SchedulingUnit[] = [];
+  for (const content of topicContents) {
+    for (const unit of schedulingUnits(content)) {
+      if (!seen.has(unit.id)) {
+        seen.add(unit.id);
+        units.push(unit);
+      }
+    }
+  }
+  for (const entry of entries) {
+    if (!seen.has(entry.id)) {
+      seen.add(entry.id);
+      units.push({ id: entry.id, item: entry });
+    }
+  }
+  return units;
+}

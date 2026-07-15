@@ -67,6 +67,7 @@ const conceptContent: Content = {
   topic: {
     id: "t-topic",
     code: "t",
+    domainId: "t",
     title: "Topic",
     description: "",
     unitIds: [conceptUnit.id],
@@ -181,6 +182,7 @@ const lexemeContent: Content = {
   topic: {
     id: "t-topic",
     code: "t",
+    domainId: "t",
     title: "Topic",
     description: "",
     unitIds: [lexemeUnit.id],
@@ -253,6 +255,7 @@ const lexemeRecognizeContent: Content = {
   topic: {
     id: "t-topic",
     code: "t",
+    domainId: "t",
     title: "Topic",
     description: "",
     unitIds: [lexemeRecognizeUnit.id],
@@ -334,6 +337,7 @@ const clozeContent: Content = {
   topic: {
     id: "t-topic",
     code: "t",
+    domainId: "t",
     title: "Topic",
     description: "",
     unitIds: [clozeUnit.id],
@@ -408,6 +412,7 @@ const matchingContent: Content = {
   topic: {
     id: "t-topic",
     code: "t",
+    domainId: "t",
     title: "Topic",
     description: "",
     unitIds: [matchingUnit.id],
@@ -519,6 +524,7 @@ const scrambleContent: Content = {
   topic: {
     id: "t-topic",
     code: "t",
+    domainId: "t",
     title: "Topic",
     description: "",
     unitIds: [scrambleUnit.id],
@@ -606,6 +612,7 @@ function buildContentWith(unitItems: Item[]): Content {
     topic: {
       id: "t-topic",
       code: "t",
+      domainId: "t",
       title: "Topic",
       description: "",
       unitIds: [unit.id],
@@ -719,6 +726,7 @@ const listenContent: Content = {
   topic: {
     id: "t-topic",
     code: "t",
+    domainId: "t",
     title: "Topic",
     description: "",
     unitIds: [listenUnit.id],
@@ -827,6 +835,7 @@ const pictureContent: Content = {
   topic: {
     id: "t-topic",
     code: "t",
+    domainId: "t",
     title: "Topic",
     description: "",
     unitIds: [pictureUnit.id],
@@ -883,6 +892,7 @@ const minimalPairContent: Content = {
   topic: {
     id: "t-topic",
     code: "t",
+    domainId: "t",
     title: "Topic",
     description: "",
     unitIds: [minimalPairUnit.id],

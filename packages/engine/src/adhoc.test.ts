@@ -8,11 +8,7 @@ import type { ProgressStore } from "./interfaces.js";
 import { recordGrade } from "./store.js";
 
 /** Lexeme fixture: id/script/transliteration derive from `n`, gloss is given. */
-function lexeme(
-  n: number,
-  gloss: string,
-  extra?: { audioRef?: string; synonyms?: string[] },
-): Item {
+function lexeme(n: number, gloss: string, extra?: { audioRef?: string }): Item {
   return {
     id: `t-item-l${n}`,
     kind: "lexeme",
@@ -112,12 +108,24 @@ describe("buildAdhocSession", () => {
     }
   });
 
-  it("recall: appends a synonym line to the reveal for lexemes that have synonyms", () => {
-    const items = [
-      lexeme(1, "good", { synonyms: ["мыкты", "сонун"] }),
-      lexeme(2, "bad"),
-    ];
-    const questions = buildAdhocSession("recall", items, zeroRng);
+  it("recall: appends a synonym line to the reveal from resolved synonym-type links (plan 0006)", () => {
+    const items = [lexeme(1, "good"), lexeme(2, "bad")];
+    const resolvedLinks = new Map([
+      [
+        "t-item-l1",
+        [
+          { type: "synonym" as const, script: "мыкты" },
+          { type: "synonym" as const, script: "сонун" },
+          { type: "antonym" as const, script: "жаман" },
+        ],
+      ],
+    ]);
+    const questions = buildAdhocSession(
+      "recall",
+      items,
+      zeroRng,
+      resolvedLinks,
+    );
     expect(questions[0]).toEqual({
       kind: "recall",
       unitId: "t-item-l1",
@@ -129,6 +137,17 @@ describe("buildAdhocSession", () => {
       unitId: "t-item-l2",
       prompt: "bad",
       reveal: ["скрипт2", "script2"],
+    });
+  });
+
+  it("recall: omits the also-line when resolvedLinks is absent", () => {
+    const items = [lexeme(1, "good")];
+    const questions = buildAdhocSession("recall", items, zeroRng);
+    expect(questions[0]).toEqual({
+      kind: "recall",
+      unitId: "t-item-l1",
+      prompt: "good",
+      reveal: ["скрипт1", "script1"],
     });
   });
 
@@ -189,6 +208,7 @@ describe("ad-hoc grading enters scheduling (plan 0004 amendment)", () => {
       question.unitId,
       4,
       new Date("2026-07-15T12:00:00Z"),
+      "t-domain",
     );
 
     expect(next).not.toBeNull();

@@ -33,7 +33,7 @@ class InMemoryProgressStore implements ProgressStore {
     return this.streak;
   }
 
-  async setStreak(streak: Streak): Promise<void> {
+  async setStreak(_domainId: string, streak: Streak): Promise<void> {
     this.setStreakCalls++;
     this.streak = streak;
   }
@@ -80,6 +80,7 @@ describe("recordGrade", () => {
       "t-item-new",
       4,
       new Date("2026-07-04T10:00:00Z"),
+      "t-domain",
     );
 
     expect(result).not.toBeNull();
@@ -95,6 +96,7 @@ describe("recordGrade", () => {
       "t-item-due",
       4,
       new Date("2026-07-05T00:00:00Z"),
+      "t-domain",
     );
 
     expect(result).not.toBeNull();
@@ -111,6 +113,7 @@ describe("recordGrade", () => {
       "t-item-not-due",
       4,
       new Date("2026-07-05T00:00:00Z"),
+      "t-domain",
     );
 
     expect(result).toBeNull();
@@ -126,16 +129,29 @@ describe("recordGrade", () => {
       "t-item-not-due",
       4,
       new Date(2026, 6, 5, 10, 0), // local time; practice-only grade
+      "t-domain",
     );
 
     expect(store.streak).toEqual({ lastActiveDay: "2026-07-05", length: 1 });
   });
 
   it("does not rewrite the streak on a same-day repeat grade", async () => {
-    await recordGrade(store, "t-item-a", 4, new Date(2026, 6, 5, 10, 0));
+    await recordGrade(
+      store,
+      "t-item-a",
+      4,
+      new Date(2026, 6, 5, 10, 0),
+      "t-domain",
+    );
     expect(store.setStreakCalls).toBe(1);
 
-    await recordGrade(store, "t-item-b", 4, new Date(2026, 6, 5, 11, 0));
+    await recordGrade(
+      store,
+      "t-item-b",
+      4,
+      new Date(2026, 6, 5, 11, 0),
+      "t-domain",
+    );
 
     expect(store.setStreakCalls).toBe(1);
     expect(store.streak).toEqual({ lastActiveDay: "2026-07-05", length: 1 });

@@ -1,9 +1,13 @@
-import type { Content } from "@betterbeaver/schema";
+import type { Content, Item } from "@betterbeaver/schema";
 import type { Quality, SrsState } from "@betterbeaver/srs";
 import type { ProgressStore } from "./interfaces.js";
 import { applyGrade, reviewQueue } from "./progress.js";
 import { advanceStreak } from "./streak.js";
-import { schedulingUnits, type SchedulingUnit } from "./units.js";
+import {
+  domainSchedulingUnits,
+  schedulingUnits,
+  type SchedulingUnit,
+} from "./units.js";
 
 /**
  * Fetches SRS state for each item id from `store`, in parallel. Items with
@@ -48,29 +52,51 @@ export async function dueUnits(
 }
 
 /**
+ * The domain-scoped "what is due" pipeline (plan 0006): derives the domain's
+ * scheduling units (`domainSchedulingUnits` — union over the domain's topics
+ * plus unreferenced lexicon entries, deduplicated by unit id), then proceeds
+ * exactly like `dueUnits`.
+ */
+export async function dueDomainUnits(
+  topicContents: Content[],
+  entries: Item[],
+  store: ProgressStore,
+  now: Date,
+): Promise<SchedulingUnit[]> {
+  const units = domainSchedulingUnits(topicContents, entries);
+  const states = await collectItemStates(
+    units.map((unit) => unit.id),
+    store,
+  );
+  return reviewQueue(units, states, now);
+}
+
+/**
  * Grades an item against `store`'s current state, persisting the result
  * only when it actually advances scheduling (new or due item). Returns the
  * new state, or `null` if the grading was practice-only (nothing persisted).
  *
  * Every recorded grade — practice-only included — also marks the local day
- * active for the streak (plan 0003); the streak is persisted only when it
- * actually changed (same-day repeats are no-ops).
+ * active for `domainId`'s streak (plan 0003; per-domain since plan 0006);
+ * the streak is persisted only when it actually changed (same-day repeats
+ * are no-ops).
  */
 export async function recordGrade(
   store: ProgressStore,
   itemId: string,
   quality: Quality,
   gradedAt: Date,
+  domainId: string,
 ): Promise<SrsState | null> {
   const previous = await store.getItemState(itemId);
   const next = applyGrade(previous, quality, gradedAt);
   if (next !== null) {
     await store.setItemState(itemId, next);
   }
-  const prevStreak = await store.getStreak();
+  const prevStreak = await store.getStreak(domainId);
   const streak = advanceStreak(prevStreak, gradedAt);
   if (streak !== prevStreak) {
-    await store.setStreak(streak);
+    await store.setStreak(domainId, streak);
   }
   return next;
 }
