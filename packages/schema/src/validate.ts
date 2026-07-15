@@ -520,6 +520,22 @@ export function validateContent(
     ) {
       errors.push(`${item.id}: invalid cloze markup in text`);
     }
+    // class (s): a synonym equal to the item's own script, or duplicate
+    // synonyms within one item.
+    if (item.kind === "lexeme" && item.payload.synonyms !== undefined) {
+      const seenSynonyms = new Set<string>();
+      for (const synonym of item.payload.synonyms) {
+        if (synonym === item.payload.script) {
+          errors.push(
+            `${item.id}: synonym "${synonym}" equals the item's own script`,
+          );
+        }
+        if (seenSynonyms.has(synonym)) {
+          errors.push(`${item.id}: duplicate synonym "${synonym}"`);
+        }
+        seenSynonyms.add(synonym);
+      }
+    }
   }
 
   // --- class (n), per task: task items missing the ref their type needs ---

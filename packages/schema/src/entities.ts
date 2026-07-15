@@ -19,6 +19,8 @@ export const topicSchema = z.object({
   title: z.string(),
   description: z.string(),
   unitIds: z.array(slugSchema),
+  /** BCP-47 tag for reading item text aloud via TTS (plan 0004); absent disables read-aloud. */
+  readAloudLang: z.string().min(1).optional(),
 });
 export type Topic = z.infer<typeof topicSchema>;
 
@@ -38,6 +40,8 @@ const lexemePayloadSchema = z.object({
   script: z.string(),
   transliteration: z.string(),
   gloss: z.string(),
+  /** Target-language script forms; display-only in vocabulary mode (plan 0004), validator class (s). */
+  synonyms: z.array(z.string()).optional(),
   usageNote: z.string().optional(),
   audioRef: slugSchema.optional(),
   imageRef: slugSchema.optional(),

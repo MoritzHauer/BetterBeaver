@@ -19,6 +19,7 @@ type LexemeItemLike = {
     script: string;
     transliteration: string;
     gloss: string;
+    synonyms?: string[];
     audioRef?: string;
     imageRef?: string;
   };
@@ -612,5 +613,55 @@ describe("validateContent", () => {
     const errors = expectErrors(validateContent(input));
 
     expect(errors.some((e) => e.includes("ky-task-listen-1"))).toBe(true);
+  });
+
+  it("(s) reports a synonym equal to the item's own script", () => {
+    const { input, unit, resource } = makeFixture();
+    const lexemeItem: LexemeItemLike = {
+      id: "ky-item-lex-syn",
+      kind: "lexeme",
+      payload: {
+        script: "жакшы",
+        transliteration: "jakshy",
+        gloss: "good",
+        synonyms: ["жакшы"],
+      },
+      sourceRef: resource.id,
+    };
+    input.items.push(lexemeItem);
+    unit.itemIds.push(lexemeItem.id);
+
+    const errors = expectErrors(validateContent(input));
+
+    expect(
+      errors.some(
+        (e) => e.includes("ky-item-lex-syn") && e.includes("own script"),
+      ),
+    ).toBe(true);
+  });
+
+  it("(s) reports duplicate synonyms within one item", () => {
+    const { input, unit, resource } = makeFixture();
+    const lexemeItem: LexemeItemLike = {
+      id: "ky-item-lex-syn",
+      kind: "lexeme",
+      payload: {
+        script: "жакшы",
+        transliteration: "jakshy",
+        gloss: "good",
+        synonyms: ["мыкты", "мыкты"],
+      },
+      sourceRef: resource.id,
+    };
+    input.items.push(lexemeItem);
+    unit.itemIds.push(lexemeItem.id);
+
+    const errors = expectErrors(validateContent(input));
+
+    expect(
+      errors.some(
+        (e) => e.includes("ky-item-lex-syn") && e.includes("duplicate synonym"),
+      ),
+    ).toBe(true);
   });
 });
