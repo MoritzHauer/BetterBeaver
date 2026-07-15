@@ -1,9 +1,13 @@
 import type { SrsState } from "@betterbeaver/srs";
 import type { ProgressStore, Streak } from "@betterbeaver/engine";
 
-const ITEM_STATE_PREFIX = "bb.item.";
+// Exported so callers that delete an item outright (e.g. removing a
+// learner-created word, plan 0006) can drop its SRS state without going
+// through `ProgressStore` (which has no delete method — items normally only
+// ever get created or updated, never removed).
+export const ITEM_STATE_PREFIX = "bb.item.";
 const ATTEMPTED_KEY = "bb.attempted";
-const STREAK_KEY = "bb.streak";
+const STREAK_PREFIX = "bb.streak.";
 
 /** Parses JSON from `localStorage`, treating a corrupt/missing value as absent. */
 export function readJson<T>(key: string): T | null {
@@ -21,7 +25,8 @@ export function readJson<T>(key: string): T | null {
 /**
  * Creates a `ProgressStore` backed by `localStorage`. Per-item SM-2 state
  * is stored under `bb.item.<itemId>`; the set of attempted task ids is
- * stored under `bb.attempted` as a JSON string array.
+ * stored under `bb.attempted` as a JSON string array; the streak is
+ * per-domain (plan 0006), under `bb.streak.<domainId>`.
  */
 export function createLocalStorageProgressStore(): ProgressStore {
   return {
@@ -46,11 +51,14 @@ export function createLocalStorageProgressStore(): ProgressStore {
       localStorage.setItem(ATTEMPTED_KEY, JSON.stringify([...attempted]));
       return Promise.resolve();
     },
-    getStreak(): Promise<Streak | null> {
-      return Promise.resolve(readJson<Streak>(STREAK_KEY));
+    getStreak(domainId: string): Promise<Streak | null> {
+      return Promise.resolve(readJson<Streak>(`${STREAK_PREFIX}${domainId}`));
     },
-    setStreak(streak: Streak): Promise<void> {
-      localStorage.setItem(STREAK_KEY, JSON.stringify(streak));
+    setStreak(domainId: string, streak: Streak): Promise<void> {
+      localStorage.setItem(
+        `${STREAK_PREFIX}${domainId}`,
+        JSON.stringify(streak),
+      );
       return Promise.resolve();
     },
   };
