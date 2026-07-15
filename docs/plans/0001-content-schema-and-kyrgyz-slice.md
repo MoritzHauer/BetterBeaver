@@ -1,6 +1,6 @@
 # Plan 0001: Content schema and Kyrgyz vertical slice
 
-Status: approved after 5 adversarial review rounds (round-5 verdict: APPROVE conditional on 3 fixes, all applied) · Owner: Moe · Date: 2026-07-03 · Amended 2026-07-04: validator classes (j)–(l) and two structure rules added from step-2 code-review findings (see storage layout)
+Status: implemented (2026-07-12, steps 1–9) · Plan approved after 5 adversarial review rounds (round-5 verdict: APPROVE conditional on 3 fixes, all applied) · Owner: Moe · Date: 2026-07-03 · Amended 2026-07-04: validator classes (j)–(l) and two structure rules added from step-2 code-review findings (see storage layout)
 
 ## Purpose
 

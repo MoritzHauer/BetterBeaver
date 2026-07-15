@@ -1,6 +1,6 @@
 # Plan 0002: Exercise-type showcase (demo topic with example inputs)
 
-Status: signed off — 2 adversarial review rounds, then a grilling session (2026-07-07) that pinned the outcome-list grading contract, split normalization rule, scramble join-equality, wav+svg assets, and the engine API shapes · Owner: Moe · Date: 2026-07-06 · Prerequisite: plan 0001 step 7 committed (steps 8–9 trail in parallel; if step 9 hasn't landed, step 4 here owns the `globPatterns` extension)
+Status: implemented (2026-07-09, steps 1–5; browser-verified per step 5) · Plan signed off — 2 adversarial review rounds, then a grilling session (2026-07-07) that pinned the outcome-list grading contract, split normalization rule, scramble join-equality, wav+svg assets, and the engine API shapes · Owner: Moe · Date: 2026-07-06 · Prerequisite: plan 0001 step 7 committed (steps 8–9 trail in parallel; if step 9 hasn't landed, step 4 here owns the `globPatterns` extension)
 
 ## Purpose
 
