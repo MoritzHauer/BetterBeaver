@@ -285,6 +285,7 @@ export const TASK_TYPES = [
   "shadowing",
   "minimal-pair",
   "picture",
+  "build",
 ] as const;
 export type TaskType = (typeof TASK_TYPES)[number];
 
@@ -303,6 +304,7 @@ export const TASK_ALLOWED_ITEM_KINDS: Record<TaskType, ItemKind[]> = {
   shadowing: ["lexeme", "concept", "sentence"],
   "minimal-pair": ["pair"],
   picture: ["lexeme", "concept"],
+  build: ["sentence"],
 };
 
 /**
@@ -320,6 +322,7 @@ export const TASK_REQUIRED_ASSET: Record<TaskType, "audio" | "image" | null> = {
   shadowing: "audio",
   "minimal-pair": null,
   picture: "image",
+  build: null,
 };
 
 /**
@@ -338,6 +341,8 @@ export const TASK_NEEDS_DISTRACTORS: Record<TaskType, boolean> = {
   shadowing: false,
   "minimal-pair": false,
   picture: true,
+  // build's word-bank distractors are its own mechanism (engine), not the MCQ sampler.
+  build: false,
 };
 
 export const taskSchema = z.object({

@@ -563,6 +563,29 @@ describe("validateContent", () => {
     expect(errors.some((e) => e.includes("ky-task-scramble-1"))).toBe(true);
   });
 
+  it("(q) reports a build item whose stripped text has fewer than 3 tokens", () => {
+    const { input, unit, resource } = makeFixture();
+    const shortSentence: SentenceItemLike = {
+      id: "ky-item-sentence-short",
+      kind: "sentence",
+      payload: { text: "Hi there", translation: "Hi there" },
+      sourceRef: resource.id,
+    };
+    input.items.push(shortSentence);
+    unit.itemIds.push(shortSentence.id);
+    const buildTask: TaskLike = {
+      id: "ky-task-build-1",
+      type: "build",
+      itemIds: [shortSentence.id],
+    };
+    input.tasks.push(buildTask);
+    unit.taskIds.push(buildTask.id);
+
+    const errors = expectErrors(validateContent(input));
+
+    expect(errors.some((e) => e.includes("ky-task-build-1"))).toBe(true);
+  });
+
   it("(r) reports a listen task whose owning unit has fewer than 4 same-kind items", () => {
     const { input, unit, resource } = makeFixture();
     const sentenceItem: SentenceItemLike = {

@@ -1,0 +1,6 @@
+{
+  "id": "dx-task-build-sentences",
+  "type": "build",
+  "itemIds": ["dx-item-sentence-scramble", "dx-item-sentence-shared"],
+  "instructions": "Tap the words to build the sentence."
+}

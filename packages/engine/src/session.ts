@@ -95,6 +95,20 @@ export interface PictureQuestion {
   correctIndex: number;
 }
 
+/** Word bank size cap: a build bank holds the target tokens plus up to this many distractors. */
+export const BUILD_DISTRACTOR_COUNT = 3;
+
+/** One sentence to build from `prompt` (the translation): `tokens` is the
+ * shuffled bank (target tokens + distractors, some may stay unused),
+ * `targetTokens` the correct order. Auto-graded via `checkScrambleAnswer`. */
+export interface BuildQuestion {
+  kind: "build";
+  unitId: string;
+  prompt: string;
+  tokens: string[];
+  targetTokens: string[];
+}
+
 export type Question =
   | RecognizeQuestion
   | RecallQuestion
@@ -105,7 +119,8 @@ export type Question =
   | DictationQuestion
   | ShadowingQuestion
   | MinimalPairQuestion
-  | PictureQuestion;
+  | PictureQuestion
+  | BuildQuestion;
 
 /** One `(schedulingUnitId, quality)` grading outcome (the outcome-list contract, plan 0002). */
 export type QuestionOutcome = [unitId: string, quality: Quality];
@@ -243,9 +258,9 @@ export function checkTypedAnswer(target: string, answer: string): boolean {
   return normalizeTypedInput(answer) === normalizeTypedInput(target);
 }
 
-/** Checks a scramble answer: the learner's ordered token strings joined with single spaces must equal the target's (duplicate tokens interchangeable by construction). */
+/** Checks a scramble/build answer: the learner's ordered token strings joined with single spaces must equal the target's (duplicate tokens interchangeable by construction; build bank distractors may stay unused). */
 export function checkScrambleAnswer(
-  question: ScrambleQuestion,
+  question: ScrambleQuestion | BuildQuestion,
   orderedTokens: string[],
 ): boolean {
   return orderedTokens.join(" ") === question.targetTokens.join(" ");
@@ -445,6 +460,40 @@ export function buildTaskSession(
           imageStem: requiredImageStem(item),
           choices,
           correctIndex,
+        };
+      });
+    }
+
+    case "build": {
+      const owningUnit = owningUnitOf(task, content);
+      return task.itemIds.map((itemId): Question => {
+        const item = itemById.get(itemId)!;
+        if (item.kind !== "sentence") {
+          throw new Error(`build item "${itemId}" is not a sentence`);
+        }
+        const targetTokens = sentenceTokens(item.payload.text);
+        // Distractor pool: the other sentence items' tokens, deduplicated by
+        // string, minus anything case-insensitively equal to a target token
+        // (a duplicate chip is indistinguishable; a re-cased one an unfair
+        // trap). Fewer/zero candidates just means a smaller bank.
+        const targetLower = new Set(targetTokens.map((t) => t.toLowerCase()));
+        const pool = [
+          ...new Set(
+            owningUnit.itemIds.flatMap((id) => {
+              const sibling = itemById.get(id)!;
+              return sibling.id !== item.id && sibling.kind === "sentence"
+                ? sentenceTokens(sibling.payload.text)
+                : [];
+            }),
+          ),
+        ].filter((token) => !targetLower.has(token.toLowerCase()));
+        const distractors = shuffle(pool, rng).slice(0, BUILD_DISTRACTOR_COUNT);
+        return {
+          kind: "build",
+          unitId: itemId,
+          prompt: item.payload.translation,
+          tokens: shuffle([...targetTokens, ...distractors], rng),
+          targetTokens,
         };
       });
     }

@@ -452,9 +452,9 @@ export function validateContent(
       }
     }
 
-    // class (q): a scramble item's stripped text needs >= 3 whitespace
+    // class (q): a scramble/build item's stripped text needs >= 3 whitespace
     // tokens to reorder (nothing to reorder otherwise).
-    if (task.type === "scramble") {
+    if (task.type === "scramble" || task.type === "build") {
       for (const item of taskItems) {
         if (item.kind !== "sentence") {
           continue; // kind mismatch already reported under class (o).
@@ -462,7 +462,7 @@ export function validateContent(
         const tokenCount = sentenceTokens(item.payload.text).length;
         if (tokenCount < 3) {
           errors.push(
-            `${task.id}: scramble item "${item.id}" has only ${tokenCount} token(s) (needs >= 3)`,
+            `${task.id}: ${task.type} item "${item.id}" has only ${tokenCount} token(s) (needs >= 3)`,
           );
         }
       }

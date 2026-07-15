@@ -568,6 +568,115 @@ describe("buildTaskSession: scramble", () => {
   });
 });
 
+const buildSentence: Item = {
+  id: "t-item-build",
+  kind: "sentence",
+  payload: { text: "the cat sleeps", translation: "die Katze schläft" },
+  sourceRef: "t-resource-1",
+};
+const buildSib1: Item = {
+  id: "t-item-build-sib1",
+  kind: "sentence",
+  payload: { text: "The dog runs fast", translation: "s1" },
+  sourceRef: "t-resource-1",
+};
+const buildSib2: Item = {
+  id: "t-item-build-sib2",
+  kind: "sentence",
+  payload: { text: "dog runs away now", translation: "s2" },
+  sourceRef: "t-resource-1",
+};
+const buildTask: Task = {
+  id: "t-task-build",
+  type: "build",
+  itemIds: [buildSentence.id],
+};
+
+function buildContentWith(unitItems: Item[]): Content {
+  const unit: Unit = {
+    id: "t-unit-build",
+    topicId: "t-topic",
+    title: "Build",
+    goal: "Goal",
+    itemIds: unitItems.map((item) => item.id),
+    taskIds: [buildTask.id],
+    noteIds: [],
+  };
+  return {
+    topic: {
+      id: "t-topic",
+      code: "t",
+      title: "Topic",
+      description: "",
+      unitIds: [unit.id],
+    },
+    units: [unit],
+    items: unitItems,
+    tasks: [buildTask],
+    resources: [],
+    notes: [],
+  };
+}
+
+describe("buildTaskSession: build", () => {
+  it("builds a deterministic bank: sibling tokens deduped by string, targets excluded case-insensitively, <= 3 distractors", () => {
+    // Candidate pool from siblings (itemIds order, first occurrence wins the
+    // dedup): The(excluded vs target "the"), dog, runs, fast, away, now ->
+    // [dog, runs, fast, away, now]. rng always 0 pins both shuffles (pool: 4
+    // calls, bank of 6: 5 calls).
+    const questions = buildTaskSession(
+      buildTask,
+      buildContentWith([buildSentence, buildSib1, buildSib2]),
+      queueRng([0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    );
+
+    expect(questions).toEqual([
+      {
+        kind: "build",
+        unitId: buildSentence.id,
+        prompt: "die Katze schläft",
+        tokens: ["cat", "sleeps", "runs", "fast", "away", "the"],
+        targetTokens: ["the", "cat", "sleeps"],
+      },
+    ]);
+  });
+
+  it("degrades to a distractor-free bank when the unit has no other sentence items", () => {
+    const questions = buildTaskSession(
+      buildTask,
+      buildContentWith([buildSentence]),
+      queueRng([0, 0]),
+    );
+
+    expect(questions).toEqual([
+      {
+        kind: "build",
+        unitId: buildSentence.id,
+        prompt: "die Katze schläft",
+        tokens: ["cat", "sleeps", "the"],
+        targetTokens: ["the", "cat", "sleeps"],
+      },
+    ]);
+  });
+
+  it("grades by join-equality against the targets; unused distractors don't matter, a chosen one does", () => {
+    const question = {
+      kind: "build" as const,
+      unitId: buildSentence.id,
+      prompt: "die Katze schläft",
+      tokens: ["cat", "sleeps", "runs", "fast", "away", "the"],
+      targetTokens: ["the", "cat", "sleeps"],
+    };
+    expect(checkScrambleAnswer(question, ["the", "cat", "sleeps"])).toBe(true);
+    expect(checkScrambleAnswer(question, ["the", "runs", "sleeps"])).toBe(
+      false,
+    );
+    expect(
+      checkScrambleAnswer(question, ["the", "cat", "sleeps", "fast"]),
+    ).toBe(false);
+  });
+});
+
 const audioC1: Item = {
   id: "t-item-audio-c1",
   kind: "concept",

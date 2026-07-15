@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import type {
+  BuildQuestion,
   MatchingQuestion,
   Question,
   QuestionOutcome,
@@ -21,7 +22,7 @@ import { playCorrect, playFanfare, playWrong } from "../sounds";
 
 /** Tally of results across a session; only the fields for the task type(s)
  * actually encountered end up non-zero. Every auto-graded kind (recognize,
- * cloze, scramble, matching, listen, dictation, minimal-pair, picture)
+ * cloze, scramble, build, matching, listen, dictation, minimal-pair, picture)
  * shares one tally; recall and shadowing (self-graded) share the other. */
 export interface SessionSummary {
   autoCorrect: number;
@@ -278,13 +279,14 @@ function TypedInput({
 
 /** Shuffled tokens as a pool of buttons; clicking one appends it to the
  * ordered answer row, clicking an answer token returns it to the pool (by
- * index, so duplicate token strings behave). */
+ * index, so duplicate token strings behave). Shared by scramble (all tokens
+ * must be placed) and build (bank distractors may stay in the pool). */
 function ScrambleInteraction({
   question,
   applyAuto,
   advance,
 }: {
-  question: ScrambleQuestion;
+  question: ScrambleQuestion | BuildQuestion;
   applyAuto: (unitId: string, correct: boolean) => Promise<void>;
   advance: () => void;
 }) {
@@ -359,7 +361,11 @@ function ScrambleInteraction({
           <button
             className="primary"
             onClick={submit}
-            disabled={pool.length > 0}
+            disabled={
+              question.kind === "scramble"
+                ? pool.length > 0
+                : answer.length === 0
+            }
           >
             Check
           </button>
@@ -560,6 +566,17 @@ function renderInteraction(
           applyAuto={applyAuto}
           advance={advance}
         />
+      );
+    case "build":
+      return (
+        <>
+          <p className="prompt">{question.prompt}</p>
+          <ScrambleInteraction
+            question={question}
+            applyAuto={applyAuto}
+            advance={advance}
+          />
+        </>
       );
     case "matching":
       return (

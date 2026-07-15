@@ -2,7 +2,7 @@
   "id": "dx-unit-sentences",
   "topicId": "demo",
   "title": "Sentences and sounds",
-  "goal": "Placeholder sentences and a minimal pair exercising cloze, dictation, scramble, and minimal-pair task types.",
+  "goal": "Placeholder sentences and a minimal pair exercising cloze, dictation, scramble, build, and minimal-pair task types.",
   "itemIds": [
     "dx-item-sentence-shared",
     "dx-item-sentence-scramble",
@@ -12,7 +12,8 @@
     "dx-task-cloze-sentences",
     "dx-task-dictation-sentences",
     "dx-task-scramble-sentences",
-    "dx-task-minimal-pair-sentences"
+    "dx-task-minimal-pair-sentences",
+    "dx-task-build-sentences"
   ],
   "noteIds": []
 }
