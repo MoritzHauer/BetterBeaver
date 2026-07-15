@@ -36,7 +36,7 @@ export function TopicScreen({
       }
       setDueCount(due.length);
     });
-    void store.getStreak().then((current) => {
+    void store.getStreak(content.topic.domainId).then((current) => {
       if (!cancelled) {
         setStreak(current);
       }

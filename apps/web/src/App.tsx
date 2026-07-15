@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import type { Content, Item, Task } from "@betterbeaver/schema";
 import type {
   ContentSource,
+  DomainContent,
+  DomainSummary,
   ProgressStore,
   TopicSummary,
 } from "@betterbeaver/engine";
@@ -11,13 +13,17 @@ import {
   buildAdhocSession,
   buildReviewSession,
   buildTaskSession,
-  dueUnits,
+  dueDomainUnits,
   recordGrade,
+  symmetricLinks,
 } from "@betterbeaver/engine";
 import type { Quality } from "@betterbeaver/srs";
+import type { TapLookup } from "./components/TappableText";
 import { createBundledContentSource } from "./content/bundled";
+import { resolvedLinksByEntryId } from "./content/links";
 import { createLocalStorageProgressStore } from "./progress/local-storage";
 import { createLocalStorageVocabListStore } from "./progress/vocab-lists";
+import { createLocalStorageUserEntryStore } from "./progress/user-entries";
 import { TopicListScreen } from "./screens/TopicListScreen";
 import { TopicScreen } from "./screens/TopicScreen";
 import { UnitScreen } from "./screens/UnitScreen";
@@ -33,17 +39,17 @@ type Screen =
   | { screen: "topic"; topicId: string }
   | { screen: "unit"; topicId: string; unitId: string }
   | { screen: "task"; topicId: string; unitId: string; taskId: string }
-  | { screen: "review"; topicId: string }
-  | { screen: "vocab"; topicId: string }
-  | { screen: "adhoc"; topicId: string; mode: AdhocMode; itemIds: string[] };
+  // Review, Vocabulary, and ad-hoc study are domain-scoped (plan 0006): the
+  // review queue, lists, and streak all key on the domain now, not the topic.
+  | { screen: "review"; domainId: string }
+  | { screen: "vocab"; domainId: string }
+  | { screen: "adhoc"; domainId: string; mode: AdhocMode; itemIds: string[] };
 
 type ContentSourceResult = { source: ContentSource } | { errors: string[] };
 
 const progressStore = createLocalStorageProgressStore();
 const vocabListStore = createLocalStorageVocabListStore();
-
-// Stable identity: SessionScreen's summary panel keys an effect on it.
-const loadStreak = () => progressStore.getStreak();
+const userEntryStore = createLocalStorageUserEntryStore();
 
 /** Wires the engine's task-session building and grading to `SessionScreen`.
  * Questions are built once per mount (keyed by `task.id` via `useMemo`), so
@@ -51,13 +57,18 @@ const loadStreak = () => progressStore.getStreak();
  * every question has been answered, matching the plan's completion rule. */
 function TaskSession({
   content,
+  lookup,
   task,
   onDone,
 }: {
   content: Content;
+  /** Tap-to-lookup dependencies (plan 0006 step 4), for post-answer reveal
+   * surfaces (SessionScreen's pinned rules). */
+  lookup: TapLookup;
   task: Task;
   onDone: () => void;
 }) {
+  const domainId = content.topic.domainId;
   const questions = useMemo(
     () => buildTaskSession(task, content, Math.random),
     // Keyed by taskId only: `content` is reloaded (new reference) on every
@@ -65,7 +76,7 @@ function TaskSession({
     [task.id],
   );
   async function handleGrade(unitId: string, quality: Quality) {
-    await recordGrade(progressStore, unitId, quality, new Date());
+    await recordGrade(progressStore, unitId, quality, new Date(), domainId);
   }
 
   return (
@@ -73,46 +84,69 @@ function TaskSession({
       title={task.instructions ?? `${task.type} practice`}
       questions={questions}
       topicId={content.topic.id}
+      lookup={lookup}
       onGrade={handleGrade}
       onAllAnswered={() => void progressStore.markTaskAttempted(task.id)}
       onFinished={onDone}
       onExit={onDone}
-      loadStreak={loadStreak}
+      loadStreak={() => progressStore.getStreak(domainId)}
     />
   );
 }
 
-/** Wires the engine's due-item queue and review-session building to
- * `SessionScreen`. Grading goes through the same `recordGrade` as tasks;
- * no attempt is recorded (review isn't task completion). */
+/** Wires the engine's per-domain due-item queue and review-session building
+ * to `SessionScreen` (plan 0006: re-scoped from per-topic — the queue is the
+ * union of every domain topic's scheduling units plus unreferenced lexicon
+ * entries). Grading goes through the same `recordGrade` as tasks; no attempt
+ * is recorded (review isn't task completion). */
 function ReviewSession({
-  content,
+  domainContent,
+  topicsContent,
   store,
+  lookup,
   onDone,
 }: {
-  content: Content;
+  domainContent: DomainContent;
+  /** Every topic belonging to the domain. */
+  topicsContent: Content[];
   store: ProgressStore;
+  /** Tap-to-lookup dependencies (plan 0006 step 4), for post-answer reveal surfaces. */
+  lookup: TapLookup;
   onDone: () => void;
 }) {
+  const domainId = domainContent.domain.id;
   const [questions, setQuestions] = useState<ReturnType<
     typeof buildReviewSession
   > | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    dueUnits(content, store, new Date()).then((due) => {
+    dueDomainUnits(
+      topicsContent,
+      domainContent.entries,
+      store,
+      new Date(),
+    ).then((due) => {
       if (cancelled) {
         return;
       }
-      setQuestions(buildReviewSession(due, content, Math.random));
+      // buildReviewSession's `content` parameter is unused by the engine
+      // (every field it needs lives on the units themselves); any topic
+      // of the domain satisfies the type.
+      const anyTopicContent = topicsContent[0];
+      if (anyTopicContent === undefined) {
+        setQuestions([]);
+        return;
+      }
+      setQuestions(buildReviewSession(due, anyTopicContent, Math.random));
     });
     return () => {
       cancelled = true;
     };
-  }, [content, store]);
+  }, [domainContent, topicsContent, store]);
 
   function handleGrade(unitId: string, quality: Quality) {
-    return recordGrade(store, unitId, quality, new Date()).then(
+    return recordGrade(store, unitId, quality, new Date(), domainId).then(
       () => undefined,
     );
   }
@@ -130,61 +164,84 @@ function ReviewSession({
     );
   }
 
+  // Representative topic for asset resolution (`SessionScreen`'s single
+  // `topicId` prop): every bundled domain ships exactly one topic today, so
+  // this always resolves correctly. A future multi-topic domain would need
+  // per-question topic resolution instead — out of scope for this step.
+  const topicId = topicsContent[0]?.topic.id ?? domainId;
+
   return (
     <SessionScreen
       title="Review"
       questions={questions}
-      topicId={content.topic.id}
+      topicId={topicId}
+      lookup={lookup}
       onGrade={handleGrade}
       onFinished={onDone}
       onExit={onDone}
-      loadStreak={loadStreak}
+      loadStreak={() => store.getStreak(domainId)}
     />
   );
 }
 
-/** Wires the engine's ad-hoc vocabulary sessions (plan 0004) to
- * `SessionScreen`. Grading goes through the same `recordGrade` as tasks —
- * per the plan's amendment, a stateless item gets scheduled — and no task
- * attempt is recorded (ad-hoc sessions never mark unit completion). */
+/** Wires the engine's ad-hoc vocabulary sessions (plan 0004; domain-scoped
+ * by plan 0006) to `SessionScreen`. Grading goes through the same
+ * `recordGrade` as tasks — per the plan's amendment, a stateless item gets
+ * scheduled — and no task attempt is recorded (ad-hoc sessions never mark
+ * unit completion). */
 function AdhocSession({
-  content,
+  domainContent,
+  topicId,
   mode,
   itemIds,
+  lookup,
   onDone,
 }: {
-  content: Content;
+  domainContent: DomainContent;
+  /** Representative topic of the domain, for `SessionScreen`'s asset resolution. */
+  topicId: string;
   mode: AdhocMode;
   itemIds: string[];
+  /** Tap-to-lookup dependencies (plan 0006 step 4), for post-answer reveal surfaces. */
+  lookup: TapLookup;
   onDone: () => void;
 }) {
+  const domainId = domainContent.domain.id;
   const questions = useMemo(
     () => {
-      const itemById = new Map(content.items.map((item) => [item.id, item]));
+      // The domain's full lexicon (plan 0006), not one topic's items — a
+      // studied list may hold any entry of the domain.
+      const itemById = new Map(
+        domainContent.entries.map((item) => [item.id, item]),
+      );
       const items = itemIds.flatMap((id): Item[] => {
         const item = itemById.get(id);
         return item !== undefined ? [item] : [];
       });
-      return buildAdhocSession(mode, items, Math.random);
+      // Re-based from the deleted `payload.synonyms` onto resolved
+      // `synonym`-type links (plan 0006); the engine filters by type itself.
+      const resolvedLinks = resolvedLinksByEntryId(domainContent);
+      return buildAdhocSession(mode, items, Math.random, resolvedLinks);
     },
     // Keyed by the study selection only, so the session doesn't reshuffle
     // across re-renders (same rule as TaskSession).
-    [mode, itemIds],
+    [mode, itemIds, domainContent],
   );
   async function handleGrade(unitId: string, quality: Quality) {
-    await recordGrade(progressStore, unitId, quality, new Date());
+    await recordGrade(progressStore, unitId, quality, new Date(), domainId);
   }
 
   return (
     <SessionScreen
       title={ADHOC_MODE_LABELS[mode]}
       questions={questions}
-      topicId={content.topic.id}
-      readAloudLang={content.topic.readAloudLang}
+      topicId={topicId}
+      readAloudLang={domainContent.domain.readAloudLang}
+      lookup={lookup}
       onGrade={handleGrade}
       onFinished={onDone}
       onExit={onDone}
-      loadStreak={loadStreak}
+      loadStreak={() => progressStore.getStreak(domainId)}
     />
   );
 }
@@ -203,13 +260,26 @@ export function App() {
 
   const [screen, setScreen] = useState<Screen>({ screen: "topics" });
   const [topics, setTopics] = useState<TopicSummary[]>([]);
+  const [domains, setDomains] = useState<DomainSummary[]>([]);
   const [content, setContent] = useState<Content | null>(null);
+  // The active domain's content and every one of its topics (plan 0006):
+  // loaded for the review/vocab/adhoc screens, which are domain-scoped and
+  // may have no single topic in hand (reachable directly from the home
+  // screen).
+  const [domainContent, setDomainContent] = useState<DomainContent | null>(
+    null,
+  );
+  const [domainTopicsContent, setDomainTopicsContent] = useState<Content[]>([]);
   const [attemptedTaskIds, setAttemptedTaskIds] = useState<Set<string>>(
     new Set(),
   );
   // Bumped on every navigation to the topic screen, so it recomputes its
   // due-review count (which task/review sessions elsewhere may have changed).
   const [topicEpoch, setTopicEpoch] = useState(0);
+  // Bumped whenever the Vocabulary screen adds/deletes a learner-created
+  // word (plan 0006), so the domain-content effect below re-merges the
+  // user entry store's current contents without requiring a navigation.
+  const [domainEpoch, setDomainEpoch] = useState(0);
 
   function reloadAttemptedTaskIds() {
     progressStore
@@ -227,6 +297,7 @@ export function App() {
       return;
     }
     contentSourceResult.source.listTopics().then(setTopics);
+    contentSourceResult.source.listDomains().then(setDomains);
     reloadAttemptedTaskIds();
   }, [contentSourceResult]);
 
@@ -234,10 +305,68 @@ export function App() {
     if (!("source" in contentSourceResult)) {
       return;
     }
-    if (screen.screen !== "topics") {
+    if (
+      screen.screen === "topic" ||
+      screen.screen === "unit" ||
+      screen.screen === "task"
+    ) {
       contentSourceResult.source.loadTopic(screen.topicId).then(setContent);
     }
   }, [contentSourceResult, screen]);
+
+  useEffect(() => {
+    if (!("source" in contentSourceResult)) {
+      return;
+    }
+    // Domain-scoped screens carry their domainId directly; topic/unit/task
+    // screens derive it from the already-loaded topic summaries (plan
+    // 0006's tap-to-lookup, step 4: those screens need the domain's merged
+    // entry pool too, for notes and post-answer session reveals).
+    const domainId =
+      screen.screen === "review" ||
+      screen.screen === "vocab" ||
+      screen.screen === "adhoc"
+        ? screen.domainId
+        : screen.screen === "topic" ||
+            screen.screen === "unit" ||
+            screen.screen === "task"
+          ? topics.find((topic) => topic.id === screen.topicId)?.domainId
+          : undefined;
+    if (domainId === undefined) {
+      return;
+    }
+    const domainTopicIds = topics
+      .filter((topic) => topic.domainId === domainId)
+      .map((topic) => topic.id);
+    let cancelled = false;
+    Promise.all([
+      contentSourceResult.source.loadDomain(domainId),
+      Promise.all(
+        domainTopicIds.map((id) => contentSourceResult.source.loadTopic(id)),
+      ),
+      userEntryStore.getEntries(domainId),
+    ]).then(([loadedDomainContent, loadedTopicsContent, userEntries]) => {
+      if (cancelled) {
+        return;
+      }
+      // Merge the domain's user-created entries into the shipped pool (plan
+      // 0006): every downstream consumer (Vocabulary screen, ad-hoc session
+      // builder, list pruning, review queue, TTS fallback) only ever sees
+      // this merged `DomainContent`, so they all pick up user words for
+      // free. Links are re-derived over the merged set too, so a link
+      // authored from a user entry to a shipped one resolves correctly.
+      const entries = [...loadedDomainContent.entries, ...userEntries];
+      setDomainContent({
+        ...loadedDomainContent,
+        entries,
+        linksByEntryId: symmetricLinks(entries),
+      });
+      setDomainTopicsContent(loadedTopicsContent);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [contentSourceResult, screen, topics, domainEpoch]);
 
   if ("errors" in contentSourceResult) {
     return <ErrorScreen errors={contentSourceResult.errors} />;
@@ -246,57 +375,77 @@ export function App() {
   if (screen.screen === "topics") {
     return (
       <TopicListScreen
+        domains={domains}
         topics={topics}
         onSelectTopic={(topicId) => goToTopic(topicId)}
+        onDomainVocabulary={(domainId) =>
+          setScreen({ screen: "vocab", domainId })
+        }
+        onDomainReview={(domainId) => setScreen({ screen: "review", domainId })}
       />
     );
   }
 
-  if (content === null) {
-    return <p>Loading&hellip;</p>;
-  }
+  if (
+    screen.screen === "topic" ||
+    screen.screen === "unit" ||
+    screen.screen === "task"
+  ) {
+    // domainContent is gated here too (not just content): unit notes and
+    // task-session post-answer reveals need the domain's merged entry pool
+    // for tap-to-lookup (plan 0006 step 4).
+    if (content === null || domainContent === null) {
+      return <p>Loading&hellip;</p>;
+    }
+    const lookup: TapLookup = {
+      domainContent,
+      listStore: vocabListStore,
+      userEntryStore,
+      onWordsChanged: () => setDomainEpoch((epoch) => epoch + 1),
+    };
 
-  if (screen.screen === "topic") {
-    return (
-      <TopicScreen
-        content={content}
-        attemptedTaskIds={attemptedTaskIds}
-        store={progressStore}
-        epoch={topicEpoch}
-        onSelectUnit={(unitId) =>
-          setScreen({ screen: "unit", topicId: screen.topicId, unitId })
-        }
-        onReview={() =>
-          setScreen({ screen: "review", topicId: screen.topicId })
-        }
-        onVocabulary={() =>
-          setScreen({ screen: "vocab", topicId: screen.topicId })
-        }
-        onBack={() => setScreen({ screen: "topics" })}
-      />
-    );
-  }
+    if (screen.screen === "topic") {
+      return (
+        <TopicScreen
+          content={content}
+          attemptedTaskIds={attemptedTaskIds}
+          store={progressStore}
+          epoch={topicEpoch}
+          onSelectUnit={(unitId) =>
+            setScreen({ screen: "unit", topicId: screen.topicId, unitId })
+          }
+          onReview={() =>
+            setScreen({ screen: "review", domainId: content.topic.domainId })
+          }
+          onVocabulary={() =>
+            setScreen({ screen: "vocab", domainId: content.topic.domainId })
+          }
+          onBack={() => setScreen({ screen: "topics" })}
+        />
+      );
+    }
 
-  if (screen.screen === "unit") {
-    return (
-      <UnitScreen
-        content={content}
-        unitId={screen.unitId}
-        attemptedTaskIds={attemptedTaskIds}
-        onPractice={(taskId) =>
-          setScreen({
-            screen: "task",
-            topicId: screen.topicId,
-            unitId: screen.unitId,
-            taskId,
-          })
-        }
-        onBack={() => goToTopic(screen.topicId)}
-      />
-    );
-  }
+    if (screen.screen === "unit") {
+      return (
+        <UnitScreen
+          content={content}
+          unitId={screen.unitId}
+          attemptedTaskIds={attemptedTaskIds}
+          lookup={lookup}
+          onPractice={(taskId) =>
+            setScreen({
+              screen: "task",
+              topicId: screen.topicId,
+              unitId: screen.unitId,
+              taskId,
+            })
+          }
+          onBack={() => goToTopic(screen.topicId)}
+        />
+      );
+    }
 
-  if (screen.screen === "task") {
+    // screen.screen === "task"
     const task = content.tasks.find((t) => t.id === screen.taskId);
     if (task === undefined) {
       return (
@@ -308,6 +457,7 @@ export function App() {
     return (
       <TaskSession
         content={content}
+        lookup={lookup}
         task={task}
         onDone={() => {
           reloadAttemptedTaskIds();
@@ -321,35 +471,59 @@ export function App() {
     );
   }
 
+  // screen.screen is "review" | "vocab" | "adhoc" — all domain-scoped.
+  if (domainContent === null || domainTopicsContent.length === 0) {
+    return <p>Loading&hellip;</p>;
+  }
+  const lookup: TapLookup = {
+    domainContent,
+    listStore: vocabListStore,
+    userEntryStore,
+    onWordsChanged: () => setDomainEpoch((epoch) => epoch + 1),
+  };
+
   if (screen.screen === "vocab") {
     return (
       <VocabularyScreen
-        content={content}
+        topicsContent={domainTopicsContent}
+        domainContent={domainContent}
         listStore={vocabListStore}
+        userEntryStore={userEntryStore}
+        onWordsChanged={() => setDomainEpoch((epoch) => epoch + 1)}
         onStudy={(mode, itemIds) =>
-          setScreen({ screen: "adhoc", topicId: screen.topicId, mode, itemIds })
+          setScreen({
+            screen: "adhoc",
+            domainId: screen.domainId,
+            mode,
+            itemIds,
+          })
         }
-        onBack={() => goToTopic(screen.topicId)}
+        onBack={() => setScreen({ screen: "topics" })}
       />
     );
   }
 
   if (screen.screen === "adhoc") {
+    const topicId = domainTopicsContent[0]?.topic.id ?? screen.domainId;
     return (
       <AdhocSession
-        content={content}
+        domainContent={domainContent}
+        topicId={topicId}
         mode={screen.mode}
         itemIds={screen.itemIds}
-        onDone={() => setScreen({ screen: "vocab", topicId: screen.topicId })}
+        lookup={lookup}
+        onDone={() => setScreen({ screen: "vocab", domainId: screen.domainId })}
       />
     );
   }
 
   return (
     <ReviewSession
-      content={content}
+      domainContent={domainContent}
+      topicsContent={domainTopicsContent}
       store={progressStore}
-      onDone={() => goToTopic(screen.topicId)}
+      lookup={lookup}
+      onDone={() => setScreen({ screen: "topics" })}
     />
   );
 }

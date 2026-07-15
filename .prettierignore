@@ -3,3 +3,8 @@ dist
 coverage
 pnpm-lock.yaml
 docs/plans
+
+# Unit notes use a hand-rolled markup convention (*single-asterisk* =
+# tappable target-language span, plan 0006 note-rendering fix); prettier's
+# markdown emphasis normalization (* -> _) would corrupt it.
+content/**/notes/*.md

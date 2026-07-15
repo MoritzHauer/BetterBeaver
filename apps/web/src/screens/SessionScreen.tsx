@@ -17,6 +17,8 @@ import {
 } from "@betterbeaver/engine";
 import type { Quality, SelfGrade } from "@betterbeaver/srs";
 import { recallQuality, recognizeQuality } from "@betterbeaver/srs";
+import type { TapLookup } from "../components/TappableText";
+import { TappableText } from "../components/TappableText";
 import { getAssetUrl } from "../content/bundled";
 import { SpeakerButton } from "../tts";
 import { playCorrect, playFanfare, playWrong } from "../sounds";
@@ -106,14 +108,23 @@ function ImageDisplay({
 
 /** Shared MCQ choice list: recognize, listen, minimal-pair, and picture all
  * pick one of N choices against a known correct index. Tap-to-answer, so the
- * action bar holds nothing until the verdict. */
+ * action bar holds nothing until the verdict.
+ *
+ * `prompt`/`lookup` (recognize only, plan 0006 step 4): recognize's prompt
+ * is target-language script, shown throughout the question — but tap-to-
+ * lookup is pinned to post-answer surfaces only, so it renders as plain text
+ * until `picked !== null`, then swaps to `TappableText`. */
 function ChoiceList({
+  prompt,
+  lookup,
   choices,
   correctIndex,
   unitId,
   applyAuto,
   advance,
 }: {
+  prompt?: string;
+  lookup?: TapLookup;
   choices: readonly string[];
   correctIndex: number;
   unitId: string;
@@ -132,6 +143,15 @@ function ChoiceList({
 
   return (
     <>
+      {prompt !== undefined ? (
+        <p className="prompt">
+          {picked !== null && lookup !== undefined ? (
+            <TappableText text={prompt} lookup={lookup} />
+          ) : (
+            prompt
+          )}
+        </p>
+      ) : null}
       <ul className="card-list">
         {choices.map((choice, choiceIndex) => {
           const state =
@@ -224,15 +244,25 @@ function SelfGradeReveal({
 /** Shared typed-input form: cloze and dictation both type an answer, checked
  * via `checkTypedAnswer`, and reveal the target on submit. The Check button
  * lives in the action bar, tied to the form via the native `form` attribute
- * so Enter still submits. */
+ * so Enter still submits.
+ *
+ * `revealedText`/`lookup` (cloze only, plan 0006 step 4): once answered,
+ * cloze reveals the sentence with its blank filled in — the "cloze sentence
+ * revealed" pinned surface — as tappable text. Dictation never passes these
+ * (its target is already the whole sentence with nothing left gapped, and
+ * it isn't a pinned surface). */
 function TypedInput({
   target,
   unitId,
+  revealedText,
+  lookup,
   applyAuto,
   advance,
 }: {
   target: string;
   unitId: string;
+  revealedText?: string;
+  lookup?: TapLookup;
   applyAuto: (unitId: string, correct: boolean) => Promise<void>;
   advance: () => void;
 }) {
@@ -261,6 +291,11 @@ function TypedInput({
           onChange={(event) => setValue(event.target.value)}
         />
       </form>
+      {result !== null && revealedText !== undefined && lookup !== undefined ? (
+        <p className="prompt">
+          <TappableText text={revealedText} lookup={lookup} />
+        </p>
+      ) : null}
       {result === null ? (
         <ActionBar>
           <button className="primary" type="submit" form={formId}>
@@ -281,13 +316,19 @@ function TypedInput({
 /** Shuffled tokens as a pool of buttons; clicking one appends it to the
  * ordered answer row, clicking an answer token returns it to the pool (by
  * index, so duplicate token strings behave). Shared by scramble (all tokens
- * must be placed) and build (bank distractors may stay in the pool). */
+ * must be placed) and build (bank distractors may stay in the pool).
+ *
+ * `lookup` (plan 0006 step 4): once checked, the assembled sentence — "the
+ * sentence just built" — renders again as tappable text below the (now
+ * frozen) token rows. */
 function ScrambleInteraction({
   question,
+  lookup,
   applyAuto,
   advance,
 }: {
   question: ScrambleQuestion | BuildQuestion;
+  lookup: TapLookup;
   applyAuto: (unitId: string, correct: boolean) => Promise<void>;
   advance: () => void;
 }) {
@@ -357,6 +398,14 @@ function ScrambleInteraction({
           </button>
         ))}
       </div>
+      {result !== null ? (
+        <p className="prompt">
+          <TappableText
+            text={answer.map((entry) => entry.token).join(" ")}
+            lookup={lookup}
+          />
+        </p>
+      ) : null}
       {result === null ? (
         <ActionBar>
           <button
@@ -385,13 +434,21 @@ function ScrambleInteraction({
 /** Two columns (prompts, answers); every selection-pair is appended to a
  * history array and re-checked via `matchingOutcomes` — a non-null result
  * clears the board and applies every outcome at once. Per-pair feedback is
- * sound + card color; the action bar appears once the board clears. */
+ * sound + card color; the action bar appears once the board clears.
+ *
+ * `lookup` (plan 0006 step 4): "the matched cards" — once a prompt card is
+ * cleared (correctly matched), it swaps from a plain (now-disabled) button
+ * to tappable text. Only the prompts column is target-language script; the
+ * answers column is the gloss/translation side, so it's never tap-to-lookup
+ * material and stays plain buttons throughout. */
 function MatchingBoard({
   question,
+  lookup,
   applyMatchingOutcomes,
   advance,
 }: {
   question: MatchingQuestion;
+  lookup: TapLookup;
   applyMatchingOutcomes: (outcomes: QuestionOutcome[]) => Promise<void>;
   advance: () => void;
 }) {
@@ -448,25 +505,31 @@ function MatchingBoard({
     <div>
       <div className="matching-board">
         <ul className="card-list">
-          {question.prompts.map((prompt, index) => (
-            <li
-              key={index}
-              className={`card${
-                clearedPrompts.has(index)
-                  ? " correct"
-                  : selectedPrompt === index
-                    ? " selected"
-                    : ""
-              }`}
-            >
-              <button
-                disabled={finished || clearedPrompts.has(index)}
-                onClick={() => pickPrompt(index)}
+          {question.prompts.map((prompt, index) => {
+            const cleared = clearedPrompts.has(index);
+            return (
+              <li
+                key={index}
+                className={`card${
+                  cleared
+                    ? " correct"
+                    : selectedPrompt === index
+                      ? " selected"
+                      : ""
+                }`}
               >
-                {prompt.text}
-              </button>
-            </li>
-          ))}
+                {cleared ? (
+                  <div>
+                    <TappableText text={prompt.text} lookup={lookup} />
+                  </div>
+                ) : (
+                  <button disabled={finished} onClick={() => pickPrompt(index)}>
+                    {prompt.text}
+                  </button>
+                )}
+              </li>
+            );
+          })}
         </ul>
         <ul className="card-list">
           {question.answers.map((answer, index) => (
@@ -505,6 +568,7 @@ function renderInteraction(
   question: Question,
   topicId: string,
   readAloudLang: string | undefined,
+  lookup: TapLookup,
   applyAuto: (unitId: string, correct: boolean) => Promise<void>,
   applySelf: (unitId: string, grade: SelfGrade) => Promise<void>,
   applyMatchingOutcomes: (outcomes: QuestionOutcome[]) => Promise<void>,
@@ -513,16 +577,15 @@ function renderInteraction(
   switch (question.kind) {
     case "recognize":
       return (
-        <>
-          <p className="prompt">{question.prompt}</p>
-          <ChoiceList
-            choices={question.choices}
-            correctIndex={question.correctIndex}
-            unitId={question.unitId}
-            applyAuto={applyAuto}
-            advance={advance}
-          />
-        </>
+        <ChoiceList
+          prompt={question.prompt}
+          lookup={lookup}
+          choices={question.choices}
+          correctIndex={question.correctIndex}
+          unitId={question.unitId}
+          applyAuto={applyAuto}
+          advance={advance}
+        />
       );
     case "recall":
       return (
@@ -544,6 +607,8 @@ function renderInteraction(
           <TypedInput
             target={question.target}
             unitId={question.unitId}
+            revealedText={question.prompt.replace("___", question.target)}
+            lookup={lookup}
             applyAuto={applyAuto}
             advance={advance}
           />
@@ -565,6 +630,7 @@ function renderInteraction(
       return (
         <ScrambleInteraction
           question={question}
+          lookup={lookup}
           applyAuto={applyAuto}
           advance={advance}
         />
@@ -575,6 +641,7 @@ function renderInteraction(
           <p className="prompt">{question.prompt}</p>
           <ScrambleInteraction
             question={question}
+            lookup={lookup}
             applyAuto={applyAuto}
             advance={advance}
           />
@@ -584,6 +651,7 @@ function renderInteraction(
       return (
         <MatchingBoard
           question={question}
+          lookup={lookup}
           applyMatchingOutcomes={applyMatchingOutcomes}
           advance={advance}
         />
@@ -746,6 +814,7 @@ export function SessionScreen({
   questions,
   topicId,
   readAloudLang,
+  lookup,
   onGrade,
   onAllAnswered,
   onFinished,
@@ -757,6 +826,11 @@ export function SessionScreen({
   topicId: string;
   /** The topic's `readAloudLang`, for TTS-backed listen questions (plan 0004). */
   readAloudLang?: string | undefined;
+  /** The domain's tap-to-lookup dependencies (plan 0006 step 4), threaded to
+   * every post-answer reveal surface the pinned rules cover (recognize's
+   * prompt, the cloze/build/scramble revealed sentence, matching's matched
+   * cards) — never to a not-yet-answered question. */
+  lookup: TapLookup;
   onGrade: (unitId: string, quality: Quality) => Promise<void>;
   onAllAnswered?: () => void;
   onFinished: (summary: SessionSummary) => void;
@@ -863,6 +937,7 @@ export function SessionScreen({
             question,
             topicId,
             readAloudLang,
+            lookup,
             applyAuto,
             applySelf,
             applyMatchingOutcomes,

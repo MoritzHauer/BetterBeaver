@@ -1,8 +1,8 @@
 # Introducing yourself
 
-To give your name, say **Менин атым ...** ("My name is ..."); to ask for
-someone's, **Сенин атың ким?** (informal) or, with a stranger or elder, the
-polite **Сиздин атыңыз ким?** Note that names take **ким?** "who?", not
+To give your name, say *Менин атым ...* ("My name is ..."); to ask for
+someone's, *Сенин атың ким?* (informal) or, with a stranger or elder, the
+polite *Сиздин атыңыз ким?* Note that names take *ким?* "who?", not
 эмне? "what?".
 
 Two small patterns from these phrases carry far:
@@ -17,5 +17,5 @@ Two small patterns from these phrases carry far:
   Америкадан**мын** "I am from America".
 
 When addressing the person you've just met, use the respectful titles:
-**агай** for a male teacher or elder, **эжеке** for an older woman,
-**аксакал** for a respected elder man.
+*агай* for a male teacher or elder, *эжеке* for an older woman,
+*аксакал* for a respected elder man.
