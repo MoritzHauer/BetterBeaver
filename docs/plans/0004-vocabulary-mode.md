@@ -1,6 +1,6 @@
 # Plan 0004: Vocabulary learning mode
 
-Status: draft, revised after 1 doc-reviewer round (all 9 findings applied) · Owner: Moe · Date: 2026-07-15 · Prerequisite: plan 0002 complete
+Status: implemented (2026-07-15, steps 1–4; browser-verified per step 4) · Owner: Moe · Date: 2026-07-15 · Prerequisite: plan 0002 complete
 
 ## Amendments to plan 0001
 
