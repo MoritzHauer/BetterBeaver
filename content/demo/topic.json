@@ -3,5 +3,6 @@
   "code": "dx",
   "title": "Exercise-type showcase",
   "description": "Throwaway English-language demo topic exercising every task type and validator edge case; example inputs, not pedagogy.",
-  "unitIds": ["dx-unit-words", "dx-unit-sentences"]
+  "unitIds": ["dx-unit-words", "dx-unit-sentences"],
+  "readAloudLang": "en"
 }

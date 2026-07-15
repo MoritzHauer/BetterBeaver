@@ -5,7 +5,8 @@
     "script": "Салам!",
     "transliteration": "salam",
     "gloss": "Hi! (informal greeting)",
-    "usageNote": "Between friends and people your age. The reply is the same: Салам!"
+    "usageNote": "Between friends and people your age. The reply is the same: Салам!",
+    "synonyms": ["Салам алейкум!"]
   },
   "sourceRef": "ky-resource-manual-greetings"
 }

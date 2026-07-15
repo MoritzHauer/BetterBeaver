@@ -4,7 +4,8 @@
   "payload": {
     "script": "Рахмат",
     "transliteration": "rahmat",
-    "gloss": "Thanks"
+    "gloss": "Thanks",
+    "synonyms": ["Чоң рахмат"]
   },
   "sourceRef": "ky-resource-competencies"
 }

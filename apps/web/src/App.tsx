@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import type { Content, Task } from "@betterbeaver/schema";
+import type { Content, Item, Task } from "@betterbeaver/schema";
 import type {
   ContentSource,
   ProgressStore,
   TopicSummary,
 } from "@betterbeaver/engine";
+import type { AdhocMode } from "@betterbeaver/engine";
 import {
   ContentValidationError,
+  buildAdhocSession,
   buildReviewSession,
   buildTaskSession,
   dueUnits,
@@ -15,10 +17,15 @@ import {
 import type { Quality } from "@betterbeaver/srs";
 import { createBundledContentSource } from "./content/bundled";
 import { createLocalStorageProgressStore } from "./progress/local-storage";
+import { createLocalStorageVocabListStore } from "./progress/vocab-lists";
 import { TopicListScreen } from "./screens/TopicListScreen";
 import { TopicScreen } from "./screens/TopicScreen";
 import { UnitScreen } from "./screens/UnitScreen";
 import { SessionScreen } from "./screens/SessionScreen";
+import {
+  ADHOC_MODE_LABELS,
+  VocabularyScreen,
+} from "./screens/VocabularyScreen";
 import { ErrorScreen } from "./screens/ErrorScreen";
 
 type Screen =
@@ -26,11 +33,14 @@ type Screen =
   | { screen: "topic"; topicId: string }
   | { screen: "unit"; topicId: string; unitId: string }
   | { screen: "task"; topicId: string; unitId: string; taskId: string }
-  | { screen: "review"; topicId: string };
+  | { screen: "review"; topicId: string }
+  | { screen: "vocab"; topicId: string }
+  | { screen: "adhoc"; topicId: string; mode: AdhocMode; itemIds: string[] };
 
 type ContentSourceResult = { source: ContentSource } | { errors: string[] };
 
 const progressStore = createLocalStorageProgressStore();
+const vocabListStore = createLocalStorageVocabListStore();
 
 // Stable identity: SessionScreen's summary panel keys an effect on it.
 const loadStreak = () => progressStore.getStreak();
@@ -133,6 +143,52 @@ function ReviewSession({
   );
 }
 
+/** Wires the engine's ad-hoc vocabulary sessions (plan 0004) to
+ * `SessionScreen`. Grading goes through the same `recordGrade` as tasks —
+ * per the plan's amendment, a stateless item gets scheduled — and no task
+ * attempt is recorded (ad-hoc sessions never mark unit completion). */
+function AdhocSession({
+  content,
+  mode,
+  itemIds,
+  onDone,
+}: {
+  content: Content;
+  mode: AdhocMode;
+  itemIds: string[];
+  onDone: () => void;
+}) {
+  const questions = useMemo(
+    () => {
+      const itemById = new Map(content.items.map((item) => [item.id, item]));
+      const items = itemIds.flatMap((id): Item[] => {
+        const item = itemById.get(id);
+        return item !== undefined ? [item] : [];
+      });
+      return buildAdhocSession(mode, items, Math.random);
+    },
+    // Keyed by the study selection only, so the session doesn't reshuffle
+    // across re-renders (same rule as TaskSession).
+    [mode, itemIds],
+  );
+  async function handleGrade(unitId: string, quality: Quality) {
+    await recordGrade(progressStore, unitId, quality, new Date());
+  }
+
+  return (
+    <SessionScreen
+      title={ADHOC_MODE_LABELS[mode]}
+      questions={questions}
+      topicId={content.topic.id}
+      readAloudLang={content.topic.readAloudLang}
+      onGrade={handleGrade}
+      onFinished={onDone}
+      onExit={onDone}
+      loadStreak={loadStreak}
+    />
+  );
+}
+
 export function App() {
   const contentSourceResult = useMemo((): ContentSourceResult => {
     try {
@@ -178,12 +234,7 @@ export function App() {
     if (!("source" in contentSourceResult)) {
       return;
     }
-    if (
-      screen.screen === "topic" ||
-      screen.screen === "unit" ||
-      screen.screen === "task" ||
-      screen.screen === "review"
-    ) {
+    if (screen.screen !== "topics") {
       contentSourceResult.source.loadTopic(screen.topicId).then(setContent);
     }
   }, [contentSourceResult, screen]);
@@ -217,6 +268,9 @@ export function App() {
         }
         onReview={() =>
           setScreen({ screen: "review", topicId: screen.topicId })
+        }
+        onVocabulary={() =>
+          setScreen({ screen: "vocab", topicId: screen.topicId })
         }
         onBack={() => setScreen({ screen: "topics" })}
       />
@@ -263,6 +317,30 @@ export function App() {
             unitId: screen.unitId,
           });
         }}
+      />
+    );
+  }
+
+  if (screen.screen === "vocab") {
+    return (
+      <VocabularyScreen
+        content={content}
+        listStore={vocabListStore}
+        onStudy={(mode, itemIds) =>
+          setScreen({ screen: "adhoc", topicId: screen.topicId, mode, itemIds })
+        }
+        onBack={() => goToTopic(screen.topicId)}
+      />
+    );
+  }
+
+  if (screen.screen === "adhoc") {
+    return (
+      <AdhocSession
+        content={content}
+        mode={screen.mode}
+        itemIds={screen.itemIds}
+        onDone={() => setScreen({ screen: "vocab", topicId: screen.topicId })}
       />
     );
   }

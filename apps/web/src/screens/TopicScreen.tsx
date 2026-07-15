@@ -10,6 +10,7 @@ export function TopicScreen({
   epoch,
   onSelectUnit,
   onReview,
+  onVocabulary,
   onBack,
 }: {
   content: Content;
@@ -20,6 +21,7 @@ export function TopicScreen({
   epoch: number;
   onSelectUnit: (unitId: string) => void;
   onReview: () => void;
+  onVocabulary: () => void;
   onBack: () => void;
 }) {
   const unitById = new Map(content.units.map((unit) => [unit.id, unit]));
@@ -72,6 +74,12 @@ export function TopicScreen({
                   ? "Nothing due"
                   : `${dueCount} due`}
             </p>
+          </button>
+        </li>
+        <li className="card">
+          <button onClick={onVocabulary}>
+            <strong>Vocabulary</strong>
+            <p className="status">Browse words, make lists, study your way</p>
           </button>
         </li>
         {content.topic.unitIds.map((unitId) => {

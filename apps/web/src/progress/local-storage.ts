@@ -6,7 +6,7 @@ const ATTEMPTED_KEY = "bb.attempted";
 const STREAK_KEY = "bb.streak";
 
 /** Parses JSON from `localStorage`, treating a corrupt/missing value as absent. */
-function readJson<T>(key: string): T | null {
+export function readJson<T>(key: string): T | null {
   const raw = localStorage.getItem(key);
   if (raw === null) {
     return null;
