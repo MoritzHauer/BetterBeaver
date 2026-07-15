@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { validateContent, type ValidateContentResult } from "./validate.js";
 
+type LinkLike = { type: string; entryId: string };
 type ConceptItemLike = {
   id: string;
   kind: "concept";
@@ -9,6 +10,7 @@ type ConceptItemLike = {
     definition: string;
     audioRef?: string;
     imageRef?: string;
+    links?: LinkLike[];
   };
   sourceRef: string;
 };
@@ -19,9 +21,11 @@ type LexemeItemLike = {
     script: string;
     transliteration: string;
     gloss: string;
-    synonyms?: string[];
+    example?: { text: string; translation: string };
+    usageNote?: string;
     audioRef?: string;
     imageRef?: string;
+    links?: LinkLike[];
   };
   sourceRef: string;
 };
@@ -43,6 +47,15 @@ type PairItemLike = {
 };
 type ItemLike =
   ConceptItemLike | LexemeItemLike | SentenceItemLike | PairItemLike;
+type DomainLike = {
+  id: string;
+  code: string;
+  kind: "language" | "general";
+  title: string;
+  glossLanguage: string;
+  readAloudLang?: string;
+};
+type FamilyLike = { id: string; name: string; entryIds: string[] };
 /** A task's `type` covers plan 0001's `recognize`/`recall` plus plan 0002's new types. */
 type TaskLike = {
   id: string;
@@ -91,6 +104,29 @@ function makeFixture() {
   };
   const items: ItemLike[] = [itemA, itemB, itemC, itemD];
 
+  const domain: DomainLike = {
+    id: "ky",
+    code: "ky",
+    kind: "language",
+    title: "Kyrgyz",
+    glossLanguage: "en",
+  };
+  // A lexicon entry, unreferenced by any unit (entries carry no ownership
+  // requirement, plan 0006) — gives domain-side tests something to mutate.
+  const entry1: LexemeItemLike = {
+    id: "ky-entry-hello",
+    kind: "lexeme",
+    payload: { script: "Салам", transliteration: "salam", gloss: "hi" },
+    sourceRef: resource.id,
+  };
+  const entries: ItemLike[] = [entry1];
+  const family1: FamilyLike = {
+    id: "ky-family-greetings",
+    name: "Greetings",
+    entryIds: [entry1.id],
+  };
+  const families: FamilyLike[] = [family1];
+
   const taskRecognize: TaskLike = {
     id: "ky-task-recognize-1",
     type: "recognize",
@@ -127,6 +163,7 @@ function makeFixture() {
     title: "Kyrgyz",
     description: "Kyrgyz language topic",
     unitIds: [unit.id],
+    domainId: domain.id,
   };
 
   const input = {
@@ -138,6 +175,11 @@ function makeFixture() {
     noteStems: ["intro"],
     audioStems: [] as string[],
     imageStems: [] as string[],
+    domain,
+    entries,
+    families,
+    lexiconAudioStems: [] as string[],
+    lexiconImageStems: [] as string[],
   };
 
   return {
@@ -151,6 +193,11 @@ function makeFixture() {
     taskRecognize,
     taskRecall,
     resource,
+    domain,
+    entries,
+    entry1,
+    families,
+    family1,
   };
 }
 
@@ -615,53 +662,183 @@ describe("validateContent", () => {
     expect(errors.some((e) => e.includes("ky-task-listen-1"))).toBe(true);
   });
 
-  it("(s) reports a synonym equal to the item's own script", () => {
-    const { input, unit, resource } = makeFixture();
-    const lexemeItem: LexemeItemLike = {
-      id: "ky-item-lex-syn",
+  it("(j) reports a duplicate id shared between a topic item and a domain entry", () => {
+    const { input, entry1 } = makeFixture();
+    input.items.push({
+      id: entry1.id,
+      kind: "concept",
+      payload: { term: "dup", definition: "collides with the entry id" },
+      sourceRef: "ky-resource-manual",
+    });
+
+    const errors = expectErrors(validateContent(input));
+
+    expect(errors.some((e) => e.includes(entry1.id))).toBe(true);
+  });
+
+  it("(t) reports a topic.domainId that doesn't match the given domain", () => {
+    const { input, topic } = makeFixture();
+    topic.domainId = "other-domain";
+
+    const errors = expectErrors(validateContent(input));
+
+    expect(errors.some((e) => e.includes("topic.domainId"))).toBe(true);
+  });
+
+  it("(u) reports an entry kind that doesn't match the domain kind", () => {
+    const { input, entry1 } = makeFixture();
+    input.domain.kind = "general";
+
+    const errors = expectErrors(validateContent(input));
+
+    expect(
+      errors.some((e) => e.includes(entry1.id) && e.includes("domain kind")),
+    ).toBe(true);
+  });
+
+  it("(v) reports an entry id not prefixed by the domain code", () => {
+    const { input, resource } = makeFixture();
+    const entry: LexemeItemLike = {
+      id: "other-entry-x",
       kind: "lexeme",
-      payload: {
-        script: "жакшы",
-        transliteration: "jakshy",
-        gloss: "good",
-        synonyms: ["жакшы"],
-      },
+      payload: { script: "х", transliteration: "x", gloss: "x" },
       sourceRef: resource.id,
     };
-    input.items.push(lexemeItem);
-    unit.itemIds.push(lexemeItem.id);
+    input.entries.push(entry);
 
     const errors = expectErrors(validateContent(input));
 
     expect(
       errors.some(
-        (e) => e.includes("ky-item-lex-syn") && e.includes("own script"),
+        (e) => e.includes("other-entry-x") && e.includes("must start with"),
       ),
     ).toBe(true);
   });
 
-  it("(s) reports duplicate synonyms within one item", () => {
-    const { input, unit, resource } = makeFixture();
-    const lexemeItem: LexemeItemLike = {
-      id: "ky-item-lex-syn",
-      kind: "lexeme",
-      payload: {
-        script: "жакшы",
-        transliteration: "jakshy",
-        gloss: "good",
-        synonyms: ["мыкты", "мыкты"],
-      },
-      sourceRef: resource.id,
-    };
-    input.items.push(lexemeItem);
-    unit.itemIds.push(lexemeItem.id);
+  it("(w) reports a dangling family entryIds reference", () => {
+    const { input, family1 } = makeFixture();
+    family1.entryIds.push("ky-entry-missing");
 
     const errors = expectErrors(validateContent(input));
 
     expect(
       errors.some(
-        (e) => e.includes("ky-item-lex-syn") && e.includes("duplicate synonym"),
+        (e) => e.includes(family1.id) && e.includes("ky-entry-missing"),
       ),
     ).toBe(true);
+  });
+
+  it("(x) rejects links on a topic-owned item", () => {
+    const { input, itemA } = makeFixture();
+    itemA.payload.links = [{ type: "related", entryId: "ky-entry-hello" }];
+
+    const errors = expectErrors(validateContent(input));
+
+    expect(
+      errors.some((e) => e.includes(itemA.id) && e.includes("links")),
+    ).toBe(true);
+  });
+
+  it('(y) reports a shipped id using the reserved "user-" prefix', () => {
+    const { input, family1 } = makeFixture();
+    family1.id = "user-greetings";
+
+    const errors = expectErrors(validateContent(input));
+
+    expect(
+      errors.some(
+        (e) => e.includes("user-greetings") && e.includes("reserved"),
+      ),
+    ).toBe(true);
+  });
+
+  it("(z) reports a dangling link target", () => {
+    const { input, entry1 } = makeFixture();
+    entry1.payload.links = [{ type: "synonym", entryId: "ky-entry-missing" }];
+
+    const errors = expectErrors(validateContent(input));
+
+    expect(
+      errors.some(
+        (e) => e.includes(entry1.id) && e.includes("dangling link target"),
+      ),
+    ).toBe(true);
+  });
+
+  it("(z) reports a self-link", () => {
+    const { input, entry1 } = makeFixture();
+    entry1.payload.links = [{ type: "synonym", entryId: entry1.id }];
+
+    const errors = expectErrors(validateContent(input));
+
+    expect(
+      errors.some((e) => e.includes(entry1.id) && e.includes("itself")),
+    ).toBe(true);
+  });
+
+  it("(z) reports a link type illegal for the domain kind", () => {
+    const { input, entry1, resource } = makeFixture();
+    const entry2: LexemeItemLike = {
+      id: "ky-entry-second",
+      kind: "lexeme",
+      payload: {
+        script: "экинчи",
+        transliteration: "ekinchi",
+        gloss: "second",
+      },
+      sourceRef: resource.id,
+    };
+    input.entries.push(entry2);
+    entry1.payload.links = [{ type: "related", entryId: entry2.id }];
+
+    const errors = expectErrors(validateContent(input));
+
+    expect(
+      errors.some((e) => e.includes(entry1.id) && e.includes("not legal")),
+    ).toBe(true);
+  });
+
+  it("(z) reports a double-authored symmetric link", () => {
+    const { input, entry1, resource } = makeFixture();
+    const entry2: LexemeItemLike = {
+      id: "ky-entry-second",
+      kind: "lexeme",
+      payload: {
+        script: "экинчи",
+        transliteration: "ekinchi",
+        gloss: "second",
+      },
+      sourceRef: resource.id,
+    };
+    input.entries.push(entry2);
+    entry1.payload.links = [{ type: "synonym", entryId: entry2.id }];
+    entry2.payload.links = [{ type: "synonym", entryId: entry1.id }];
+
+    const errors = expectErrors(validateContent(input));
+
+    expect(errors.some((e) => e.includes("double-authored"))).toBe(true);
+  });
+
+  it("accepts entries referenced by a unit into content.items (pinned Content.items semantics)", () => {
+    const { input, unit, entry1 } = makeFixture();
+    unit.itemIds.push(entry1.id);
+    unit.taskIds.push("ky-task-recall-entry");
+    input.tasks.push({
+      id: "ky-task-recall-entry",
+      type: "recall",
+      itemIds: [entry1.id],
+    });
+
+    const result = validateContent(input);
+
+    if ("errors" in result) {
+      throw new Error(
+        `expected valid content, got errors: ${result.errors.join("; ")}`,
+      );
+    }
+    expect(result.content.items.map((i) => i.id)).toContain(entry1.id);
+    expect(result.domain.id).toBe("ky");
+    expect(result.entries.map((e) => e.id)).toContain(entry1.id);
+    expect(result.families.map((f) => f.id)).toContain("ky-family-greetings");
   });
 });

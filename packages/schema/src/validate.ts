@@ -6,6 +6,8 @@ import {
   itemSchema,
   taskSchema,
   resourceSchema,
+  domainSchema,
+  familySchema,
   itemDisplayText,
   recognizePrompt,
   parseClozeMarkup,
@@ -14,16 +16,21 @@ import {
   TASK_ALLOWED_ITEM_KINDS,
   TASK_NEEDS_DISTRACTORS,
   TASK_REQUIRED_ASSET,
+  DOMAIN_ENTRY_KIND,
+  DOMAIN_LINK_TYPES,
   type Topic,
   type Unit,
   type Item,
   type Task,
   type Resource,
+  type Domain,
+  type Family,
 } from "./entities.js";
 
 export interface Content {
   topic: Topic;
   units: Unit[];
+  /** Topic-owned items plus the domain entries referenced by this topic's units (plan 0006, pinned). */
   items: Item[];
   tasks: Task[];
   resources: Resource[];
@@ -33,6 +40,7 @@ export interface Content {
 export interface ValidateContentInput {
   topic: unknown;
   units: unknown[];
+  /** Topic-owned items only: sentences, pairs, and (for language topics) non-lexicon concepts. */
   items: unknown[];
   tasks: unknown[];
   resources: unknown[];
@@ -40,9 +48,17 @@ export interface ValidateContentInput {
   /** Two separate stem lists (never cross-checked) so an `imageRef` can never validate against an audio file. */
   audioStems: string[];
   imageStems: string[];
+  /** The topic's domain (plan 0006): domain.json, its entries and families, and its asset stems. */
+  domain: unknown;
+  entries: unknown[];
+  families: unknown[];
+  lexiconAudioStems: string[];
+  lexiconImageStems: string[];
 }
 
-export type ValidateContentResult = { content: Content } | { errors: string[] };
+export type ValidateContentResult =
+  | { content: Content; domain: Domain; entries: Item[]; families: Family[] }
+  | { errors: string[] };
 
 function formatZodError(label: string, error: z.ZodError): string {
   const detail = error.issues
@@ -179,10 +195,29 @@ export function validateContent(
     phase1Errors,
   );
 
+  const domainResult = domainSchema.safeParse(input.domain);
+  if (!domainResult.success) {
+    phase1Errors.push(formatZodError("domain", domainResult.error));
+  }
+  const entries = parseAll(
+    itemSchema,
+    input.entries,
+    (raw, i) => idLabel(raw, i, "entries"),
+    phase1Errors,
+  );
+  const families = parseAll(
+    familySchema,
+    input.families,
+    (raw, i) => idLabel(raw, i, "families"),
+    phase1Errors,
+  );
+
   for (const [name, stems] of [
     ["noteStems", input.noteStems],
     ["audioStems", input.audioStems],
     ["imageStems", input.imageStems],
+    ["lexiconAudioStems", input.lexiconAudioStems],
+    ["lexiconImageStems", input.lexiconImageStems],
   ] as const) {
     for (const [index, stem] of stems.entries()) {
       if (!slugPattern.test(stem)) {
@@ -194,15 +229,19 @@ export function validateContent(
   if (
     phase1Errors.length > 0 ||
     !topicResult.success ||
+    !domainResult.success ||
     units === undefined ||
     items === undefined ||
     tasks === undefined ||
-    resources === undefined
+    resources === undefined ||
+    entries === undefined ||
+    families === undefined
   ) {
     return { errors: phase1Errors };
   }
 
   const topic = topicResult.data;
+  const domain = domainResult.data;
   const notes = input.noteStems.map((stem) => ({
     id: `${topic.code}-note-${stem}`,
     stem,
@@ -215,10 +254,13 @@ export function validateContent(
   const uniquenessErrors: string[] = [];
 
   reportDuplicateIds(units, "unit", uniquenessErrors);
-  reportDuplicateIds(items, "item", uniquenessErrors);
+  // Merged pool: a topic-owned item id colliding with a domain entry id
+  // would silently share its `bb.item.<id>` SRS state (plan 0006).
+  reportDuplicateIds([...items, ...entries], "item", uniquenessErrors);
   reportDuplicateIds(tasks, "task", uniquenessErrors);
   reportDuplicateIds(resources, "resource", uniquenessErrors);
   reportDuplicateIds(notes, "note", uniquenessErrors);
+  reportDuplicateIds(families, "family", uniquenessErrors);
 
   reportDuplicateEntries(
     "topic.unitIds",
@@ -242,7 +284,10 @@ export function validateContent(
   const errors: string[] = [];
 
   const unitById = new Map(units.map((u) => [u.id, u]));
-  const itemById = new Map(items.map((i) => [i.id, i]));
+  // Merged pool (plan 0006, pinned): unit/task itemIds resolve against
+  // topic-owned items *and* the domain's lexicon entries.
+  const itemById = new Map([...items, ...entries].map((i) => [i.id, i]));
+  const entryById = new Map(entries.map((e) => [e.id, e]));
   const taskById = new Map(tasks.map((t) => [t.id, t]));
   const resourceById = new Map(resources.map((r) => [r.id, r]));
   const noteById = new Map(notes.map((n) => [n.id, n]));
@@ -520,21 +565,13 @@ export function validateContent(
     ) {
       errors.push(`${item.id}: invalid cloze markup in text`);
     }
-    // class (s): a synonym equal to the item's own script, or duplicate
-    // synonyms within one item.
-    if (item.kind === "lexeme" && item.payload.synonyms !== undefined) {
-      const seenSynonyms = new Set<string>();
-      for (const synonym of item.payload.synonyms) {
-        if (synonym === item.payload.script) {
-          errors.push(
-            `${item.id}: synonym "${synonym}" equals the item's own script`,
-          );
-        }
-        if (seenSynonyms.has(synonym)) {
-          errors.push(`${item.id}: duplicate synonym "${synonym}"`);
-        }
-        seenSynonyms.add(synonym);
-      }
+    // class (x): `links` is a lexicon-entry-only field; no validator or UI
+    // exists for it on a topic-owned item.
+    if (
+      (item.kind === "lexeme" || item.kind === "concept") &&
+      item.payload.links !== undefined
+    ) {
+      errors.push(`${item.id}: "links" is not allowed on a topic-owned item`);
     }
   }
 
@@ -625,9 +662,159 @@ export function validateContent(
     }
   }
 
+  // --- class (t): topic.domainId must reference the domain content was
+  // validated against ---
+  if (topic.domainId !== domain.id) {
+    errors.push(
+      `topic.domainId "${topic.domainId}" does not match domain id "${domain.id}"`,
+    );
+  }
+
+  // --- classes (u)/(v), per entry: entry kind must be a valid lexicon kind
+  // and match the domain kind, entry id must start with "<domain.code>-";
+  // plus sourceRef and audioRef/imageRef must resolve — the lexicon's own
+  // resource/asset pools (asset-resolution pinned rule) ---
+  const expectedEntryKind = DOMAIN_ENTRY_KIND[domain.kind];
+  const entryPrefix = `${domain.code}-`;
+  const lexiconAudioStemSet = new Set(input.lexiconAudioStems);
+  const lexiconImageStemSet = new Set(input.lexiconImageStems);
+  for (const entry of entries) {
+    if (!entry.id.startsWith(entryPrefix)) {
+      errors.push(`${entry.id}: entry id must start with "${entryPrefix}"`);
+    }
+    if (entry.kind !== "lexeme" && entry.kind !== "concept") {
+      errors.push(
+        `${entry.id}: entry kind "${entry.kind}" is not a valid lexicon entry kind (must be "lexeme" or "concept")`,
+      );
+      continue;
+    }
+    if (entry.kind !== expectedEntryKind) {
+      errors.push(
+        `${entry.id}: entry kind "${entry.kind}" does not match domain kind "${domain.kind}" (expected "${expectedEntryKind}")`,
+      );
+    }
+    if (!resourceById.has(entry.sourceRef)) {
+      errors.push(`${entry.id}: dangling sourceRef "${entry.sourceRef}"`);
+    }
+    if (
+      entry.payload.audioRef !== undefined &&
+      !lexiconAudioStemSet.has(entry.payload.audioRef)
+    ) {
+      errors.push(`${entry.id}: dangling audioRef "${entry.payload.audioRef}"`);
+    }
+    if (
+      entry.payload.imageRef !== undefined &&
+      !lexiconImageStemSet.has(entry.payload.imageRef)
+    ) {
+      errors.push(`${entry.id}: dangling imageRef "${entry.payload.imageRef}"`);
+    }
+  }
+
+  // --- class (w): family entryIds must resolve against the domain's entries ---
+  for (const family of families) {
+    for (const entryId of family.entryIds) {
+      if (!entryById.has(entryId)) {
+        errors.push(
+          `${family.id}: dangling entry reference "${entryId}" in entryIds`,
+        );
+      }
+    }
+  }
+
+  // --- class (y): "user-" is reserved for learner-created entries (plan
+  // 0006); no shipped id may use it ---
+  for (const [noun, entities] of [
+    ["unit", units],
+    ["item", items],
+    ["task", tasks],
+    ["resource", resources],
+    ["entry", entries],
+    ["family", families],
+  ] as const) {
+    for (const entity of entities) {
+      if (entity.id.startsWith("user-")) {
+        errors.push(
+          `${entity.id}: ${noun} id must not start with "user-" (reserved for learner-created entries)`,
+        );
+      }
+    }
+  }
+  if (topic.id.startsWith("user-")) {
+    errors.push(
+      `${topic.id}: topic id must not start with "user-" (reserved for learner-created entries)`,
+    );
+  }
+  if (domain.id.startsWith("user-")) {
+    errors.push(
+      `${domain.id}: domain id must not start with "user-" (reserved for learner-created entries)`,
+    );
+  }
+
+  // --- class (z), per entry link: dangling target, self-link, illegal type
+  // for the domain kind, and double-authored symmetric duplicates (a link
+  // is authored on one side only; the engine derives the reverse at load) ---
+  const legalLinkTypes = new Set(DOMAIN_LINK_TYPES[domain.kind]);
+  const linkTriples = new Set<string>();
+  for (const entry of entries) {
+    if (entry.kind !== "lexeme" && entry.kind !== "concept") {
+      continue;
+    }
+    for (const link of entry.payload.links ?? []) {
+      linkTriples.add(`${entry.id}|${link.type}|${link.entryId}`);
+    }
+  }
+  for (const entry of entries) {
+    if (entry.kind !== "lexeme" && entry.kind !== "concept") {
+      continue;
+    }
+    for (const link of entry.payload.links ?? []) {
+      if (link.entryId === entry.id) {
+        errors.push(`${entry.id}: link "${link.type}" targets itself`);
+        continue;
+      }
+      if (!entryById.has(link.entryId)) {
+        errors.push(`${entry.id}: dangling link target "${link.entryId}"`);
+        continue;
+      }
+      if (!legalLinkTypes.has(link.type)) {
+        errors.push(
+          `${entry.id}: link type "${link.type}" is not legal for domain kind "${domain.kind}"`,
+        );
+      }
+      if (
+        entry.id < link.entryId &&
+        linkTriples.has(`${link.entryId}|${link.type}|${entry.id}`)
+      ) {
+        errors.push(
+          `${entry.id}: link "${link.type}" to "${link.entryId}" is authored on both sides (double-authored symmetric link)`,
+        );
+      }
+    }
+  }
+
   if (errors.length > 0) {
     return { errors };
   }
 
-  return { content: { topic, units, items, tasks, resources, notes } };
+  // Content.items (pinned, plan 0006): topic-owned items plus the domain
+  // entries this topic's units actually reference, so per-topic sessions,
+  // review, and distractor sampling behave exactly as before the migration.
+  const unitItemIdUnion = new Set(units.flatMap((u) => u.itemIds));
+  const referencedEntries = entries.filter((entry) =>
+    unitItemIdUnion.has(entry.id),
+  );
+
+  return {
+    content: {
+      topic,
+      units,
+      items: [...items, ...referencedEntries],
+      tasks,
+      resources,
+      notes,
+    },
+    domain,
+    entries,
+    families,
+  };
 }

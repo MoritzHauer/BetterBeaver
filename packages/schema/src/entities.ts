@@ -19,10 +19,55 @@ export const topicSchema = z.object({
   title: z.string(),
   description: z.string(),
   unitIds: z.array(slugSchema),
-  /** BCP-47 tag for reading item text aloud via TTS (plan 0004); absent disables read-aloud. */
-  readAloudLang: z.string().min(1).optional(),
+  /** The lexicon domain this topic draws vocabulary from (plan 0006); readAloudLang lives on the domain now. */
+  domainId: slugSchema,
 });
 export type Topic = z.infer<typeof topicSchema>;
+
+/** A domain's kind gates which entry kind its lexicon holds (plan 0006): `language` -> lexeme, `general` -> concept. */
+export const DOMAIN_KINDS = ["language", "general"] as const;
+export type DomainKind = (typeof DOMAIN_KINDS)[number];
+
+export const domainSchema = z.object({
+  id: slugSchema,
+  /** Prefixes entry ids: `<code>-...` (plan 0006, class (c) extension). */
+  code: slugSchema,
+  kind: z.enum(DOMAIN_KINDS),
+  title: z.string(),
+  /** The language glosses/definitions are written in; required for both domain kinds. */
+  glossLanguage: z.string().min(1),
+  /** BCP-47 tag for reading entry script aloud via TTS (plan 0004's rules, moved here by plan 0006). */
+  readAloudLang: z.string().min(1).optional(),
+});
+export type Domain = z.infer<typeof domainSchema>;
+
+export const familySchema = z.object({
+  id: slugSchema,
+  name: z.string(),
+  entryIds: z.array(slugSchema),
+});
+export type Family = z.infer<typeof familySchema>;
+
+/** A link's type is legal only within its domain kind (plan 0006, validator class (z)). */
+export const LINK_TYPES = [
+  "synonym",
+  "antonym",
+  "related",
+  "contrast",
+] as const;
+export type LinkType = (typeof LINK_TYPES)[number];
+
+export const DOMAIN_LINK_TYPES: Record<DomainKind, LinkType[]> = {
+  language: ["synonym", "antonym"],
+  general: ["related", "contrast"],
+};
+
+/** Authored on one side only; the engine derives the symmetric closure at load (plan 0006). */
+export const linkSchema = z.object({
+  type: z.enum(LINK_TYPES),
+  entryId: slugSchema,
+});
+export type Link = z.infer<typeof linkSchema>;
 
 export const unitSchema = z.object({
   id: slugSchema,
@@ -40,11 +85,12 @@ const lexemePayloadSchema = z.object({
   script: z.string(),
   transliteration: z.string(),
   gloss: z.string(),
-  /** Target-language script forms; display-only in vocabulary mode (plan 0004), validator class (s). */
-  synonyms: z.array(z.string()).optional(),
+  example: z.object({ text: z.string(), translation: z.string() }).optional(),
   usageNote: z.string().optional(),
   audioRef: slugSchema.optional(),
   imageRef: slugSchema.optional(),
+  /** Authored one side only; see `linkSchema` (plan 0006, validator class (z)). */
+  links: z.array(linkSchema).optional(),
 });
 
 const conceptPayloadSchema = z.object({
@@ -53,6 +99,8 @@ const conceptPayloadSchema = z.object({
   example: z.string().optional(),
   audioRef: slugSchema.optional(),
   imageRef: slugSchema.optional(),
+  /** Authored one side only; see `linkSchema` (plan 0006, validator class (z)). */
+  links: z.array(linkSchema).optional(),
 });
 
 /**
@@ -109,6 +157,12 @@ export const itemSchema = z.discriminatedUnion("kind", [
 ]);
 export type Item = z.infer<typeof itemSchema>;
 export type ItemKind = Item["kind"];
+
+/** The entry kind a domain's lexicon holds, keyed by domain kind (plan 0006, validator class (u)). */
+export const DOMAIN_ENTRY_KIND: Record<DomainKind, ItemKind> = {
+  language: "lexeme",
+  general: "concept",
+};
 
 /**
  * One numbered blank parsed out of a sentence's cloze markup, e.g. `{

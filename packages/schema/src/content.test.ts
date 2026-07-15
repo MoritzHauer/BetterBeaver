@@ -39,11 +39,15 @@ function readAssetStems(dir: string): string[] {
   return readdirSync(dir).map((name) => name.replace(/\.[^.]+$/, ""));
 }
 
+// "lexicon" holds domain data (content/lexicon/<domainId>/...), not a topic
+// (plan 0006) — every other content/ subdirectory is still a topic dir.
 const topicDirNames = existsSync(CONTENT_DIR)
   ? readdirSync(CONTENT_DIR, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
+      .filter((entry) => entry.isDirectory() && entry.name !== "lexicon")
       .map((entry) => entry.name)
   : [];
+
+const LEXICON_DIR = join(CONTENT_DIR, "lexicon");
 
 describe("content on disk", () => {
   it("finds at least one topic directory under content/", () => {
@@ -66,6 +70,21 @@ describe("content on disk", () => {
       const audioStems = readAssetStems(join(dir, "assets", "audio"));
       const imageStems = readAssetStems(join(dir, "assets", "img"));
 
+      const domainId = (topic as { domainId?: unknown }).domainId;
+      if (typeof domainId !== "string") {
+        throw new Error(`content/${topicDirName}/topic.json: missing domainId`);
+      }
+      const domainDir = join(LEXICON_DIR, domainId);
+      const domain = readJson(join(domainDir, "domain.json"));
+      const entries = readJsonFilesIn(join(domainDir, "entries"));
+      const families = readJsonFilesIn(join(domainDir, "families"));
+      const lexiconAudioStems = readAssetStems(
+        join(domainDir, "assets", "audio"),
+      );
+      const lexiconImageStems = readAssetStems(
+        join(domainDir, "assets", "img"),
+      );
+
       const result = validateContent({
         topic,
         units,
@@ -75,6 +94,11 @@ describe("content on disk", () => {
         noteStems,
         audioStems,
         imageStems,
+        domain,
+        entries,
+        families,
+        lexiconAudioStems,
+        lexiconImageStems,
       });
 
       if ("errors" in result) {
