@@ -37,6 +37,7 @@ import {
   VocabularyScreen,
 } from "./screens/VocabularyScreen";
 import { ErrorScreen } from "./screens/ErrorScreen";
+import { StartScreen } from "./screens/StartScreen";
 
 type Screen =
   | { screen: "topics" }
@@ -272,6 +273,9 @@ export function App() {
   }, []);
 
   const [screen, setScreen] = useState<Screen>({ screen: "topics" });
+  // ponytail: welcome cover shows on every load (plan 0009); persist a
+  // "seen" flag if the extra tap ever annoys.
+  const [started, setStarted] = useState(false);
   const [topics, setTopics] = useState<TopicSummary[]>([]);
   const [domains, setDomains] = useState<DomainSummary[]>([]);
   const [content, setContent] = useState<Content | null>(null);
@@ -398,6 +402,10 @@ export function App() {
 
   if ("errors" in contentSourceResult) {
     return <ErrorScreen errors={contentSourceResult.errors} />;
+  }
+
+  if (!started) {
+    return <StartScreen onStart={() => setStarted(true)} />;
   }
 
   if (screen.screen === "topics") {
