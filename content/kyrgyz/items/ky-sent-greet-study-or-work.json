@@ -1,0 +1,9 @@
+{
+  "id": "ky-sent-greet-study-or-work",
+  "kind": "sentence",
+  "payload": {
+    "text": "Сиз окуйсузбу же иштейсизби?",
+    "translation": "Do you study or work? (polite)"
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

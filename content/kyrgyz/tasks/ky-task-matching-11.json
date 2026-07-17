@@ -1,0 +1,11 @@
+{
+  "id": "ky-task-matching-11",
+  "type": "matching",
+  "itemIds": [
+    "ky-item-taarynbanyz",
+    "ky-item-sizden-otunom",
+    "ky-item-jardam-berip-koyunuzchu",
+    "ky-item-kiruugo-mumkunbu"
+  ],
+  "instructions": "Match each word or phrase to its meaning."
+}

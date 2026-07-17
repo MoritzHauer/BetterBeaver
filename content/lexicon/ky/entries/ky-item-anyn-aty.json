@@ -1,0 +1,11 @@
+{
+  "id": "ky-item-anyn-aty",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Анын аты ...",
+    "transliteration": "anyn aty ...",
+    "gloss": "His/her name is ...",
+    "usageNote": "анын \"his/her\" plus аты \"name\" (possessed form of ат)."
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

@@ -1,0 +1,10 @@
+{
+  "id": "ky-item-ber",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Бер",
+    "transliteration": "ber",
+    "gloss": "Give! (command)"
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

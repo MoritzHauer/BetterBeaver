@@ -1,0 +1,9 @@
+{
+  "id": "ky-sent-family-grandparents-retired",
+  "kind": "sentence",
+  "payload": {
+    "text": "Чоң атам менен чоң апам пенсияда.",
+    "translation": "My grandfather and my grandmother are retired."
+  },
+  "sourceRef": "ky-resource-manual-family"
+}

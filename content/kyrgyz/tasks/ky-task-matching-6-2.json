@@ -1,0 +1,12 @@
+{
+  "id": "ky-task-matching-6-2",
+  "type": "matching",
+  "itemIds": [
+    "ky-item-sen-kimsin",
+    "ky-item-senin-ayalyn-barby",
+    "ky-item-turmushka-chykkansynby",
+    "ky-item-taanyshyp-alaly",
+    "ky-item-biz-taanyshpyz"
+  ],
+  "instructions": "Match each word or phrase to its meaning."
+}

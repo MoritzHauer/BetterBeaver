@@ -1,0 +1,11 @@
+{
+  "id": "ky-item-kaidan-keldingiz",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Сиз кайдан келдиңиз?",
+    "transliteration": "siz kaidan keldingiz",
+    "gloss": "Where are you from? (polite)",
+    "usageNote": "Answer with -дан/-дон келдим, e.g. Мен Америкадан келдим \"I am from America.\""
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

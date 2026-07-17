@@ -1,0 +1,10 @@
+{
+  "id": "ky-item-biz",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Биз",
+    "transliteration": "biz",
+    "gloss": "We"
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

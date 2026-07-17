@@ -1,0 +1,10 @@
+{
+  "id": "ky-item-sizden-otunom",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Сизден өтүнөм!",
+    "transliteration": "sizden otunom",
+    "gloss": "Could you do me a favor! / I ask this of you!"
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

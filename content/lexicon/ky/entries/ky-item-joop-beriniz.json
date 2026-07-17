@@ -1,0 +1,10 @@
+{
+  "id": "ky-item-joop-beriniz",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Жооп бериңиз",
+    "transliteration": "joop beringiz",
+    "gloss": "Answer, please (polite)"
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

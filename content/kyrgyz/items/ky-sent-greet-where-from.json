@@ -1,0 +1,9 @@
+{
+  "id": "ky-sent-greet-where-from",
+  "kind": "sentence",
+  "payload": {
+    "text": "Сиз кайдан келдиңиз?",
+    "translation": "Where are you from? (polite)"
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

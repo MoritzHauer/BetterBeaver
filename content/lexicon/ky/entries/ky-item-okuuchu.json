@@ -1,0 +1,10 @@
+{
+  "id": "ky-item-okuuchu",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Окуучу",
+    "transliteration": "okuuchu",
+    "gloss": "Student"
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

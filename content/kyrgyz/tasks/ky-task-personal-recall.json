@@ -1,0 +1,22 @@
+{
+  "id": "ky-task-personal-recall",
+  "type": "recall",
+  "itemIds": [
+    "ky-item-siler",
+    "ky-item-biz",
+    "ky-item-bular",
+    "ky-item-alar",
+    "ky-item-mugalim",
+    "ky-item-okuuchu",
+    "ky-item-amerikanykpyz",
+    "ky-item-kesip",
+    "ky-item-senin-ayalyn-barby",
+    "ky-item-turmushka-chykkansynby",
+    "ky-item-uylongonsunbu",
+    "ky-item-kuyoo",
+    "ky-item-ayal",
+    "ky-item-boydokmun",
+    "ky-item-albette"
+  ],
+  "instructions": "Say the Kyrgyz out loud from the English meaning, then reveal and grade yourself."
+}

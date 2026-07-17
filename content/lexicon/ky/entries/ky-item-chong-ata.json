@@ -1,0 +1,14 @@
+{
+  "id": "ky-item-chong-ata",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Чоң ата",
+    "transliteration": "chong ata",
+    "gloss": "Grandfather",
+    "components": [
+      { "script": "чоң", "gloss": "big" },
+      { "script": "ата", "gloss": "father" }
+    ]
+  },
+  "sourceRef": "ky-resource-manual-family"
+}

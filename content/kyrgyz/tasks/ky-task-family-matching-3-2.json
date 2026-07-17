@@ -1,0 +1,11 @@
+{
+  "id": "ky-task-family-matching-3-2",
+  "type": "matching",
+  "itemIds": [
+    "ky-item-jazuuchu",
+    "ky-item-yrchy",
+    "ky-item-yntymaktuu",
+    "ky-item-pensiya"
+  ],
+  "instructions": "Match each family word to its meaning."
+}

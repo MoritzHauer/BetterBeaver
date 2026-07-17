@@ -1,0 +1,11 @@
+{
+  "id": "ky-item-emne",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Эмне?",
+    "transliteration": "emne",
+    "gloss": "What?",
+    "usageNote": "Used for things, e.g. Бул эмне? \"What is this?\" Contrast Ким? \"Who?\", used for people."
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

@@ -1,0 +1,14 @@
+{
+  "id": "ky-item-kesip",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Кесип",
+    "transliteration": "kesip",
+    "gloss": "Occupation, profession",
+    "example": {
+      "text": "Биздин кесибибиз мугалим.",
+      "translation": "Our occupation is teaching."
+    }
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

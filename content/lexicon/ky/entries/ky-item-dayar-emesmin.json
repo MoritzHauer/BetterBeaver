@@ -1,0 +1,10 @@
+{
+  "id": "ky-item-dayar-emesmin",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Даяр эмесмин",
+    "transliteration": "dayar emesmin",
+    "gloss": "I am not ready"
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

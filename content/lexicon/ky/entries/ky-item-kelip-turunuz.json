@@ -1,0 +1,10 @@
+{
+  "id": "ky-item-kelip-turunuz",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Келип туруңуз",
+    "transliteration": "kelip turunuz",
+    "gloss": "Welcome, come again"
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

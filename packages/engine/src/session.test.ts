@@ -9,6 +9,7 @@ import {
   type MatchingQuestion,
   type Rng,
 } from "./session.js";
+import { noteUnitId } from "./units.js";
 
 /** Returns an Rng that yields the given values in order; throws if exhausted. */
 function queueRng(values: number[]): Rng {
@@ -55,7 +56,7 @@ const recognizeTask: Task = {
 
 const conceptUnit: Unit = {
   id: "t-unit-concepts",
-  topicId: "t-topic",
+  lessonId: "t-topic",
   title: "Concepts",
   goal: "Goal",
   itemIds: [c1.id, c2.id, c3.id, c4.id],
@@ -70,8 +71,9 @@ const conceptContent: Content = {
     domainId: "t",
     title: "Topic",
     description: "",
-    unitIds: [conceptUnit.id],
+    lessonIds: [conceptUnit.id],
   },
+  lessons: [],
   units: [conceptUnit],
   items: [c1, c2, c3, c4],
   tasks: [recognizeTask],
@@ -170,7 +172,7 @@ const recallTask: Task = {
 
 const lexemeUnit: Unit = {
   id: "t-unit-lexemes",
-  topicId: "t-topic",
+  lessonId: "t-topic",
   title: "Lexemes",
   goal: "Goal",
   itemIds: [l1.id],
@@ -185,8 +187,9 @@ const lexemeContent: Content = {
     domainId: "t",
     title: "Topic",
     description: "",
-    unitIds: [lexemeUnit.id],
+    lessonIds: [lexemeUnit.id],
   },
+  lessons: [],
   units: [lexemeUnit],
   items: [l1],
   tasks: [recallTask],
@@ -243,7 +246,7 @@ const recognizeLexemeTask: Task = {
 
 const lexemeRecognizeUnit: Unit = {
   id: "t-unit-lexemes-recognize",
-  topicId: "t-topic",
+  lessonId: "t-topic",
   title: "Lexemes",
   goal: "Goal",
   itemIds: [rl1.id, rl2.id, rl3.id, rl4.id],
@@ -258,8 +261,9 @@ const lexemeRecognizeContent: Content = {
     domainId: "t",
     title: "Topic",
     description: "",
-    unitIds: [lexemeRecognizeUnit.id],
+    lessonIds: [lexemeRecognizeUnit.id],
   },
+  lessons: [],
   units: [lexemeRecognizeUnit],
   items: [rl1, rl2, rl3, rl4],
   tasks: [recognizeLexemeTask],
@@ -326,7 +330,7 @@ const clozeTask: Task = {
 };
 const clozeUnit: Unit = {
   id: "t-unit-cloze",
-  topicId: "t-topic",
+  lessonId: "t-topic",
   title: "Cloze",
   goal: "Goal",
   itemIds: [clozeSentence1.id, clozeSentence2.id],
@@ -340,8 +344,9 @@ const clozeContent: Content = {
     domainId: "t",
     title: "Topic",
     description: "",
-    unitIds: [clozeUnit.id],
+    lessonIds: [clozeUnit.id],
   },
+  lessons: [],
   units: [clozeUnit],
   items: [clozeSentence1, clozeSentence2],
   tasks: [clozeTask],
@@ -401,7 +406,7 @@ const matchingTask: Task = {
 };
 const matchingUnit: Unit = {
   id: "t-unit-matching",
-  topicId: "t-topic",
+  lessonId: "t-topic",
   title: "Matching",
   goal: "Goal",
   itemIds: [matchM1.id, matchM2.id, matchM3.id],
@@ -415,8 +420,9 @@ const matchingContent: Content = {
     domainId: "t",
     title: "Topic",
     description: "",
-    unitIds: [matchingUnit.id],
+    lessonIds: [matchingUnit.id],
   },
+  lessons: [],
   units: [matchingUnit],
   items: [matchM1, matchM2, matchM3],
   tasks: [matchingTask],
@@ -513,7 +519,7 @@ const scrambleTask: Task = {
 };
 const scrambleUnit: Unit = {
   id: "t-unit-scramble",
-  topicId: "t-topic",
+  lessonId: "t-topic",
   title: "Scramble",
   goal: "Goal",
   itemIds: [scrambleSentence.id],
@@ -527,8 +533,9 @@ const scrambleContent: Content = {
     domainId: "t",
     title: "Topic",
     description: "",
-    unitIds: [scrambleUnit.id],
+    lessonIds: [scrambleUnit.id],
   },
+  lessons: [],
   units: [scrambleUnit],
   items: [scrambleSentence],
   tasks: [scrambleTask],
@@ -601,7 +608,7 @@ const buildTask: Task = {
 function buildContentWith(unitItems: Item[]): Content {
   const unit: Unit = {
     id: "t-unit-build",
-    topicId: "t-topic",
+    lessonId: "t-topic",
     title: "Build",
     goal: "Goal",
     itemIds: unitItems.map((item) => item.id),
@@ -615,8 +622,9 @@ function buildContentWith(unitItems: Item[]): Content {
       domainId: "t",
       title: "Topic",
       description: "",
-      unitIds: [unit.id],
+      lessonIds: [unit.id],
     },
+    lessons: [],
     units: [unit],
     items: unitItems,
     tasks: [buildTask],
@@ -715,7 +723,7 @@ const listenTask: Task = {
 };
 const listenUnit: Unit = {
   id: "t-unit-listen",
-  topicId: "t-topic",
+  lessonId: "t-topic",
   title: "Listen",
   goal: "Goal",
   itemIds: [audioC1.id, audioC2.id, audioC3.id, audioC4.id],
@@ -729,8 +737,9 @@ const listenContent: Content = {
     domainId: "t",
     title: "Topic",
     description: "",
-    unitIds: [listenUnit.id],
+    lessonIds: [listenUnit.id],
   },
+  lessons: [],
   units: [listenUnit],
   items: [audioC1, audioC2, audioC3, audioC4],
   tasks: [listenTask],
@@ -824,7 +833,7 @@ const pictureTask: Task = {
 };
 const pictureUnit: Unit = {
   id: "t-unit-picture",
-  topicId: "t-topic",
+  lessonId: "t-topic",
   title: "Picture",
   goal: "Goal",
   itemIds: [imageL1.id, imageL2.id, imageL3.id, imageL4.id],
@@ -838,8 +847,9 @@ const pictureContent: Content = {
     domainId: "t",
     title: "Topic",
     description: "",
-    unitIds: [pictureUnit.id],
+    lessonIds: [pictureUnit.id],
   },
+  lessons: [],
   units: [pictureUnit],
   items: [imageL1, imageL2, imageL3, imageL4],
   tasks: [pictureTask],
@@ -881,7 +891,7 @@ const minimalPairTask: Task = {
 };
 const minimalPairUnit: Unit = {
   id: "t-unit-minimal-pair",
-  topicId: "t-topic",
+  lessonId: "t-topic",
   title: "Minimal pair",
   goal: "Goal",
   itemIds: [pairItem.id],
@@ -895,8 +905,9 @@ const minimalPairContent: Content = {
     domainId: "t",
     title: "Topic",
     description: "",
-    unitIds: [minimalPairUnit.id],
+    lessonIds: [minimalPairUnit.id],
   },
+  lessons: [],
   units: [minimalPairUnit],
   items: [pairItem],
   tasks: [minimalPairTask],
@@ -1035,6 +1046,22 @@ describe("buildReviewSession", () => {
         audioStem: "chym",
         choices: ["шым", "чым"],
         correctIndex: 1,
+      },
+    ]);
+  });
+
+  it("maps a note unit to a NoteQuestion (plan 0008 step 7)", () => {
+    const note = { id: "t-note-1", stem: "note-stem-1" };
+    const units = [{ id: noteUnitId(note.id), note }];
+
+    const questions = buildReviewSession(units, conceptContent, queueRng([]));
+
+    expect(questions).toEqual([
+      {
+        kind: "note",
+        unitId: noteUnitId(note.id),
+        noteId: note.id,
+        stem: note.stem,
       },
     ]);
   });

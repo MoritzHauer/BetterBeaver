@@ -1,0 +1,11 @@
+{
+  "id": "ky-item-korgoz",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Көргөз",
+    "transliteration": "korgoz",
+    "gloss": "Show! (command)",
+    "usageNote": "The Kyrgyz verb stem doubles as the imperative; add -үзчү/-үнүзчү to soften it into a polite request."
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

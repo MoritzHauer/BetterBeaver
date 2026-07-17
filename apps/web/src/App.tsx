@@ -14,18 +14,22 @@ import {
   buildReviewSession,
   buildTaskSession,
   dueDomainUnits,
+  noteUnitId,
   recordGrade,
   symmetricLinks,
 } from "@betterbeaver/engine";
 import type { Quality } from "@betterbeaver/srs";
+import { recallQuality } from "@betterbeaver/srs";
 import type { TapLookup } from "./components/TappableText";
 import { createBundledContentSource } from "./content/bundled";
 import { resolvedLinksByEntryId } from "./content/links";
 import { createLocalStorageProgressStore } from "./progress/local-storage";
 import { createLocalStorageVocabListStore } from "./progress/vocab-lists";
 import { createLocalStorageUserEntryStore } from "./progress/user-entries";
+import { getPinnedTaskIds, togglePinnedTask } from "./progress/pinned-tasks";
 import { TopicListScreen } from "./screens/TopicListScreen";
 import { TopicScreen } from "./screens/TopicScreen";
+import { LessonScreen } from "./screens/LessonScreen";
 import { UnitScreen } from "./screens/UnitScreen";
 import { SessionScreen } from "./screens/SessionScreen";
 import {
@@ -37,8 +41,16 @@ import { ErrorScreen } from "./screens/ErrorScreen";
 type Screen =
   | { screen: "topics" }
   | { screen: "topic"; topicId: string }
-  | { screen: "unit"; topicId: string; unitId: string }
-  | { screen: "task"; topicId: string; unitId: string; taskId: string }
+  // The lesson level sits between topic and unit (plan 0008).
+  | { screen: "lesson"; topicId: string; lessonId: string }
+  | { screen: "unit"; topicId: string; lessonId: string; unitId: string }
+  | {
+      screen: "task";
+      topicId: string;
+      lessonId: string;
+      unitId: string;
+      taskId: string;
+    }
   // Review, Vocabulary, and ad-hoc study are domain-scoped (plan 0006): the
   // review queue, lists, and streak all key on the domain now, not the topic.
   | { screen: "review"; domainId: string }
@@ -126,6 +138,7 @@ function ReviewSession({
       domainContent.entries,
       store,
       new Date(),
+      getPinnedTaskIds(domainId),
     ).then((due) => {
       if (cancelled) {
         return;
@@ -280,6 +293,19 @@ export function App() {
   // word (plan 0006), so the domain-content effect below re-merges the
   // user entry store's current contents without requiring a navigation.
   const [domainEpoch, setDomainEpoch] = useState(0);
+  // Bumped whenever a task's pinned state is toggled (plan 0008), so
+  // UnitScreen re-reads the pin store without requiring a navigation.
+  const [pinEpoch, setPinEpoch] = useState(0);
+  // The current topic's domain's pinned task ids, re-read whenever pinEpoch
+  // bumps (plan 0008); only ever consumed by UnitScreen, but computed here
+  // (not inside the screen-specific branch below) since it's a hook.
+  const pinnedTaskIds = useMemo(
+    () =>
+      content !== null
+        ? getPinnedTaskIds(content.topic.domainId)
+        : new Set<string>(),
+    [content, pinEpoch],
+  );
 
   function reloadAttemptedTaskIds() {
     progressStore
@@ -307,6 +333,7 @@ export function App() {
     }
     if (
       screen.screen === "topic" ||
+      screen.screen === "lesson" ||
       screen.screen === "unit" ||
       screen.screen === "task"
     ) {
@@ -328,6 +355,7 @@ export function App() {
       screen.screen === "adhoc"
         ? screen.domainId
         : screen.screen === "topic" ||
+            screen.screen === "lesson" ||
             screen.screen === "unit" ||
             screen.screen === "task"
           ? topics.find((topic) => topic.id === screen.topicId)?.domainId
@@ -388,6 +416,7 @@ export function App() {
 
   if (
     screen.screen === "topic" ||
+    screen.screen === "lesson" ||
     screen.screen === "unit" ||
     screen.screen === "task"
   ) {
@@ -411,8 +440,15 @@ export function App() {
           attemptedTaskIds={attemptedTaskIds}
           store={progressStore}
           epoch={topicEpoch}
-          onSelectUnit={(unitId) =>
-            setScreen({ screen: "unit", topicId: screen.topicId, unitId })
+          onSelectLesson={(lessonId) =>
+            setScreen({ screen: "lesson", topicId: screen.topicId, lessonId })
+          }
+          onPracticeTask={(target) =>
+            setScreen({
+              screen: "task",
+              topicId: screen.topicId,
+              ...target,
+            })
           }
           onReview={() =>
             setScreen({ screen: "review", domainId: content.topic.domainId })
@@ -425,22 +461,69 @@ export function App() {
       );
     }
 
+    if (screen.screen === "lesson") {
+      return (
+        <LessonScreen
+          content={content}
+          lessonId={screen.lessonId}
+          attemptedTaskIds={attemptedTaskIds}
+          onSelectUnit={(unitId) =>
+            setScreen({
+              screen: "unit",
+              topicId: screen.topicId,
+              lessonId: screen.lessonId,
+              unitId,
+            })
+          }
+          onPracticeTask={(target) =>
+            setScreen({
+              screen: "task",
+              topicId: screen.topicId,
+              ...target,
+            })
+          }
+          onBack={() => goToTopic(screen.topicId)}
+        />
+      );
+    }
+
     if (screen.screen === "unit") {
       return (
         <UnitScreen
           content={content}
           unitId={screen.unitId}
           attemptedTaskIds={attemptedTaskIds}
+          pinnedTaskIds={pinnedTaskIds}
           lookup={lookup}
           onPractice={(taskId) =>
             setScreen({
               screen: "task",
               topicId: screen.topicId,
+              lessonId: screen.lessonId,
               unitId: screen.unitId,
               taskId,
             })
           }
-          onBack={() => goToTopic(screen.topicId)}
+          onTogglePin={(taskId) => {
+            togglePinnedTask(content.topic.domainId, taskId);
+            setPinEpoch((epoch) => epoch + 1);
+          }}
+          onGradeNote={(noteId, grade) => {
+            void recordGrade(
+              progressStore,
+              noteUnitId(noteId),
+              recallQuality(grade),
+              new Date(),
+              content.topic.domainId,
+            );
+          }}
+          onBack={() =>
+            setScreen({
+              screen: "lesson",
+              topicId: screen.topicId,
+              lessonId: screen.lessonId,
+            })
+          }
         />
       );
     }
@@ -464,6 +547,7 @@ export function App() {
           setScreen({
             screen: "unit",
             topicId: screen.topicId,
+            lessonId: screen.lessonId,
             unitId: screen.unitId,
           });
         }}

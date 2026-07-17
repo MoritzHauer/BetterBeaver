@@ -1,0 +1,10 @@
+{
+  "id": "ky-item-sindi",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Синди",
+    "transliteration": "sindi",
+    "gloss": "Younger sister (used by a woman)"
+  },
+  "sourceRef": "ky-resource-manual-family"
+}

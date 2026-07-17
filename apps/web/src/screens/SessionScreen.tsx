@@ -14,12 +14,15 @@ import {
   checkTypedAnswer,
   localDay,
   matchingOutcomes,
+  resolveToken,
 } from "@betterbeaver/engine";
+import { itemDisplayText } from "@betterbeaver/schema";
 import type { Quality, SelfGrade } from "@betterbeaver/srs";
 import { recallQuality, recognizeQuality } from "@betterbeaver/srs";
 import type { TapLookup } from "../components/TappableText";
 import { TappableText } from "../components/TappableText";
-import { getAssetUrl } from "../content/bundled";
+import { NoteView } from "../components/NoteView";
+import { getAssetUrl, getNoteMarkdown } from "../content/bundled";
 import { SpeakerButton } from "../tts";
 import { playCorrect, playFanfare, playWrong } from "../sounds";
 
@@ -241,6 +244,80 @@ function SelfGradeReveal({
   );
 }
 
+/** A note-derived review question (plan 0008 step 7): the note's markdown
+ * (or, missing that, its stem as a plain fallback) is the whole card — there
+ * is nothing to reveal, so the Again/Hard/Good row appears immediately below
+ * it, reusing the same `applySelf` pipeline as `SelfGradeReveal` (just
+ * without a reveal gate). */
+function NoteReview({
+  markdown,
+  fallbackStem,
+  lookup,
+  unitId,
+  applySelf,
+  advance,
+}: {
+  markdown: string | undefined;
+  fallbackStem: string;
+  lookup: TapLookup;
+  unitId: string;
+  applySelf: (unitId: string, grade: SelfGrade) => Promise<void>;
+  advance: () => void;
+}) {
+  const [graded, setGraded] = useState(false);
+
+  async function grade(selfGrade: SelfGrade) {
+    if (graded) {
+      return;
+    }
+    setGraded(true);
+    await applySelf(unitId, selfGrade);
+    advance();
+  }
+
+  return (
+    <div>
+      {markdown !== undefined ? (
+        <NoteView markdown={markdown} lookup={lookup} />
+      ) : (
+        <p className="prompt">{fallbackStem}</p>
+      )}
+      <ActionBar>
+        <div className="grade-buttons">
+          <button disabled={graded} onClick={() => grade("again")}>
+            Again
+          </button>
+          <button disabled={graded} onClick={() => grade("hard")}>
+            Hard
+          </button>
+          <button disabled={graded} onClick={() => grade("good")}>
+            Good
+          </button>
+        </div>
+      </ActionBar>
+    </div>
+  );
+}
+
+/** Reveal-on-tap hint control (plan 0008 step 5): a plain "Hint" button that
+ * swaps itself for `text` once tapped, never submitting an answer. Shared by
+ * cloze's target-word hint and build's now-hidden-by-default English prompt
+ * — the same interaction shape, just fed different text. */
+function HintReveal({ text }: { text: string }) {
+  const [revealed, setRevealed] = useState(false);
+  return revealed ? (
+    <p className="prompt">{text}</p>
+  ) : (
+    <button
+      type="button"
+      className="plain tappable-token"
+      onClick={() => setRevealed(true)}
+    >
+      Hint
+    </button>
+  );
+}
+
 /** Shared typed-input form: cloze and dictation both type an answer, checked
  * via `checkTypedAnswer`, and reveal the target on submit. The Check button
  * lives in the action bar, tied to the form via the native `form` attribute
@@ -250,10 +327,15 @@ function SelfGradeReveal({
  * cloze reveals the sentence with its blank filled in — the "cloze sentence
  * revealed" pinned surface — as tappable text. Dictation never passes these
  * (its target is already the whole sentence with nothing left gapped, and
- * it isn't a pinned surface). */
+ * it isn't a pinned surface).
+ *
+ * `hint` (cloze only, plan 0008 step 5): the target blank's English word,
+ * behind a `HintReveal` shown only while unanswered — purely additive, the
+ * post-answer reveal above is unchanged. Dictation never passes it. */
 function TypedInput({
   target,
   unitId,
+  hint,
   revealedText,
   lookup,
   applyAuto,
@@ -261,6 +343,7 @@ function TypedInput({
 }: {
   target: string;
   unitId: string;
+  hint?: string;
   revealedText?: string;
   lookup?: TapLookup;
   applyAuto: (unitId: string, correct: boolean) => Promise<void>;
@@ -291,6 +374,9 @@ function TypedInput({
           onChange={(event) => setValue(event.target.value)}
         />
       </form>
+      {result === null && hint !== undefined ? (
+        <HintReveal text={hint} />
+      ) : null}
       {result !== null && revealedText !== undefined && lookup !== undefined ? (
         <p className="prompt">
           <TappableText text={revealedText} lookup={lookup} />
@@ -600,13 +686,20 @@ function renderInteraction(
           />
         </>
       );
-    case "cloze":
+    case "cloze": {
+      const hintItem = resolveToken(
+        question.target,
+        lookup.domainContent.entries,
+      );
+      const hint =
+        hintItem !== undefined ? itemDisplayText(hintItem) : undefined;
       return (
         <>
           <p className="prompt">{question.prompt}</p>
           <TypedInput
             target={question.target}
             unitId={question.unitId}
+            hint={hint}
             revealedText={question.prompt.replace("___", question.target)}
             lookup={lookup}
             applyAuto={applyAuto}
@@ -614,6 +707,7 @@ function renderInteraction(
           />
         </>
       );
+    }
     case "dictation":
       return (
         <>
@@ -638,7 +732,7 @@ function renderInteraction(
     case "build":
       return (
         <>
-          <p className="prompt">{question.prompt}</p>
+          <HintReveal text={question.prompt} />
           <ScrambleInteraction
             question={question}
             lookup={lookup}
@@ -711,6 +805,17 @@ function renderInteraction(
             advance={advance}
           />
         </>
+      );
+    case "note":
+      return (
+        <NoteReview
+          markdown={getNoteMarkdown(topicId, question.stem)}
+          fallbackStem={question.stem}
+          lookup={lookup}
+          unitId={question.unitId}
+          applySelf={applySelf}
+          advance={advance}
+        />
       );
     default:
       question satisfies never;

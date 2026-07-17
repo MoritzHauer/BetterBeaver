@@ -1,0 +1,29 @@
+{
+  "id": "ky-unit-family-occupations",
+  "lessonId": "ky-lesson-family",
+  "title": "Occupations",
+  "goal": "Say what family members do for work, and describe them.",
+  "itemIds": [
+    "ky-item-jazuuchu",
+    "ky-item-yrchy",
+    "ky-item-yntymaktuu",
+    "ky-item-pensiya",
+    "ky-item-pensiyada",
+    "ky-item-tiguuchu",
+    "ky-item-aydoochu",
+    "ky-item-kyzmatchy",
+    "ky-item-belgiluu",
+    "ky-item-daryger",
+    "ky-item-dukonchu",
+    "ky-item-jardam"
+  ],
+  "taskIds": [
+    "ky-task-occupations-recognize",
+    "ky-task-family-matching-3-2",
+    "ky-task-family-matching-4-1",
+    "ky-task-family-matching-4-2",
+    "ky-task-occupations-recall"
+  ],
+  "noteIds": ["ky-note-occupation-suffix-and-negation"],
+  "unlocksAfterUnitId": "ky-unit-family-members"
+}

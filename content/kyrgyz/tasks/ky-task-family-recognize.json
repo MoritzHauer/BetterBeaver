@@ -1,0 +1,27 @@
+{
+  "id": "ky-task-family-recognize",
+  "type": "recognize",
+  "itemIds": [
+    "ky-item-uy-bulo",
+    "ky-item-chong-ata",
+    "ky-item-chong-apa",
+    "ky-item-aga",
+    "ky-item-ini",
+    "ky-item-karyndash",
+    "ky-item-sindi",
+    "ky-item-bayke",
+    "ky-item-tayata",
+    "ky-item-tayene",
+    "ky-item-tayake",
+    "ky-item-tayeje",
+    "ky-item-jezde",
+    "ky-item-jene",
+    "ky-item-jeen",
+    "ky-item-kaynata",
+    "ky-item-kaynene",
+    "ky-item-kuyo-inlaw",
+    "ky-item-kyz",
+    "ky-item-bala"
+  ],
+  "instructions": "Pick the correct meaning for each family word."
+}

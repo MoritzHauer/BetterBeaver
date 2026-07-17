@@ -1,0 +1,12 @@
+{
+  "id": "ky-task-matching-3-2",
+  "type": "matching",
+  "itemIds": [
+    "ky-item-ishteringiz-kanday",
+    "ky-item-ishteringiz-jakshyby",
+    "ky-item-den-soolugunuz-kanday",
+    "ky-item-sancha-jashtasyz",
+    "ky-item-ozunchu"
+  ],
+  "instructions": "Match each word or phrase to its meaning."
+}

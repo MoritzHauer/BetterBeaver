@@ -1,0 +1,9 @@
+{
+  "id": "ky-sent-greet-name",
+  "kind": "sentence",
+  "payload": {
+    "text": "Менин атым {{c1::Асан}}, сенин атың ким?",
+    "translation": "My name is Asan, what is your name?"
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

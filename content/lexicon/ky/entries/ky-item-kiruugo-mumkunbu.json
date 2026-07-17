@@ -1,0 +1,10 @@
+{
+  "id": "ky-item-kiruugo-mumkunbu",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Кирүүгө мүмкүнбү?",
+    "transliteration": "kiruugo mumkunbu",
+    "gloss": "May I come in?"
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

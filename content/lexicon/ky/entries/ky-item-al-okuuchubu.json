@@ -1,0 +1,11 @@
+{
+  "id": "ky-item-al-okuuchubu",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Ал окуучубу?",
+    "transliteration": "al okuuchubu",
+    "gloss": "Is he/she a student?",
+    "usageNote": "Third person adds no personal ending before the question particle -бу."
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

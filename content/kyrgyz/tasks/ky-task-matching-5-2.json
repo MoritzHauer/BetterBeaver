@@ -1,0 +1,12 @@
+{
+  "id": "ky-task-matching-5-2",
+  "type": "matching",
+  "itemIds": [
+    "ky-item-mugalim",
+    "ky-item-okuuchu",
+    "ky-item-amerikanykpyz",
+    "ky-item-sen-mugalimsinbi",
+    "ky-item-al-okuuchubu"
+  ],
+  "instructions": "Match each word or phrase to its meaning."
+}

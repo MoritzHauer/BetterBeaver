@@ -1,0 +1,11 @@
+{
+  "id": "ky-item-ishteringiz-jakshyby",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Иштериңиз жакшыбы?",
+    "transliteration": "ishteringiz jakshyby",
+    "gloss": "Are things going well? (polite)",
+    "usageNote": "A variant of Иштериңиз кандай?, expecting a yes/no-shaped answer."
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

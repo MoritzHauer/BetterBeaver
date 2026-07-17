@@ -1,9 +1,11 @@
 import { describe, it, expect } from "vitest";
-import type { Item, Unit } from "@betterbeaver/schema";
+import type { Item, Lesson, Unit } from "@betterbeaver/schema";
 import type { SrsState } from "@betterbeaver/srs";
 import {
   isUnitComplete,
   isUnitUnlocked,
+  isLessonComplete,
+  isLessonUnlocked,
   reviewQueue,
   applyGrade,
 } from "./progress.js";
@@ -11,12 +13,22 @@ import type { SchedulingUnit } from "./units.js";
 
 function makeUnit(overrides: Partial<Unit> & Pick<Unit, "id">): Unit {
   return {
-    topicId: "t-topic",
+    lessonId: "t-lesson",
     title: "Unit",
     goal: "Goal",
     itemIds: [],
     taskIds: [],
     noteIds: [],
+    ...overrides,
+  };
+}
+
+function makeLesson(overrides: Partial<Lesson> & Pick<Lesson, "id">): Lesson {
+  return {
+    topicId: "t-topic",
+    title: "Lesson",
+    goal: "Goal",
+    unitIds: [],
     ...overrides,
   };
 }
@@ -64,6 +76,61 @@ describe("isUnitUnlocked", () => {
       unlocksAfterUnitId: "t-unit-missing",
     });
     expect(isUnitUnlocked(orphan, units, new Set())).toBe(true);
+  });
+});
+
+describe("isLessonComplete", () => {
+  it("is false until every unit of the lesson is complete", () => {
+    const unitA = makeUnit({ id: "t-unit-a", taskIds: ["t-task-1"] });
+    const unitB = makeUnit({ id: "t-unit-b", taskIds: ["t-task-2"] });
+    const lesson = makeLesson({
+      id: "t-lesson-a",
+      unitIds: [unitA.id, unitB.id],
+    });
+    const units = [unitA, unitB];
+
+    expect(isLessonComplete(lesson, units, new Set())).toBe(false);
+    expect(isLessonComplete(lesson, units, new Set(["t-task-1"]))).toBe(false);
+    expect(
+      isLessonComplete(lesson, units, new Set(["t-task-1", "t-task-2"])),
+    ).toBe(true);
+  });
+});
+
+describe("isLessonUnlocked", () => {
+  const lessonUnitA = makeUnit({ id: "t-unit-a", taskIds: ["t-task-1"] });
+  const lessonA = makeLesson({
+    id: "t-lesson-a",
+    unitIds: [lessonUnitA.id],
+  });
+  const lessonB = makeLesson({
+    id: "t-lesson-b",
+    unitIds: [],
+    unlocksAfterLessonId: "t-lesson-a",
+  });
+  const lessons = [lessonA, lessonB];
+  const units = [lessonUnitA];
+
+  it("a lesson without unlocksAfterLessonId is always unlocked", () => {
+    expect(isLessonUnlocked(lessonA, lessons, units, new Set())).toBe(true);
+  });
+
+  it("is locked when the gating lesson's units are not all complete", () => {
+    expect(isLessonUnlocked(lessonB, lessons, units, new Set())).toBe(false);
+  });
+
+  it("is unlocked once every unit of the gating lesson is complete", () => {
+    expect(
+      isLessonUnlocked(lessonB, lessons, units, new Set(["t-task-1"])),
+    ).toBe(true);
+  });
+
+  it("defensively treats a missing gate lesson as unlocked", () => {
+    const orphan = makeLesson({
+      id: "t-lesson-c",
+      unlocksAfterLessonId: "t-lesson-missing",
+    });
+    expect(isLessonUnlocked(orphan, lessons, units, new Set())).toBe(true);
   });
 });
 
@@ -125,6 +192,62 @@ describe("reviewQueue", () => {
     expect(
       reviewQueue([unit1, unit2], states, new Date("2026-07-06T00:00:00Z")),
     ).toEqual([unit1]);
+  });
+});
+
+describe("reviewQueue pinning (plan 0008)", () => {
+  const item3: Item = {
+    id: "t-item-3",
+    kind: "concept",
+    payload: { term: "Term 3", definition: "Definition 3" },
+    sourceRef: "t-resource-1",
+  };
+  const unit3: SchedulingUnit = { id: item3.id, item: item3 };
+
+  const states = new Map<string, SrsState>([
+    [
+      item1.id,
+      { due: "2026-07-04T00:00:00.000Z", intervalDays: 1, ease: 2.5, reps: 1 },
+    ],
+    [
+      item2.id,
+      { due: "2026-07-05T00:00:00.000Z", intervalDays: 1, ease: 2.5, reps: 1 },
+    ],
+    [
+      item3.id,
+      { due: "2026-07-03T00:00:00.000Z", intervalDays: 1, ease: 2.5, reps: 1 },
+    ],
+  ]);
+  const now = new Date("2026-07-06T00:00:00Z");
+
+  it("sorts a pinned unit first even when its due date is later than non-pinned units", () => {
+    expect(
+      reviewQueue([unit1, unit2, unit3], states, now, new Set([item2.id])),
+    ).toEqual([unit2, unit3, unit1]);
+  });
+
+  it("keeps due-ascending order within the pinned group and within the rest", () => {
+    expect(
+      reviewQueue(
+        [unit1, unit2, unit3],
+        states,
+        now,
+        new Set([item1.id, item2.id]),
+      ),
+    ).toEqual([unit1, unit2, unit3]);
+  });
+
+  it("an empty/omitted pin set leaves due-ascending order unchanged", () => {
+    expect(reviewQueue([unit1, unit2, unit3], states, now)).toEqual([
+      unit3,
+      unit1,
+      unit2,
+    ]);
+    expect(reviewQueue([unit1, unit2, unit3], states, now, new Set())).toEqual([
+      unit3,
+      unit1,
+      unit2,
+    ]);
   });
 });
 

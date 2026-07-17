@@ -1,0 +1,9 @@
+{
+  "id": "ky-sent-greet-they-from-america",
+  "kind": "sentence",
+  "payload": {
+    "text": "Алар Америкадан келди.",
+    "translation": "They are from America."
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

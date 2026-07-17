@@ -1,0 +1,10 @@
+{
+  "id": "ky-item-achuulanbanyz",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Ачууланбаңыз!",
+    "transliteration": "achuulanbanyz",
+    "gloss": "Please, don't be angry!"
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

@@ -1,0 +1,11 @@
+{
+  "id": "ky-item-den-soolugunuz-kanday",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Ден-соолугуңуз кандай?",
+    "transliteration": "den-soolugunuz kanday",
+    "gloss": "How is your health? (polite)",
+    "usageNote": "A warmer, more personal follow-up than Иштериңиз кандай?, often used with elders."
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

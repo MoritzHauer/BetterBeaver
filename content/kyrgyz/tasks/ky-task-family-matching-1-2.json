@@ -1,0 +1,12 @@
+{
+  "id": "ky-task-family-matching-1-2",
+  "type": "matching",
+  "itemIds": [
+    "ky-item-aga",
+    "ky-item-ini",
+    "ky-item-karyndash",
+    "ky-item-sindi",
+    "ky-item-bayke"
+  ],
+  "instructions": "Match each family word to its meaning."
+}

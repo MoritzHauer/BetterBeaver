@@ -1,0 +1,6 @@
+{
+  "id": "ky-task-greet-cloze",
+  "type": "cloze",
+  "itemIds": ["ky-sent-greet-name", "ky-sent-greet-from-america"],
+  "instructions": "Fill in the missing word."
+}

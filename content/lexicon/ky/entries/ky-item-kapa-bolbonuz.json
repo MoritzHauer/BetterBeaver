@@ -1,0 +1,10 @@
+{
+  "id": "ky-item-kapa-bolbonuz",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Капа болбоңуз!",
+    "transliteration": "kapa bolbonuz",
+    "gloss": "Please, don't get upset!"
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

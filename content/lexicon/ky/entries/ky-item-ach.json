@@ -1,0 +1,10 @@
+{
+  "id": "ky-item-ach",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Ач",
+    "transliteration": "ach",
+    "gloss": "Open! (command)"
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

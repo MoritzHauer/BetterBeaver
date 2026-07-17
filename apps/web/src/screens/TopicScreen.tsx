@@ -1,14 +1,52 @@
 import { useEffect, useState } from "react";
-import type { Content } from "@betterbeaver/schema";
+import type { Content, Lesson } from "@betterbeaver/schema";
 import type { ProgressStore, Streak } from "@betterbeaver/engine";
-import { dueUnits, isUnitComplete, isUnitUnlocked } from "@betterbeaver/engine";
+import {
+  dueUnits,
+  isLessonComplete,
+  isLessonUnlocked,
+  isUnitComplete,
+  isUnitUnlocked,
+} from "@betterbeaver/engine";
+
+/** One practice-able task and where it lives, for the shuffle buttons (plan 0008). */
+export interface PracticeTarget {
+  lessonId: string;
+  unitId: string;
+  taskId: string;
+}
+
+/**
+ * Every task of a lesson's *opened* (unlocked) units — the lesson-level
+ * Practice shuffle pool (plan 0008, pinned scope).
+ */
+export function lessonPracticeTargets(
+  lesson: Lesson,
+  content: Content,
+  attemptedTaskIds: ReadonlySet<string>,
+): PracticeTarget[] {
+  const units = lesson.unitIds.flatMap((id) => {
+    const unit = content.units.find((u) => u.id === id);
+    return unit !== undefined ? [unit] : [];
+  });
+  return units
+    .filter((unit) => isUnitUnlocked(unit, units, attemptedTaskIds))
+    .flatMap((unit) =>
+      unit.taskIds.map((taskId) => ({
+        lessonId: lesson.id,
+        unitId: unit.id,
+        taskId,
+      })),
+    );
+}
 
 export function TopicScreen({
   content,
   attemptedTaskIds,
   store,
   epoch,
-  onSelectUnit,
+  onSelectLesson,
+  onPracticeTask,
   onReview,
   onVocabulary,
   onBack,
@@ -19,12 +57,15 @@ export function TopicScreen({
   /** Bumped by the caller on every navigation to this screen, so the due
    * count is recomputed after sessions elsewhere may have changed it. */
   epoch: number;
-  onSelectUnit: (unitId: string) => void;
+  onSelectLesson: (lessonId: string) => void;
+  onPracticeTask: (target: PracticeTarget) => void;
   onReview: () => void;
   onVocabulary: () => void;
   onBack: () => void;
 }) {
-  const unitById = new Map(content.units.map((unit) => [unit.id, unit]));
+  const lessonById = new Map(
+    content.lessons.map((lesson) => [lesson.id, lesson]),
+  );
   const [dueCount, setDueCount] = useState<number | null>(null);
   const [streak, setStreak] = useState<Streak | null>(null);
 
@@ -45,6 +86,21 @@ export function TopicScreen({
       cancelled = true;
     };
   }, [content, store, epoch]);
+
+  // Topic-level Practice shuffles across the opened lessons' opened units
+  // (plan 0008, pinned scope).
+  const practicePool = content.lessons
+    .filter((lesson) =>
+      isLessonUnlocked(
+        lesson,
+        content.lessons,
+        content.units,
+        attemptedTaskIds,
+      ),
+    )
+    .flatMap((lesson) =>
+      lessonPracticeTargets(lesson, content, attemptedTaskIds),
+    );
 
   return (
     <main>
@@ -82,39 +138,66 @@ export function TopicScreen({
             <p className="status">Browse words, make lists, study your way</p>
           </button>
         </li>
-        {content.topic.unitIds.map((unitId) => {
-          const unit = unitById.get(unitId);
-          if (unit === undefined) {
+        <li className="card">
+          <button
+            disabled={practicePool.length === 0}
+            onClick={() => {
+              const target =
+                practicePool[Math.floor(Math.random() * practicePool.length)];
+              if (target !== undefined) {
+                onPracticeTask(target);
+              }
+            }}
+          >
+            <strong>Practice</strong>
+            <p className="status">A random task from your opened lessons</p>
+          </button>
+        </li>
+        {content.topic.lessonIds.map((lessonId) => {
+          const lesson = lessonById.get(lessonId);
+          if (lesson === undefined) {
             return null;
           }
-          const unlocked = isUnitUnlocked(
-            unit,
+          const unlocked = isLessonUnlocked(
+            lesson,
+            content.lessons,
             content.units,
             attemptedTaskIds,
           );
-          const complete = isUnitComplete(unit, attemptedTaskIds);
-          const attemptedCount = unit.taskIds.filter((id) =>
-            attemptedTaskIds.has(id),
-          ).length;
-          const progress = `${attemptedCount} of ${unit.taskIds.length} tasks`;
+          const complete = isLessonComplete(
+            lesson,
+            content.units,
+            attemptedTaskIds,
+          );
+          const completeCount = lesson.unitIds.filter((id) => {
+            const unit = content.units.find((u) => u.id === id);
+            return unit !== undefined && isUnitComplete(unit, attemptedTaskIds);
+          }).length;
+          const progress = `${completeCount} of ${lesson.unitIds.length} units`;
           return (
-            <li key={unit.id} className={`card${unlocked ? "" : " locked"}`}>
-              {unlocked ? (
-                <button onClick={() => onSelectUnit(unit.id)}>
-                  <strong>{unit.title}</strong>
-                  {complete ? (
-                    <span className="done-mark"> &#10003;</span>
-                  ) : null}
-                  <p>{unit.goal}</p>
-                  <p className="status">{progress}</p>
-                </button>
-              ) : (
-                <div>
-                  <strong>&#128274; {unit.title}</strong>
-                  <p>{unit.goal}</p>
-                  <p className="status">locked</p>
-                </div>
-              )}
+            <li key={lesson.id} className={`card${unlocked ? "" : " locked"}`}>
+              <button
+                onClick={() => {
+                  // Skip-ahead is allowed behind a confirmation (plan 0008
+                  // point 15) — a locked lesson is clickable, not blocked.
+                  if (
+                    unlocked ||
+                    window.confirm(
+                      "Are you sure you want to skip the previous lesson?",
+                    )
+                  ) {
+                    onSelectLesson(lesson.id);
+                  }
+                }}
+              >
+                <strong>
+                  {unlocked ? "" : "\u{1F512} "}
+                  {lesson.title}
+                </strong>
+                {complete ? <span className="done-mark"> &#10003;</span> : null}
+                <p>{lesson.goal}</p>
+                <p className="status">{unlocked ? progress : "locked"}</p>
+              </button>
             </li>
           );
         })}

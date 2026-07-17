@@ -1,0 +1,12 @@
+{
+  "id": "ky-item-den-soolugunar-kanday",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Ден-соолугуңар кандай?",
+    "transliteration": "den-soolugunar kanday",
+    "gloss": "How is your health, all of you? (informal, to a group)",
+    "usageNote": "The plural form of Ден-соолугуңуз кандай?",
+    "links": [{ "type": "synonym", "entryId": "ky-item-den-soolugunuz-kanday" }]
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

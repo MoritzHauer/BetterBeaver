@@ -1,0 +1,11 @@
+{
+  "id": "ky-item-taanyshyp-koy",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Таанышып кой",
+    "transliteration": "taanyshyp koy",
+    "gloss": "Let me introduce you (to my friend)",
+    "usageNote": "Said while introducing a third person, e.g. Таанышып кой. Бул менин досум. \"Meet my friend.\""
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

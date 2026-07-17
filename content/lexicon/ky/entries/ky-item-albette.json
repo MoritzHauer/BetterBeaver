@@ -1,0 +1,10 @@
+{
+  "id": "ky-item-albette",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Албетте",
+    "transliteration": "albette",
+    "gloss": "Of course"
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

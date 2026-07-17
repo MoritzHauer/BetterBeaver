@@ -11,13 +11,18 @@
     "ky-item-rakhmat",
     "ky-item-jakshy",
     "ky-item-jaman-emes",
-    "ky-item-menin-atym",
-    "ky-item-senin-atyng-kim",
-    "ky-item-sen",
-    "ky-item-siz",
-    "ky-item-agai",
-    "ky-item-ejeke",
-    "ky-item-aksakal"
+    "ky-item-ozunchu",
+    "ky-item-ishteringiz-kanday",
+    "ky-item-ishteringiz-jakshyby",
+    "ky-item-den-soolugunuz-kanday",
+    "ky-item-sancha-jashtasyz",
+    "ky-item-kaidan-keldingiz",
+    "ky-item-okuysuzbu-je-ishteysizbi",
+    "ky-item-salamatsyzdarby",
+    "ky-item-kandaysynar",
+    "ky-item-ishteriner-kanday",
+    "ky-item-den-soolugunar-kanday",
+    "ky-item-kudayga-shugur"
   ],
   "instructions": "Say the Kyrgyz out loud from the English meaning, then reveal and grade yourself."
 }

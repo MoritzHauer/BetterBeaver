@@ -1,0 +1,11 @@
+{
+  "id": "ky-item-dukonchu",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Дүкөнчү",
+    "transliteration": "dukonchu",
+    "gloss": "Shopkeeper",
+    "usageNote": "дүкөн \"shop\" + -чү \"the person who does\"."
+  },
+  "sourceRef": "ky-resource-manual-family"
+}

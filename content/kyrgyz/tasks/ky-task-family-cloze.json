@@ -1,0 +1,10 @@
+{
+  "id": "ky-task-family-cloze",
+  "type": "cloze",
+  "itemIds": [
+    "ky-sent-family-how-many-people",
+    "ky-sent-family-ermek-helps",
+    "ky-sent-family-uncle-doctor"
+  ],
+  "instructions": "Fill in the missing word."
+}

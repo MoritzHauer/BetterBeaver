@@ -1,0 +1,10 @@
+{
+  "id": "ky-item-uk",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Ук",
+    "transliteration": "uk",
+    "gloss": "Listen! (command)"
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

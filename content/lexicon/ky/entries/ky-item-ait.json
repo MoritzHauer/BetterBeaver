@@ -1,0 +1,10 @@
+{
+  "id": "ky-item-ait",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Айт",
+    "transliteration": "ait",
+    "gloss": "Tell! / Say! (command)"
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

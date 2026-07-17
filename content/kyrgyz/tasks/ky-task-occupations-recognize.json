@@ -1,0 +1,19 @@
+{
+  "id": "ky-task-occupations-recognize",
+  "type": "recognize",
+  "itemIds": [
+    "ky-item-jazuuchu",
+    "ky-item-yrchy",
+    "ky-item-yntymaktuu",
+    "ky-item-pensiya",
+    "ky-item-pensiyada",
+    "ky-item-tiguuchu",
+    "ky-item-aydoochu",
+    "ky-item-kyzmatchy",
+    "ky-item-belgiluu",
+    "ky-item-daryger",
+    "ky-item-dukonchu",
+    "ky-item-jardam"
+  ],
+  "instructions": "Pick the correct meaning for each occupation word."
+}

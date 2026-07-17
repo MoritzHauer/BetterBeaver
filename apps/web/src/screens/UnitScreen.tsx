@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { Content, Item, Task } from "@betterbeaver/schema";
 import { stripClozeMarkup } from "@betterbeaver/schema";
+import type { SelfGrade } from "@betterbeaver/srs";
 import type { TapLookup } from "../components/TappableText";
 import { TappableText } from "../components/TappableText";
 import { NoteView } from "../components/NoteView";
@@ -25,16 +26,28 @@ function ExampleCard({
   item: ExampleItem;
   lookup: TapLookup;
 }) {
+  const [showTranslation, setShowTranslation] = useState(false);
+
   if (item.kind === "sentence") {
     return (
       <li className="card">
-        <strong>{item.payload.translation}</strong>
         <p>
           <TappableText
             text={stripClozeMarkup(item.payload.text)}
             lookup={lookup}
           />
         </p>
+        {showTranslation ? (
+          <strong>{item.payload.translation}</strong>
+        ) : (
+          <button
+            type="button"
+            className="plain tappable-token"
+            onClick={() => setShowTranslation(true)}
+          >
+            Show translation
+          </button>
+        )}
       </li>
     );
   }
@@ -49,14 +62,44 @@ function ExampleCard({
   );
 }
 
+/** One Theory note plus its self-grade row (plan 0008 step 7): a note has no
+ * separate "study it once" action, so grading is offered right here —
+ * reviewing *is* how a note first gets SRS state, same self-grade vocabulary
+ * (Again/Hard/Good) as `SessionScreen`'s `NoteReview`. */
+function NoteCard({
+  markdown,
+  lookup,
+  onGrade,
+}: {
+  markdown: string;
+  lookup: TapLookup;
+  onGrade: (grade: SelfGrade) => void;
+}) {
+  return (
+    <section className="note">
+      <NoteView markdown={markdown} lookup={lookup} />
+      <p>Review this note:</p>
+      <div className="grade-buttons">
+        <button onClick={() => onGrade("again")}>Again</button>
+        <button onClick={() => onGrade("hard")}>Hard</button>
+        <button onClick={() => onGrade("good")}>Good</button>
+      </div>
+    </section>
+  );
+}
+
 function TaskCard({
   task,
   attempted,
+  pinned,
   onPractice,
+  onTogglePin,
 }: {
   task: Task;
   attempted: boolean;
+  pinned: boolean;
   onPractice: () => void;
+  onTogglePin: () => void;
 }) {
   return (
     <li className="card">
@@ -67,6 +110,9 @@ function TaskCard({
         <button className="primary" onClick={onPractice}>
           Practice
         </button>
+        <button className="plain" onClick={onTogglePin}>
+          {pinned ? "📌 Pinned" : "📌 Pin"}
+        </button>
       </div>
     </li>
   );
@@ -76,17 +122,26 @@ export function UnitScreen({
   content,
   unitId,
   attemptedTaskIds,
+  pinnedTaskIds,
   lookup,
   onPractice,
+  onTogglePin,
+  onGradeNote,
   onBack,
 }: {
   content: Content;
   unitId: string;
   attemptedTaskIds: ReadonlySet<string>;
+  /** Task ids pinned for priority in this domain's review queue (plan 0008). */
+  pinnedTaskIds: ReadonlySet<string>;
   /** Tap-to-lookup dependencies (plan 0006 step 4): note views are a pinned
    * non-graded surface. */
   lookup: TapLookup;
   onPractice: (taskId: string) => void;
+  onTogglePin: (taskId: string) => void;
+  /** Self-grades a note (plan 0008 step 7) — first grading schedules it,
+   * entering it into the domain's review queue like any other unit. */
+  onGradeNote: (noteId: string, grade: SelfGrade) => void;
   onBack: () => void;
 }) {
   // Which shipped lexicon entry's popup is open, if any (kind-partitioned
@@ -138,7 +193,11 @@ export function UnitScreen({
 
   return (
     <main>
-      <button onClick={onBack}>&larr; {content.topic.title}</button>
+      <button onClick={onBack}>
+        &larr;{" "}
+        {content.lessons.find((l) => l.id === unit.lessonId)?.title ??
+          content.topic.title}
+      </button>
       <h1>{unit.title}</h1>
       <p>{unit.goal}</p>
 
@@ -146,9 +205,12 @@ export function UnitScreen({
         <details open className="unit-section">
           <summary>Theory</summary>
           {notes.map(({ noteId, markdown }) => (
-            <section key={noteId} className="note">
-              <NoteView markdown={markdown} lookup={lookup} />
-            </section>
+            <NoteCard
+              key={noteId}
+              markdown={markdown}
+              lookup={lookup}
+              onGrade={(grade) => onGradeNote(noteId, grade)}
+            />
           ))}
         </details>
       ) : null}
@@ -244,7 +306,9 @@ export function UnitScreen({
                 key={taskId}
                 task={task}
                 attempted={attemptedTaskIds.has(taskId)}
+                pinned={pinnedTaskIds.has(taskId)}
                 onPractice={() => onPractice(taskId)}
+                onTogglePin={() => onTogglePin(taskId)}
               />
             );
           })}

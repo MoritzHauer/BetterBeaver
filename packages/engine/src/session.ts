@@ -116,6 +116,16 @@ export interface BuildQuestion {
   targetTokens: string[];
 }
 
+/** A note-derived scheduling unit due for review (plan 0008 step 7): the
+ * note's markdown is the card itself, self-graded like `RecallQuestion` —
+ * review-only, task sessions never produce this kind. */
+export interface NoteQuestion {
+  kind: "note";
+  unitId: string;
+  noteId: string;
+  stem: string;
+}
+
 export type Question =
   | RecognizeQuestion
   | RecallQuestion
@@ -127,7 +137,8 @@ export type Question =
   | ShadowingQuestion
   | MinimalPairQuestion
   | PictureQuestion
-  | BuildQuestion;
+  | BuildQuestion
+  | NoteQuestion;
 
 /** One `(schedulingUnitId, quality)` grading outcome (the outcome-list contract, plan 0002). */
 export type QuestionOutcome = [unitId: string, quality: Quality];
@@ -516,9 +527,9 @@ export function buildTaskSession(
  * Builds a review session, one question per due unit (amendment 3, plan
  * 0002): `lexeme`/`concept`/plain-`sentence` units use the recall
  * presentation (self-graded); a due cloze blank uses that blank's cloze
- * question (auto); a due `pair` uses a minimal-pair question (auto). `rng`
- * drives only the minimal-pair coin flip, the sole nondeterminism in
- * review.
+ * question (auto); a due `pair` uses a minimal-pair question (auto); a due
+ * note (plan 0008 step 7) uses a `NoteQuestion` (self-graded). `rng` drives
+ * only the minimal-pair coin flip, the sole nondeterminism in review.
  */
 export function buildReviewSession(
   dueUnits: SchedulingUnit[],
@@ -526,6 +537,17 @@ export function buildReviewSession(
   rng: Rng,
 ): Question[] {
   return dueUnits.map((unit): Question => {
+    if (unit.note !== undefined) {
+      return {
+        kind: "note",
+        unitId: unit.id,
+        noteId: unit.note.id,
+        stem: unit.note.stem,
+      };
+    }
+    if (unit.item === undefined) {
+      throw new Error(`scheduling unit "${unit.id}" has neither item nor note`);
+    }
     if (unit.blankNumber !== undefined) {
       if (unit.item.kind !== "sentence") {
         throw new Error(

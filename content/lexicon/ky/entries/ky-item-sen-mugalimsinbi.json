@@ -1,0 +1,11 @@
+{
+  "id": "ky-item-sen-mugalimsinbi",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Сен мугалимсиңби?",
+    "transliteration": "sen mugalimsinbi",
+    "gloss": "Are you a teacher? (informal)",
+    "usageNote": "The personal ending -сың \"you are\" plus the question particle -бы."
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

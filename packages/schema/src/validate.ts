@@ -2,6 +2,7 @@ import type { z } from "zod";
 import {
   slugPattern,
   topicSchema,
+  lessonSchema,
   unitSchema,
   itemSchema,
   taskSchema,
@@ -19,6 +20,7 @@ import {
   DOMAIN_ENTRY_KIND,
   DOMAIN_LINK_TYPES,
   type Topic,
+  type Lesson,
   type Unit,
   type Item,
   type Task,
@@ -29,6 +31,7 @@ import {
 
 export interface Content {
   topic: Topic;
+  lessons: Lesson[];
   units: Unit[];
   /** Topic-owned items plus the domain entries referenced by this topic's units (plan 0006, pinned). */
   items: Item[];
@@ -39,6 +42,7 @@ export interface Content {
 
 export interface ValidateContentInput {
   topic: unknown;
+  lessons: unknown[];
   units: unknown[];
   /** Topic-owned items only: sentences, pairs, and (for language topics) non-lexicon concepts. */
   items: unknown[];
@@ -148,14 +152,17 @@ function reportOwnership(
   entities: { id: string }[],
   counts: Map<string, number>,
   noun: string,
+  ownerNoun: string,
   errors: string[],
 ): void {
   for (const entity of entities) {
     const count = counts.get(entity.id) ?? 0;
     if (count === 0) {
-      errors.push(`${entity.id}: ${noun} is orphaned (owned by no unit)`);
+      errors.push(
+        `${entity.id}: ${noun} is orphaned (owned by no ${ownerNoun})`,
+      );
     } else if (count > 1) {
-      errors.push(`${entity.id}: ${noun} is owned by multiple units`);
+      errors.push(`${entity.id}: ${noun} is owned by multiple ${ownerNoun}s`);
     }
   }
 }
@@ -170,6 +177,12 @@ export function validateContent(
     phase1Errors.push(formatZodError("topic", topicResult.error));
   }
 
+  const lessons = parseAll(
+    lessonSchema,
+    input.lessons,
+    (raw, i) => idLabel(raw, i, "lessons"),
+    phase1Errors,
+  );
   const units = parseAll(
     unitSchema,
     input.units,
@@ -230,6 +243,7 @@ export function validateContent(
     phase1Errors.length > 0 ||
     !topicResult.success ||
     !domainResult.success ||
+    lessons === undefined ||
     units === undefined ||
     items === undefined ||
     tasks === undefined ||
@@ -253,6 +267,7 @@ export function validateContent(
   // remaining, Map-dependent checks.
   const uniquenessErrors: string[] = [];
 
+  reportDuplicateIds(lessons, "lesson", uniquenessErrors);
   reportDuplicateIds(units, "unit", uniquenessErrors);
   // Merged pool: a topic-owned item id colliding with a domain entry id
   // would silently share its `bb.item.<id>` SRS state (plan 0006).
@@ -263,11 +278,19 @@ export function validateContent(
   reportDuplicateIds(families, "family", uniquenessErrors);
 
   reportDuplicateEntries(
-    "topic.unitIds",
-    topic.unitIds,
-    "unitIds",
+    "topic.lessonIds",
+    topic.lessonIds,
+    "lessonIds",
     uniquenessErrors,
   );
+  for (const lesson of lessons) {
+    reportDuplicateEntries(
+      lesson.id,
+      lesson.unitIds,
+      "unitIds",
+      uniquenessErrors,
+    );
+  }
   for (const unit of units) {
     reportDuplicateEntries(unit.id, unit.itemIds, "itemIds", uniquenessErrors);
     reportDuplicateEntries(unit.id, unit.taskIds, "taskIds", uniquenessErrors);
@@ -283,6 +306,7 @@ export function validateContent(
 
   const errors: string[] = [];
 
+  const lessonById = new Map(lessons.map((l) => [l.id, l]));
   const unitById = new Map(units.map((u) => [u.id, u]));
   // Merged pool (plan 0006, pinned): unit/task itemIds resolve against
   // topic-owned items *and* the domain's lexicon entries.
@@ -295,6 +319,7 @@ export function validateContent(
   // --- class (c): non-Topic entity ids must start with "<code>-" ---
   const prefix = `${topic.code}-`;
   for (const [noun, entities] of [
+    ["lesson", lessons],
     ["unit", units],
     ["item", items],
     ["task", tasks],
@@ -310,9 +335,44 @@ export function validateContent(
   // trivially start with "<code>-" by construction; no check needed.
 
   // --- class (a): dangling references ---
-  for (const id of topic.unitIds) {
-    if (!unitById.has(id)) {
-      errors.push(`topic.unitIds: dangling unit reference "${id}"`);
+  // Extended one level by plan 0008: Topic -> Lesson -> Unit -> content,
+  // each level's child-id list must resolve and each child's parent-id must
+  // match.
+  for (const id of topic.lessonIds) {
+    if (!lessonById.has(id)) {
+      errors.push(`topic.lessonIds: dangling lesson reference "${id}"`);
+    }
+  }
+  for (const lesson of lessons) {
+    for (const id of lesson.unitIds) {
+      const unit = unitById.get(id);
+      if (unit === undefined) {
+        errors.push(`${lesson.id}: dangling unit reference "${id}" in unitIds`);
+      } else if (unit.lessonId !== lesson.id) {
+        errors.push(
+          `${unit.id}: lessonId "${unit.lessonId}" does not match owning lesson "${lesson.id}"`,
+        );
+      }
+    }
+    if (
+      lesson.unlocksAfterLessonId !== undefined &&
+      !lessonById.has(lesson.unlocksAfterLessonId)
+    ) {
+      errors.push(
+        `${lesson.id}: dangling unlocksAfterLessonId reference "${lesson.unlocksAfterLessonId}"`,
+      );
+    }
+    if (lesson.topicId !== topic.id) {
+      errors.push(
+        `${lesson.id}: topicId "${lesson.topicId}" does not match topic id "${topic.id}"`,
+      );
+    }
+  }
+  // Every lesson must be referenced from topic.lessonIds (an orphaned lesson).
+  const topicLessonIdSet = new Set(topic.lessonIds);
+  for (const lesson of lessons) {
+    if (!topicLessonIdSet.has(lesson.id)) {
+      errors.push(`${lesson.id}: lesson is not referenced in topic.lessonIds`);
     }
   }
   for (const unit of units) {
@@ -339,11 +399,6 @@ export function validateContent(
         `${unit.id}: dangling unlocksAfterUnitId reference "${unit.unlocksAfterUnitId}"`,
       );
     }
-    if (unit.topicId !== topic.id) {
-      errors.push(
-        `${unit.id}: topicId "${unit.topicId}" does not match topic id "${topic.id}"`,
-      );
-    }
   }
   for (const item of items) {
     if (!resourceById.has(item.sourceRef)) {
@@ -357,15 +412,7 @@ export function validateContent(
       }
     }
   }
-  // Every unit must be referenced from topic.unitIds (an orphaned unit structure).
-  const topicUnitIdSet = new Set(topic.unitIds);
-  for (const unit of units) {
-    if (!topicUnitIdSet.has(unit.id)) {
-      errors.push(`${unit.id}: unit is not referenced in topic.unitIds`);
-    }
-  }
-
-  // --- class (d): orphaned or multiply-owned items/tasks/notes ---
+  // --- class (d): orphaned or multiply-owned units/items/tasks/notes ---
   function countOwnership(
     unitsList: Unit[],
     getIds: (unit: Unit) => string[],
@@ -379,14 +426,24 @@ export function validateContent(
     return counts;
   }
 
+  // Units are owned by lessons (plan 0008's inserted level), exactly like
+  // items/tasks/notes are owned by units.
+  const unitOwnerCounts = new Map<string, number>();
+  for (const lesson of lessons) {
+    for (const id of lesson.unitIds) {
+      unitOwnerCounts.set(id, (unitOwnerCounts.get(id) ?? 0) + 1);
+    }
+  }
+  reportOwnership(units, unitOwnerCounts, "unit", "lesson", errors);
+
   const itemOwnerCounts = countOwnership(units, (u) => u.itemIds);
-  reportOwnership(items, itemOwnerCounts, "item", errors);
+  reportOwnership(items, itemOwnerCounts, "item", "unit", errors);
 
   const taskOwnerCounts = countOwnership(units, (u) => u.taskIds);
-  reportOwnership(tasks, taskOwnerCounts, "task", errors);
+  reportOwnership(tasks, taskOwnerCounts, "task", "unit", errors);
 
   const noteOwnerCounts = countOwnership(units, (u) => u.noteIds);
-  reportOwnership(notes, noteOwnerCounts, "note", errors);
+  reportOwnership(notes, noteOwnerCounts, "note", "unit", errors);
 
   // Well-defined single owning unit per task, used by classes (f) and (g).
   const taskOwningUnit = new Map<string, Unit>();
@@ -472,13 +529,13 @@ export function validateContent(
       }
     }
 
-    // class (p): a matching task must have 2..8 items, and no two items
+    // class (p): a matching task must have 2..5 items, and no two items
     // sharing a prompt-side text (two identical prompt cards would make the
     // pairing undecidable).
     if (task.type === "matching") {
-      if (taskItems.length < 2 || taskItems.length > 8) {
+      if (taskItems.length < 2 || taskItems.length > 5) {
         errors.push(
-          `${task.id}: matching task has ${taskItems.length} item(s) (needs 2..8)`,
+          `${task.id}: matching task has ${taskItems.length} item(s) (needs 2..5)`,
         );
       }
       const idsByPrompt = new Map<string, string[]>();
@@ -641,6 +698,29 @@ export function validateContent(
     }
   }
 
+  // --- class (l): unlocksAfterLessonId cycles (plan 0008, one level up) ---
+  for (const startLesson of lessons) {
+    let current: Lesson | undefined = startLesson;
+    let steps = 0;
+    let cameBackToStart = false;
+    while (
+      current?.unlocksAfterLessonId !== undefined &&
+      steps < lessons.length
+    ) {
+      current = lessonById.get(current.unlocksAfterLessonId);
+      steps++;
+      if (current?.id === startLesson.id) {
+        cameBackToStart = true;
+        break;
+      }
+    }
+    if (cameBackToStart) {
+      errors.push(
+        `${startLesson.id}: unlocksAfterLessonId chain forms a cycle`,
+      );
+    }
+  }
+
   // --- class (l): unlocksAfterUnitId cycles ---
   for (const startUnit of units) {
     let current: Unit | undefined = startUnit;
@@ -724,6 +804,7 @@ export function validateContent(
   // --- class (y): "user-" is reserved for learner-created entries (plan
   // 0006); no shipped id may use it ---
   for (const [noun, entities] of [
+    ["lesson", lessons],
     ["unit", units],
     ["item", items],
     ["task", tasks],
@@ -807,6 +888,7 @@ export function validateContent(
   return {
     content: {
       topic,
+      lessons,
       units,
       items: [...items, ...referencedEntries],
       tasks,

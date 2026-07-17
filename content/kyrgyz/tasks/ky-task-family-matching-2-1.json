@@ -1,0 +1,11 @@
+{
+  "id": "ky-task-family-matching-2-1",
+  "type": "matching",
+  "itemIds": [
+    "ky-item-tayata",
+    "ky-item-tayene",
+    "ky-item-tayake",
+    "ky-item-tayeje"
+  ],
+  "instructions": "Match each family word to its meaning."
+}

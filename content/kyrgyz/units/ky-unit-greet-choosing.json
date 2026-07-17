@@ -1,0 +1,44 @@
+{
+  "id": "ky-unit-greet-choosing",
+  "lessonId": "ky-lesson-greetings",
+  "title": "Choosing the right greeting",
+  "goal": "Greet people informally and formally, alone or in a group, and ask how they are doing.",
+  "itemIds": [
+    "ky-item-salam",
+    "ky-item-salamatsyzby",
+    "ky-item-salamatchylyk",
+    "ky-item-assalom-aleikum",
+    "ky-item-aleikum-assalom",
+    "ky-item-ishter-kanday",
+    "ky-item-rakhmat",
+    "ky-item-jakshy",
+    "ky-item-jaman-emes",
+    "ky-item-ozunchu",
+    "ky-item-ishteringiz-kanday",
+    "ky-item-ishteringiz-jakshyby",
+    "ky-item-den-soolugunuz-kanday",
+    "ky-item-sancha-jashtasyz",
+    "ky-item-kaidan-keldingiz",
+    "ky-item-okuysuzbu-je-ishteysizbi",
+    "ky-item-salamatsyzdarby",
+    "ky-item-kandaysynar",
+    "ky-item-ishteriner-kanday",
+    "ky-item-den-soolugunar-kanday",
+    "ky-item-kudayga-shugur"
+  ],
+  "taskIds": [
+    "ky-task-greet-recognize",
+    "ky-task-matching-1-1",
+    "ky-task-matching-1-2",
+    "ky-task-matching-3-2",
+    "ky-task-matching-4-1",
+    "ky-task-matching-4-2",
+    "ky-task-greet-recall"
+  ],
+  "noteIds": [
+    "ky-note-greeting-register",
+    "ky-note-greetings-sabak-1",
+    "ky-note-greetings-sabak-2",
+    "ky-note-greetings-sabak-3"
+  ]
+}

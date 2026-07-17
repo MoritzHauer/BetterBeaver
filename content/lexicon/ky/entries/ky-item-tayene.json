@@ -1,0 +1,11 @@
+{
+  "id": "ky-item-tayene",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Тайэне",
+    "transliteration": "tayene",
+    "gloss": "Maternal grandmother",
+    "usageNote": "The тай- prefix marks relatives on the mother's side."
+  },
+  "sourceRef": "ky-resource-manual-family"
+}

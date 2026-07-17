@@ -1,0 +1,15 @@
+{
+  "id": "ky-item-chong-apa",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Чоң апа",
+    "transliteration": "chong apa",
+    "gloss": "Grandmother",
+    "usageNote": "Also spelled чоң эне in this manual — same word, dialect/spelling variant.",
+    "components": [
+      { "script": "чоң", "gloss": "big" },
+      { "script": "апа", "gloss": "mother" }
+    ]
+  },
+  "sourceRef": "ky-resource-manual-family"
+}

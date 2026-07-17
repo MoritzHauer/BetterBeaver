@@ -1,0 +1,29 @@
+{
+  "id": "ky-unit-family-sentences",
+  "lessonId": "ky-lesson-family",
+  "title": "Talking about your family",
+  "goal": "Describe your family and its size in full sentences.",
+  "itemIds": [
+    "ky-sent-family-how-many-people",
+    "ky-sent-family-my-family-big",
+    "ky-sent-family-grandparents-retired",
+    "ky-sent-family-father-office-worker",
+    "ky-sent-family-brother-driver",
+    "ky-sent-family-not-big",
+    "ky-sent-family-writer-singer",
+    "ky-sent-family-loves-mother",
+    "ky-sent-family-six-people",
+    "ky-sent-family-grandparents-village",
+    "ky-sent-family-gather-holidays",
+    "ky-sent-family-not-friend",
+    "ky-sent-family-ermek-helps",
+    "ky-sent-family-uncle-doctor"
+  ],
+  "taskIds": [
+    "ky-task-family-cloze",
+    "ky-task-family-scramble",
+    "ky-task-family-build"
+  ],
+  "noteIds": ["ky-note-family-dialogues", "ky-note-family-extended-reading"],
+  "unlocksAfterUnitId": "ky-unit-family-occupations"
+}

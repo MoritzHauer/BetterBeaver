@@ -8,7 +8,7 @@ import type {
   VocabList,
   VocabListStore,
 } from "@betterbeaver/engine";
-import { ADHOC_MODES, availableModes } from "@betterbeaver/engine";
+import { ADHOC_MODES, availableModes, shuffle } from "@betterbeaver/engine";
 import { AddWordForm } from "../components/AddWordForm";
 import { EntryPopup } from "../components/EntryPopup";
 import type { TapLookup } from "../components/TappableText";
@@ -407,6 +407,21 @@ export function VocabularyScreen({
     });
   }
 
+  /** Fresh 5-random-word matching session over the saved-words pool (plan
+   * 0008 point 9/10) — resampled on every press, so unlike the other study
+   * entry points this skips the mode picker and calls `onStudy` directly. */
+  function practiceMatching(list: VocabList) {
+    const pool = listItems(list);
+    const sample = shuffle(pool, Math.random).slice(
+      0,
+      Math.min(5, pool.length),
+    );
+    onStudy(
+      "matching",
+      sample.map((item) => item.id),
+    );
+  }
+
   /** Adds a learner-created word (plan 0006): creates the entry only — no
    * list membership, no SRS state. It becomes studyable simply by existing
    * in the merged pool once the caller re-merges via `onWordsChanged`. */
@@ -512,6 +527,11 @@ export function VocabularyScreen({
                       >
                         Edit
                       </button>
+                      {list.id === SAVED_LIST_ID && list.itemIds.length >= 2 ? (
+                        <button onClick={() => practiceMatching(list)}>
+                          Practice matching
+                        </button>
+                      ) : null}
                       {list.id !== SAVED_LIST_ID ? (
                         <button onClick={() => void deleteList(list.id)}>
                           Delete

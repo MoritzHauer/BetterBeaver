@@ -1,0 +1,10 @@
+{
+  "id": "ky-item-kyzmatchy",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Кызматчы",
+    "transliteration": "kyzmatchy",
+    "gloss": "Office worker"
+  },
+  "sourceRef": "ky-resource-manual-family"
+}

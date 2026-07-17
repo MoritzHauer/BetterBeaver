@@ -1,0 +1,26 @@
+{
+  "id": "ky-task-people-recall",
+  "type": "recall",
+  "itemIds": [
+    "ky-item-menin-atym",
+    "ky-item-senin-atyng-kim",
+    "ky-item-sen",
+    "ky-item-siz",
+    "ky-item-agai",
+    "ky-item-ejeke",
+    "ky-item-aksakal",
+    "ky-item-bul",
+    "ky-item-kim",
+    "ky-item-emne",
+    "ky-item-sen-mugalimsinbi",
+    "ky-item-al-okuuchubu",
+    "ky-item-taanyshyp-koy",
+    "ky-item-anyn-aty",
+    "ky-item-taanyshkanyma-kubanychtuumun",
+    "ky-item-taanyshyp-algyla",
+    "ky-item-taanyshyp-alaly",
+    "ky-item-biz-taanyshpyz",
+    "ky-item-sen-kimsin"
+  ],
+  "instructions": "Say the Kyrgyz out loud from the English meaning, then reveal and grade yourself."
+}

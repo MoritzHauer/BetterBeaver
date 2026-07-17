@@ -1,0 +1,14 @@
+{
+  "id": "ky-item-jardam",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Жардам",
+    "transliteration": "jardam",
+    "gloss": "Help",
+    "example": {
+      "text": "Эрмек энесине жардам берет.",
+      "translation": "Ermek helps his mother."
+    }
+  },
+  "sourceRef": "ky-resource-manual-family"
+}

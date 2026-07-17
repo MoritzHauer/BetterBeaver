@@ -1,0 +1,9 @@
+{
+  "id": "ky-sent-greet-their-teacher",
+  "kind": "sentence",
+  "payload": {
+    "text": "Алардын мугалими ким?",
+    "translation": "Who is their teacher?"
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

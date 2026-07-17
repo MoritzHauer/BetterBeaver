@@ -1,0 +1,13 @@
+{
+  "id": "ky-lesson-greetings",
+  "topicId": "kyrgyz",
+  "title": "Greetings and introductions",
+  "goal": "Greet people informally and formally, alone or in a group; take your leave; introduce yourself and others; give basic personal information including age, origin, occupation, and marital status; and make polite requests.",
+  "unitIds": [
+    "ky-unit-greet-choosing",
+    "ky-unit-greet-introductions",
+    "ky-unit-greet-requests",
+    "ky-unit-greet-sentences"
+  ],
+  "unlocksAfterLessonId": "ky-lesson-script-survival"
+}

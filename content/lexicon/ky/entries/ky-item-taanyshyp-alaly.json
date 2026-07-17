@@ -1,0 +1,11 @@
+{
+  "id": "ky-item-taanyshyp-alaly",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Таанышып алалы",
+    "transliteration": "taanyshyp alaly",
+    "gloss": "Let's get acquainted",
+    "usageNote": "Opens an introduction, followed by Менин атым ... \"My name is ...\""
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

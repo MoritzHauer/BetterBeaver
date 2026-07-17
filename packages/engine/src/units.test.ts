@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
 import type { Content, Item, Task, Unit } from "@betterbeaver/schema";
-import { domainSchedulingUnits, schedulingUnits } from "./units.js";
+import {
+  domainSchedulingUnits,
+  noteUnitId,
+  schedulingUnits,
+  taskSchedulingUnitIds,
+} from "./units.js";
 
 const sharedSentence: Item = {
   id: "t-item-shared",
@@ -80,7 +85,7 @@ const minimalPairTask: Task = {
 
 const unit: Unit = {
   id: "t-unit-1",
-  topicId: "t-topic",
+  lessonId: "t-topic",
   title: "Unit",
   goal: "Goal",
   itemIds: [
@@ -108,8 +113,9 @@ const content: Content = {
     domainId: "t",
     title: "Topic",
     description: "",
-    unitIds: [unit.id],
+    lessonIds: [unit.id],
   },
+  lessons: [],
   units: [unit],
   items: [
     sharedSentence,
@@ -127,7 +133,7 @@ const content: Content = {
 describe("schedulingUnits", () => {
   const units = schedulingUnits(content);
   const idsByItem = (itemId: string) =>
-    units.filter((u) => u.item.id === itemId).map((u) => u.id);
+    units.filter((u) => u.item?.id === itemId).map((u) => u.id);
 
   it("a sentence referenced by both a cloze task (2 blanks) and a non-cloze task yields both blank units and the item unit", () => {
     expect(idsByItem(sharedSentence.id).sort()).toEqual(
@@ -163,6 +169,59 @@ describe("schedulingUnits", () => {
   });
 });
 
+describe("schedulingUnits — notes (plan 0008 step 7)", () => {
+  const note = { id: "t-note-1", stem: "note-stem-1" };
+  const otherNote = { id: "t-note-2", stem: "note-stem-2" };
+  const noteUnit: Unit = {
+    id: "t-unit-notes",
+    lessonId: "t-topic",
+    title: "Unit",
+    goal: "Goal",
+    itemIds: [],
+    taskIds: [],
+    noteIds: [note.id, otherNote.id],
+  };
+  const noteContent: Content = {
+    topic: {
+      id: "t-topic",
+      code: "t",
+      domainId: "t",
+      title: "Topic",
+      description: "",
+      lessonIds: [noteUnit.id],
+    },
+    lessons: [],
+    units: [noteUnit],
+    items: [],
+    tasks: [],
+    resources: [],
+    notes: [note, otherNote],
+  };
+
+  it("emits one unit per note referenced by a unit, id `note:<id>`", () => {
+    const units = schedulingUnits(noteContent);
+    expect(units.map((u) => u.id).sort()).toEqual(
+      [noteUnitId(note.id), noteUnitId(otherNote.id)].sort(),
+    );
+  });
+
+  it("a note unit carries its note id/stem and no item", () => {
+    const units = schedulingUnits(noteContent);
+    const unit = units.find((u) => u.id === noteUnitId(note.id));
+    expect(unit?.note).toEqual(note);
+    expect(unit?.item).toBeUndefined();
+  });
+
+  it("a note referenced by no unit contributes no scheduling unit", () => {
+    const sparseContent: Content = {
+      ...noteContent,
+      units: [{ ...noteUnit, noteIds: [note.id] }],
+    };
+    const units = schedulingUnits(sparseContent);
+    expect(units.some((u) => u.id === noteUnitId(otherNote.id))).toBe(false);
+  });
+});
+
 describe("domainSchedulingUnits", () => {
   // A second topic of the same domain, referencing the same `lexeme` entry
   // (shared vocabulary) plus a unit-less lexicon entry the topic never uses.
@@ -174,7 +233,7 @@ describe("domainSchedulingUnits", () => {
   };
   const otherUnit: Unit = {
     id: "t-unit-2",
-    topicId: "t-topic-2",
+    lessonId: "t-topic-2",
     title: "Unit 2",
     goal: "Goal",
     itemIds: [lexeme.id, otherLexeme.id],
@@ -188,8 +247,9 @@ describe("domainSchedulingUnits", () => {
       domainId: "t",
       title: "Topic 2",
       description: "",
-      unitIds: [otherUnit.id],
+      lessonIds: [otherUnit.id],
     },
+    lessons: [],
     units: [otherUnit],
     items: [lexeme, otherLexeme],
     tasks: [
@@ -214,7 +274,7 @@ describe("domainSchedulingUnits", () => {
     [lexeme, otherLexeme, unreferencedEntry],
   );
   const idsByItem = (itemId: string) =>
-    units.filter((u) => u.item.id === itemId).map((u) => u.id);
+    units.filter((u) => u.item?.id === itemId).map((u) => u.id);
 
   it("unions scheduling units across every topic of the domain", () => {
     expect(idsByItem(sharedSentence.id).sort()).toEqual(
@@ -240,5 +300,98 @@ describe("domainSchedulingUnits", () => {
     // unreferenced-entries pass must not duplicate them.
     expect(units.filter((u) => u.id === lexeme.id)).toHaveLength(1);
     expect(units.filter((u) => u.id === otherLexeme.id)).toHaveLength(1);
+  });
+});
+
+describe("domainSchedulingUnits — notes across topics (plan 0008 step 7)", () => {
+  // Two topics whose units both reference the same note id (e.g. a shared
+  // grammar point) — dedup by scheduling-unit id must collapse it to one.
+  const sharedNote = { id: "t-note-shared", stem: "shared-note-stem" };
+  const noteUnitA: Unit = {
+    id: "t-unit-notes-a",
+    lessonId: "t-topic-notes-a",
+    title: "Unit A",
+    goal: "Goal",
+    itemIds: [],
+    taskIds: [],
+    noteIds: [sharedNote.id],
+  };
+  const noteContentA: Content = {
+    topic: {
+      id: "t-topic-notes-a",
+      code: "t",
+      domainId: "t",
+      title: "Topic A",
+      description: "",
+      lessonIds: [noteUnitA.id],
+    },
+    lessons: [],
+    units: [noteUnitA],
+    items: [],
+    tasks: [],
+    resources: [],
+    notes: [sharedNote],
+  };
+  const noteUnitB: Unit = {
+    id: "t-unit-notes-b",
+    lessonId: "t-topic-notes-b",
+    title: "Unit B",
+    goal: "Goal",
+    itemIds: [],
+    taskIds: [],
+    noteIds: [sharedNote.id],
+  };
+  const noteContentB: Content = {
+    topic: {
+      id: "t-topic-notes-b",
+      code: "t",
+      domainId: "t",
+      title: "Topic B",
+      description: "",
+      lessonIds: [noteUnitB.id],
+    },
+    lessons: [],
+    units: [noteUnitB],
+    items: [],
+    tasks: [],
+    resources: [],
+    notes: [sharedNote],
+  };
+
+  it("a note referenced by units of two topics is one scheduling unit, not two", () => {
+    const units = domainSchedulingUnits([noteContentA, noteContentB], []);
+    expect(
+      units.filter((u) => u.id === noteUnitId(sharedNote.id)),
+    ).toHaveLength(1);
+  });
+});
+
+describe("taskSchedulingUnitIds (plan 0008)", () => {
+  const itemById = new Map(content.items.map((item) => [item.id, item]));
+
+  it("a non-cloze task's ids are its itemIds as-is", () => {
+    expect(taskSchedulingUnitIds(dictationTask, itemById)).toEqual([
+      sharedSentence.id,
+    ]);
+    expect(taskSchedulingUnitIds(recallTask, itemById)).toEqual([
+      lexeme.id,
+      concept.id,
+    ]);
+  });
+
+  it("a cloze task's ids are each item's blank unit ids", () => {
+    expect(taskSchedulingUnitIds(clozeTask, itemById)).toEqual([
+      `${sharedSentence.id}::c1`,
+      `${sharedSentence.id}::c2`,
+      `${clozeOnlySentence.id}::c1`,
+    ]);
+  });
+
+  it("skips an item missing from itemById", () => {
+    const sparse = new Map([[sharedSentence.id, sharedSentence]]);
+    expect(taskSchedulingUnitIds(clozeTask, sparse)).toEqual([
+      `${sharedSentence.id}::c1`,
+      `${sharedSentence.id}::c2`,
+    ]);
   });
 });

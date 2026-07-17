@@ -1,0 +1,11 @@
+{
+  "id": "ky-item-bayke",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Байке",
+    "transliteration": "bayke",
+    "gloss": "Term of address for an older brother",
+    "links": [{ "type": "synonym", "entryId": "ky-item-aga" }]
+  },
+  "sourceRef": "ky-resource-manual-family"
+}

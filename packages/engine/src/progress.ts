@@ -1,4 +1,4 @@
-import type { Unit } from "@betterbeaver/schema";
+import type { Lesson, Unit } from "@betterbeaver/schema";
 import type { Quality, SrsState } from "@betterbeaver/srs";
 import { isDue, schedule } from "@betterbeaver/srs";
 import type { SchedulingUnit } from "./units.js";
@@ -32,16 +32,53 @@ export function isUnitUnlocked(
   return isUnitComplete(gate, attemptedTaskIds);
 }
 
+/** True when every unit of `lesson` is complete (plan 0008: a lesson rolls up its units). A dangling unit id (which valid content never has) counts as complete, defensively. */
+export function isLessonComplete(
+  lesson: Lesson,
+  units: Unit[],
+  attemptedTaskIds: ReadonlySet<string>,
+): boolean {
+  return lesson.unitIds.every((id) => {
+    const unit = units.find((u) => u.id === id);
+    return unit === undefined || isUnitComplete(unit, attemptedTaskIds);
+  });
+}
+
+/**
+ * True when `lesson` is unlocked — `isUnitUnlocked`'s gating logic one level
+ * up (plan 0008): lessons without `unlocksAfterLessonId` are always
+ * unlocked; otherwise the referenced lesson must be complete. A missing
+ * referenced lesson is treated as unlocked, defensively.
+ */
+export function isLessonUnlocked(
+  lesson: Lesson,
+  lessons: Lesson[],
+  units: Unit[],
+  attemptedTaskIds: ReadonlySet<string>,
+): boolean {
+  if (lesson.unlocksAfterLessonId === undefined) {
+    return true;
+  }
+  const gate = lessons.find((l) => l.id === lesson.unlocksAfterLessonId);
+  if (gate === undefined) {
+    return true;
+  }
+  return isLessonComplete(gate, units, attemptedTaskIds);
+}
+
 /**
  * Scheduling units whose SRS state is due (`isDue`), sorted by due
  * ascending, keyed by unit id. Units without state are excluded. An
  * unparseable `due` sorts first (treated as negative infinity), surfacing
- * corrupted state for repair.
+ * corrupted state for repair. `pinnedUnitIds` (plan 0008) sorts its members
+ * ahead of the rest, ordering only — due-ascending still applies within each
+ * group.
  */
 export function reviewQueue(
   units: SchedulingUnit[],
   states: ReadonlyMap<string, SrsState>,
   now: Date,
+  pinnedUnitIds: ReadonlySet<string> = new Set(),
 ): SchedulingUnit[] {
   const due: { unit: SchedulingUnit; dueMs: number }[] = [];
   for (const unit of units) {
@@ -55,7 +92,14 @@ export function reviewQueue(
       dueMs: Number.isNaN(dueMs) ? Number.NEGATIVE_INFINITY : dueMs,
     });
   }
-  return due.sort((a, b) => a.dueMs - b.dueMs).map((entry) => entry.unit);
+  return due
+    .sort((a, b) => {
+      const pinned =
+        Number(!pinnedUnitIds.has(a.unit.id)) -
+        Number(!pinnedUnitIds.has(b.unit.id));
+      return pinned !== 0 ? pinned : a.dueMs - b.dueMs;
+    })
+    .map((entry) => entry.unit);
 }
 
 /**

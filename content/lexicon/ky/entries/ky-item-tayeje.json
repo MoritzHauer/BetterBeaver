@@ -1,0 +1,10 @@
+{
+  "id": "ky-item-tayeje",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Тайэже",
+    "transliteration": "tayeje",
+    "gloss": "Maternal aunt (mother's sister)"
+  },
+  "sourceRef": "ky-resource-manual-family"
+}

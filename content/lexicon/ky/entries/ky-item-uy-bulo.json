@@ -1,0 +1,14 @@
+{
+  "id": "ky-item-uy-bulo",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Үй-бүлө",
+    "transliteration": "uy-bulo",
+    "gloss": "Family",
+    "example": {
+      "text": "Биздин үй-бүлө чоң жана ынтымактуу.",
+      "translation": "Our family is big and close-knit."
+    }
+  },
+  "sourceRef": "ky-resource-manual-family"
+}

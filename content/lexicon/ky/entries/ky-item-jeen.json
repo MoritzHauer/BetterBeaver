@@ -1,0 +1,10 @@
+{
+  "id": "ky-item-jeen",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Жээн",
+    "transliteration": "jeen",
+    "gloss": "Nephew or niece (sibling's child)"
+  },
+  "sourceRef": "ky-resource-manual-family"
+}

@@ -1,0 +1,11 @@
+{
+  "id": "ky-item-kudayga-shugur",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Кудайга шүгүр",
+    "transliteration": "kudayga shugur",
+    "gloss": "Not too bad (literally \"thank God\")",
+    "usageNote": "A common reply to \"how are you\", used the same way as Рахмат, жакшы."
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

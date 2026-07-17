@@ -1,0 +1,12 @@
+{
+  "id": "ky-item-bular",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Булар",
+    "transliteration": "bular",
+    "gloss": "These (people/things)",
+    "usageNote": "The plural of бул, e.g. Булар кимдер? \"Who are these people?\"",
+    "links": [{ "type": "synonym", "entryId": "ky-item-bul" }]
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

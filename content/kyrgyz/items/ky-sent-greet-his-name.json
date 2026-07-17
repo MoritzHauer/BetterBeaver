@@ -1,0 +1,9 @@
+{
+  "id": "ky-sent-greet-his-name",
+  "kind": "sentence",
+  "payload": {
+    "text": "Анын аты Майкл.",
+    "translation": "His name is Michael."
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

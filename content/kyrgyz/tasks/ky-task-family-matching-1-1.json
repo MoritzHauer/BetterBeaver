@@ -1,0 +1,6 @@
+{
+  "id": "ky-task-family-matching-1-1",
+  "type": "matching",
+  "itemIds": ["ky-item-uy-bulo", "ky-item-chong-ata", "ky-item-chong-apa"],
+  "instructions": "Match each family word to its meaning."
+}

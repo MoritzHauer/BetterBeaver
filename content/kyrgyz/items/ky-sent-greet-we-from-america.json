@@ -1,0 +1,9 @@
+{
+  "id": "ky-sent-greet-we-from-america",
+  "kind": "sentence",
+  "payload": {
+    "text": "Биз Америкадан келдик.",
+    "translation": "We are from America."
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

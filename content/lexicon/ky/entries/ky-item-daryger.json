@@ -1,0 +1,10 @@
+{
+  "id": "ky-item-daryger",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Дарыгер",
+    "transliteration": "daryger",
+    "gloss": "Doctor"
+  },
+  "sourceRef": "ky-resource-manual-family"
+}

@@ -1,0 +1,10 @@
+{
+  "id": "ky-item-kechiresiz",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Кечиресиз",
+    "transliteration": "kechiresiz",
+    "gloss": "Excuse me"
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

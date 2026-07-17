@@ -1,0 +1,11 @@
+{
+  "id": "ky-item-siler",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Силер",
+    "transliteration": "siler",
+    "gloss": "You (plural, informal)",
+    "usageNote": "The plural of сен, for addressing a group of friends, children, or peers."
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

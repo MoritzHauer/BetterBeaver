@@ -1,0 +1,9 @@
+{
+  "id": "ky-sent-greet-this-is-friend",
+  "kind": "sentence",
+  "payload": {
+    "text": "Бул менин досум.",
+    "translation": "This is my friend."
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

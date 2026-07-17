@@ -1,0 +1,10 @@
+{
+  "id": "ky-item-sen-kimsin",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Сен кимсиң?",
+    "transliteration": "sen kimsin",
+    "gloss": "Who are you?"
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

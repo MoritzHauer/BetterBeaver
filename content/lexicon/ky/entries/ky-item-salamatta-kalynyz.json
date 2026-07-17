@@ -1,0 +1,10 @@
+{
+  "id": "ky-item-salamatta-kalynyz",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Саламатта калыңыз!",
+    "transliteration": "salamatta kalynyz",
+    "gloss": "Good bye! (said to the one leaving, by those staying)"
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

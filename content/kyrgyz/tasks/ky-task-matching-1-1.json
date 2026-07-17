@@ -1,0 +1,12 @@
+{
+  "id": "ky-task-matching-1-1",
+  "type": "matching",
+  "itemIds": [
+    "ky-item-salam",
+    "ky-item-salamatsyzby",
+    "ky-item-salamatchylyk",
+    "ky-item-assalom-aleikum",
+    "ky-item-aleikum-assalom"
+  ],
+  "instructions": "Match each Kyrgyz greeting to its meaning."
+}

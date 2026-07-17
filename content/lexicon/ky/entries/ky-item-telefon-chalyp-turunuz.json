@@ -1,0 +1,10 @@
+{
+  "id": "ky-item-telefon-chalyp-turunuz",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Телефон чалып туруңуз",
+    "transliteration": "telefon chalyp turunuz",
+    "gloss": "Call me"
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

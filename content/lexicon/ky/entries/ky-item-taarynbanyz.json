@@ -1,0 +1,10 @@
+{
+  "id": "ky-item-taarynbanyz",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Таарынбаңыз!",
+    "transliteration": "taarynbanyz",
+    "gloss": "Don't be offended!"
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

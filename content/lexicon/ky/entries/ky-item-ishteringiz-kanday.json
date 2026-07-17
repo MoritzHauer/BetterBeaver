@@ -1,0 +1,12 @@
+{
+  "id": "ky-item-ishteringiz-kanday",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Иштериңиз кандай?",
+    "transliteration": "ishteringiz kanday",
+    "gloss": "How are things? (polite, addressing someone as сиз)",
+    "usageNote": "The polite counterpart of Иштер кандай?",
+    "links": [{ "type": "synonym", "entryId": "ky-item-ishter-kanday" }]
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

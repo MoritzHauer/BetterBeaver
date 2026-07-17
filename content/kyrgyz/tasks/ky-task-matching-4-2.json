@@ -1,0 +1,10 @@
+{
+  "id": "ky-task-matching-4-2",
+  "type": "matching",
+  "itemIds": [
+    "ky-item-kaidan-keldingiz",
+    "ky-item-okuysuzbu-je-ishteysizbi",
+    "ky-item-kudayga-shugur"
+  ],
+  "instructions": "Match each word or phrase to its meaning."
+}

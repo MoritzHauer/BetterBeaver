@@ -1,0 +1,19 @@
+{
+  "id": "ky-task-occupations-recall",
+  "type": "recall",
+  "itemIds": [
+    "ky-item-jazuuchu",
+    "ky-item-yrchy",
+    "ky-item-yntymaktuu",
+    "ky-item-pensiya",
+    "ky-item-pensiyada",
+    "ky-item-tiguuchu",
+    "ky-item-aydoochu",
+    "ky-item-kyzmatchy",
+    "ky-item-belgiluu",
+    "ky-item-daryger",
+    "ky-item-dukonchu",
+    "ky-item-jardam"
+  ],
+  "instructions": "Say the Kyrgyz out loud from the English meaning, then reveal and grade yourself."
+}

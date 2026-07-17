@@ -108,6 +108,10 @@ export function EntryPopup({
     entry !== undefined
       ? families.filter((family) => family.entryIds.includes(entry.id))
       : [];
+  const components =
+    entry !== undefined && entry.kind === "lexeme"
+      ? (entry.payload.components ?? [])
+      : [];
 
   // Rendered via a portal to `document.body` (not inline where this
   // component is mounted): pinned tap-to-lookup surfaces place `TappableText`
@@ -160,6 +164,25 @@ export function EntryPopup({
             ) : null}
             <p>{itemDisplayText(entry)}</p>
             <ExampleLine entry={entry} />
+            {components.length > 0 ? (
+              <p className="chips">
+                {components.map((component, index) => {
+                  const target = resolveToken(component.script, entries);
+                  return (
+                    <button
+                      key={`${component.script}-${index}`}
+                      type="button"
+                      className="plain chip"
+                      onClick={() =>
+                        target !== undefined && openEntry(target.id)
+                      }
+                    >
+                      {component.script} — {component.gloss}
+                    </button>
+                  );
+                })}
+              </p>
+            ) : null}
             {entryFamilies.length > 0 ? (
               <p className="chips">
                 {entryFamilies.map((family) => (

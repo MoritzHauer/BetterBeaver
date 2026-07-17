@@ -1,0 +1,9 @@
+{
+  "id": "ky-sent-family-uncle-doctor",
+  "kind": "sentence",
+  "payload": {
+    "text": "Менин тайакем {{c1::белгилүү}} дарыгер.",
+    "translation": "My maternal uncle is a well-known doctor."
+  },
+  "sourceRef": "ky-resource-manual-family"
+}

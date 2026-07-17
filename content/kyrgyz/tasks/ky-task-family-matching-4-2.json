@@ -1,0 +1,11 @@
+{
+  "id": "ky-task-family-matching-4-2",
+  "type": "matching",
+  "itemIds": [
+    "ky-item-belgiluu",
+    "ky-item-daryger",
+    "ky-item-dukonchu",
+    "ky-item-jardam"
+  ],
+  "instructions": "Match each family word to its meaning."
+}

@@ -1,0 +1,10 @@
+{
+  "id": "ky-item-pensiyada",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Пенсияда",
+    "transliteration": "pensiyada",
+    "gloss": "Retired, on a pension"
+  },
+  "sourceRef": "ky-resource-manual-family"
+}

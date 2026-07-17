@@ -1,0 +1,11 @@
+{
+  "id": "ky-item-alar",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Алар",
+    "transliteration": "alar",
+    "gloss": "They / those",
+    "usageNote": "The plural of ал."
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

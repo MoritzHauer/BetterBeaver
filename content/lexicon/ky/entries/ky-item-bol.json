@@ -1,0 +1,10 @@
+{
+  "id": "ky-item-bol",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Бол",
+    "transliteration": "bol",
+    "gloss": "Be! (command)"
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

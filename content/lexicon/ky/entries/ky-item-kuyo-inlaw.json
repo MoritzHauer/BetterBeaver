@@ -1,0 +1,11 @@
+{
+  "id": "ky-item-kuyo-inlaw",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Күйө",
+    "transliteration": "kuyo",
+    "gloss": "Son-in-law",
+    "usageNote": "Distinct from күйөө \"husband\" — same root, different family role."
+  },
+  "sourceRef": "ky-resource-manual-family"
+}

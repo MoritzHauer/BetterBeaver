@@ -1,0 +1,10 @@
+{
+  "id": "ky-item-kechirip-koyunuz",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Кечирип коюңуз!",
+    "transliteration": "kechirip koyunuz",
+    "gloss": "I'm sorry!"
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

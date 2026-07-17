@@ -1,0 +1,9 @@
+{
+  "id": "ky-sent-greet-from-america",
+  "kind": "sentence",
+  "payload": {
+    "text": "Мен {{c1::Америкадан}} келдим.",
+    "translation": "I am from America."
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

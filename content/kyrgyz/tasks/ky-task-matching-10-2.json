@@ -1,0 +1,11 @@
+{
+  "id": "ky-task-matching-10-2",
+  "type": "matching",
+  "itemIds": [
+    "ky-item-kechirip-koyunuz",
+    "ky-item-ayyp-mende",
+    "ky-item-achuulanbanyz",
+    "ky-item-kapa-bolbonuz"
+  ],
+  "instructions": "Match each word or phrase to its meaning."
+}

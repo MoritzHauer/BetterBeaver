@@ -26,6 +26,7 @@ type LexemeItemLike = {
     audioRef?: string;
     imageRef?: string;
     links?: LinkLike[];
+    components?: { script: string; gloss: string }[];
   };
   sourceRef: string;
 };
@@ -140,7 +141,7 @@ function makeFixture() {
 
   const unit: {
     id: string;
-    topicId: string;
+    lessonId: string;
     title: string;
     goal: string;
     itemIds: string[];
@@ -149,7 +150,7 @@ function makeFixture() {
     unlocksAfterUnitId?: string;
   } = {
     id: "ky-unit-1",
-    topicId: "kyrgyz",
+    lessonId: "ky-lesson-1",
     title: "Script and sound survival",
     goal: "recognize the Kyrgyz alphabet",
     itemIds: [itemA.id, itemB.id, itemC.id, itemD.id],
@@ -157,17 +158,33 @@ function makeFixture() {
     noteIds: ["ky-note-intro"],
   };
 
+  const lesson: {
+    id: string;
+    topicId: string;
+    title: string;
+    goal: string;
+    unitIds: string[];
+    unlocksAfterLessonId?: string;
+  } = {
+    id: "ky-lesson-1",
+    topicId: "kyrgyz",
+    title: "Script survival",
+    goal: "recognize the Kyrgyz alphabet",
+    unitIds: [unit.id],
+  };
+
   const topic = {
     id: "kyrgyz",
     code: "ky",
     title: "Kyrgyz",
     description: "Kyrgyz language topic",
-    unitIds: [unit.id],
+    lessonIds: [lesson.id],
     domainId: domain.id,
   };
 
   const input = {
     topic,
+    lessons: [lesson],
     units: [unit],
     items,
     tasks: [taskRecognize, taskRecall],
@@ -185,6 +202,7 @@ function makeFixture() {
   return {
     input,
     topic,
+    lesson,
     unit,
     itemA,
     itemB,
@@ -414,13 +432,13 @@ describe("validateContent", () => {
     expect(errors.some((e) => e.includes("ky-task-recall-1"))).toBe(true);
   });
 
-  it("(k) reports a duplicate entry in topic.unitIds", () => {
-    const { input, topic, unit } = makeFixture();
-    topic.unitIds.push(unit.id);
+  it("(k) reports a duplicate entry in topic.lessonIds", () => {
+    const { input, topic, lesson } = makeFixture();
+    topic.lessonIds.push(lesson.id);
 
     const errors = expectErrors(validateContent(input));
 
-    expect(errors.some((e) => e.includes("topic.unitIds"))).toBe(true);
+    expect(errors.some((e) => e.includes("topic.lessonIds"))).toBe(true);
   });
 
   it("(l) reports a unit whose unlocksAfterUnitId is itself", () => {
@@ -433,7 +451,7 @@ describe("validateContent", () => {
   });
 
   it("(l) reports a 2-unit unlocksAfterUnitId cycle", () => {
-    const { input, topic, unit } = makeFixture();
+    const { input, lesson, unit } = makeFixture();
     const itemE: ConceptItemLike = {
       id: "ky-item-e",
       kind: "concept",
@@ -447,7 +465,7 @@ describe("validateContent", () => {
     };
     const unit2 = {
       id: "ky-unit-2",
-      topicId: "kyrgyz",
+      lessonId: lesson.id,
       title: "Second unit",
       goal: "second goal",
       itemIds: [itemE.id],
@@ -458,13 +476,96 @@ describe("validateContent", () => {
     input.items.push(itemE);
     input.tasks.push(task2);
     input.units.push(unit2);
-    topic.unitIds.push(unit2.id);
+    lesson.unitIds.push(unit2.id);
     unit.unlocksAfterUnitId = unit2.id;
 
     const errors = expectErrors(validateContent(input));
 
     expect(errors.some((e) => e.includes("ky-unit-1"))).toBe(true);
     expect(errors.some((e) => e.includes("ky-unit-2"))).toBe(true);
+  });
+
+  it("(a) reports a dangling lesson reference in topic.lessonIds", () => {
+    const { input, topic } = makeFixture();
+    topic.lessonIds.push("ky-lesson-missing");
+
+    const errors = expectErrors(validateContent(input));
+
+    expect(
+      errors.some(
+        (e) => e.includes("topic.lessonIds") && e.includes("ky-lesson-missing"),
+      ),
+    ).toBe(true);
+  });
+
+  it("(a) reports a unit whose lessonId doesn't match its owning lesson", () => {
+    const { input, unit } = makeFixture();
+    unit.lessonId = "ky-lesson-other";
+
+    const errors = expectErrors(validateContent(input));
+
+    expect(
+      errors.some(
+        (e) =>
+          e.includes("ky-unit-1") && e.includes("does not match owning lesson"),
+      ),
+    ).toBe(true);
+  });
+
+  it("(d) reports a unit owned by no lesson", () => {
+    const { input, lesson } = makeFixture();
+    lesson.unitIds = [];
+
+    const errors = expectErrors(validateContent(input));
+
+    expect(
+      errors.some(
+        (e) => e.includes("ky-unit-1") && e.includes("owned by no lesson"),
+      ),
+    ).toBe(true);
+  });
+
+  it("(l) reports an unlocksAfterLessonId cycle", () => {
+    const { input, lesson } = makeFixture();
+    const itemE: ConceptItemLike = {
+      id: "ky-item-e",
+      kind: "concept",
+      payload: { term: "Д", definition: "Sound of D" },
+      sourceRef: "ky-resource-manual",
+    };
+    const task2 = {
+      id: "ky-task-recall-2",
+      type: "recall",
+      itemIds: [itemE.id],
+    };
+    const unit2 = {
+      id: "ky-unit-2",
+      lessonId: "ky-lesson-2",
+      title: "Second unit",
+      goal: "second goal",
+      itemIds: [itemE.id],
+      taskIds: [task2.id],
+      noteIds: [] as string[],
+    };
+    const lesson2 = {
+      id: "ky-lesson-2",
+      topicId: "kyrgyz",
+      title: "Second lesson",
+      goal: "second goal",
+      unitIds: [unit2.id],
+      unlocksAfterLessonId: lesson.id as string | undefined,
+    };
+    input.items.push(itemE);
+    input.tasks.push(task2);
+    input.units.push(unit2);
+    input.lessons.push(lesson2);
+    input.topic.lessonIds.push(lesson2.id);
+    lesson.unlocksAfterLessonId = lesson2.id;
+
+    const errors = expectErrors(validateContent(input));
+
+    expect(errors.some((e) => e.includes("ky-lesson-1"))).toBe(true);
+    expect(errors.some((e) => e.includes("ky-lesson-2"))).toBe(true);
   });
 
   it("(m) reports invalid cloze markup (Anki's ::hint suffix is unsupported)", () => {
@@ -817,6 +918,22 @@ describe("validateContent", () => {
     const errors = expectErrors(validateContent(input));
 
     expect(errors.some((e) => e.includes("double-authored"))).toBe(true);
+  });
+
+  it("accepts a lexeme entry with a components breakdown", () => {
+    const { input, entry1 } = makeFixture();
+    entry1.payload.components = [
+      { script: "кайн", gloss: "in-law" },
+      { script: "эне", gloss: "mother" },
+    ];
+
+    const result = validateContent(input);
+
+    if ("errors" in result) {
+      throw new Error(
+        `expected valid content, got errors: ${result.errors.join("; ")}`,
+      );
+    }
   });
 
   it("accepts entries referenced by a unit into content.items (pinned Content.items semantics)", () => {

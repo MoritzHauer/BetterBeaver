@@ -18,7 +18,7 @@ export const topicSchema = z.object({
   code: slugSchema,
   title: z.string(),
   description: z.string(),
-  unitIds: z.array(slugSchema),
+  lessonIds: z.array(slugSchema),
   /** The lexicon domain this topic draws vocabulary from (plan 0006); readAloudLang lives on the domain now. */
   domainId: slugSchema,
 });
@@ -69,9 +69,20 @@ export const linkSchema = z.object({
 });
 export type Link = z.infer<typeof linkSchema>;
 
-export const unitSchema = z.object({
+/** Plan 0008: the former Unit, renamed — the unlock-chain/progress level under a Topic; its content refs moved down to the new, daily-sized `Unit`. */
+export const lessonSchema = z.object({
   id: slugSchema,
   topicId: slugSchema,
+  title: z.string(),
+  goal: z.string(),
+  unitIds: z.array(slugSchema),
+  unlocksAfterLessonId: slugSchema.optional(),
+});
+export type Lesson = z.infer<typeof lessonSchema>;
+
+export const unitSchema = z.object({
+  id: slugSchema,
+  lessonId: slugSchema,
   title: z.string(),
   goal: z.string(),
   itemIds: z.array(slugSchema),
@@ -91,6 +102,10 @@ const lexemePayloadSchema = z.object({
   imageRef: slugSchema.optional(),
   /** Authored one side only; see `linkSchema` (plan 0006, validator class (z)). */
   links: z.array(linkSchema).optional(),
+  /** Hand-authored compound breakdown (plan 0008 step 5), e.g. кайнэне → [{script: "кайн", gloss: "in-law"}, {script: "эне", gloss: "mother"}]. */
+  components: z
+    .array(z.object({ script: z.string(), gloss: z.string() }))
+    .optional(),
 });
 
 const conceptPayloadSchema = z.object({

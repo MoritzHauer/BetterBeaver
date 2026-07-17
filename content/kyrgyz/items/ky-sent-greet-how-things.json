@@ -1,0 +1,9 @@
+{
+  "id": "ky-sent-greet-how-things",
+  "kind": "sentence",
+  "payload": {
+    "text": "Салам Асан, иштер кандай?",
+    "translation": "Hi Asan, how are things?"
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

@@ -62,6 +62,7 @@ describe("content on disk", () => {
       const dir = join(CONTENT_DIR, topicDirName);
 
       const topic = readJson(join(dir, "topic.json"));
+      const lessons = readJsonFilesIn(join(dir, "lessons"));
       const units = readJsonFilesIn(join(dir, "units"));
       const items = readJsonFilesIn(join(dir, "items"));
       const tasks = readJsonFilesIn(join(dir, "tasks"));
@@ -87,6 +88,7 @@ describe("content on disk", () => {
 
       const result = validateContent({
         topic,
+        lessons,
         units,
         items,
         tasks,

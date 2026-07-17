@@ -1,0 +1,11 @@
+{
+  "id": "ky-item-kim",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Ким?",
+    "transliteration": "kim",
+    "gloss": "Who?",
+    "usageNote": "Used for people, e.g. Бул ким? \"Who is this?\" Contrast Эмне? \"What?\", used for things."
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

@@ -1,0 +1,12 @@
+{
+  "id": "ky-item-ishteriner-kanday",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Иштериңер кандай?",
+    "transliteration": "ishteriner kanday",
+    "gloss": "How are things? (informal, to a group)",
+    "usageNote": "The plural form of Иштер кандай?",
+    "links": [{ "type": "synonym", "entryId": "ky-item-ishter-kanday" }]
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

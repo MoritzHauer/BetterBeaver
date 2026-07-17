@@ -1,0 +1,11 @@
+{
+  "id": "ky-item-sancha-jashtasyz",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Сиз канча жаштасыз?",
+    "transliteration": "siz kancha jashtasyz",
+    "gloss": "How old are you? (polite)",
+    "usageNote": "Answer with a number plus -жаштамын, e.g. Мен 40 жаштамын \"I am 40 years old.\""
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

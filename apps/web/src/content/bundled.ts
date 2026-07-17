@@ -15,6 +15,10 @@ const topicFiles = import.meta.glob("../../../../content/*/topic.json", {
   eager: true,
   import: "default",
 });
+const lessonFiles = import.meta.glob("../../../../content/*/lessons/*.json", {
+  eager: true,
+  import: "default",
+});
 const unitFiles = import.meta.glob("../../../../content/*/units/*.json", {
   eager: true,
   import: "default",
@@ -143,6 +147,7 @@ function stemMapByDir(
 }
 
 const topicsByDir = groupByTopicDir(topicFiles, identity);
+const lessonsByDir = groupByTopicDir(lessonFiles, identity);
 const unitsByDir = groupByTopicDir(unitFiles, identity);
 const itemsByDir = groupByTopicDir(itemFiles, identity);
 const tasksByDir = groupByTopicDir(taskFiles, identity);
@@ -206,6 +211,7 @@ export function createBundledContentSource(): ContentSource {
     const noteStemMap = notesByDir.get(dir) ?? new Map<string, string>();
     const result = validateContent({
       topic,
+      lessons: lessonsByDir.get(dir) ?? [],
       units: unitsByDir.get(dir) ?? [],
       items: itemsByDir.get(dir) ?? [],
       tasks: tasksByDir.get(dir) ?? [],

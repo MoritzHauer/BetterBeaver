@@ -1,0 +1,11 @@
+{
+  "id": "ky-item-kandaysynar",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Кандайсыңар?",
+    "transliteration": "kandaysynar",
+    "gloss": "How are you all? (informal, to a group)",
+    "usageNote": "The plural form of Кандайсың?"
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

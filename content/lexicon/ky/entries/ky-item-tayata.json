@@ -1,0 +1,11 @@
+{
+  "id": "ky-item-tayata",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Тайата",
+    "transliteration": "tayata",
+    "gloss": "Maternal grandfather",
+    "usageNote": "The тай- prefix marks relatives on the mother's side."
+  },
+  "sourceRef": "ky-resource-manual-family"
+}

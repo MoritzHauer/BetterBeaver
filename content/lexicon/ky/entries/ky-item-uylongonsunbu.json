@@ -1,0 +1,11 @@
+{
+  "id": "ky-item-uylongonsunbu",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Үйлөнгөнсүңбү?",
+    "transliteration": "uylongonsunbu",
+    "gloss": "Are you married? (asked of a man)",
+    "links": [{ "type": "synonym", "entryId": "ky-item-senin-ayalyn-barby" }]
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

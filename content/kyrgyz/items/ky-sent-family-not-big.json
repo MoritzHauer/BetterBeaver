@@ -1,0 +1,9 @@
+{
+  "id": "ky-sent-family-not-big",
+  "kind": "sentence",
+  "payload": {
+    "text": "Менин үй-бүлөм чоң эмес.",
+    "translation": "My family isn't big."
+  },
+  "sourceRef": "ky-resource-manual-family"
+}

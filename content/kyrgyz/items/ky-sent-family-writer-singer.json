@@ -1,0 +1,9 @@
+{
+  "id": "ky-sent-family-writer-singer",
+  "kind": "sentence",
+  "payload": {
+    "text": "Атам жазуучу, апам ырчы.",
+    "translation": "My father is a writer, my mother is a singer."
+  },
+  "sourceRef": "ky-resource-manual-family"
+}

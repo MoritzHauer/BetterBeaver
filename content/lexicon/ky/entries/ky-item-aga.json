@@ -1,0 +1,10 @@
+{
+  "id": "ky-item-aga",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Ага",
+    "transliteration": "aga",
+    "gloss": "Older brother"
+  },
+  "sourceRef": "ky-resource-manual-family"
+}

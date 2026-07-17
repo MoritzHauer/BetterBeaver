@@ -1,0 +1,10 @@
+{
+  "id": "ky-item-ayal",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Аял",
+    "transliteration": "ayal",
+    "gloss": "Wife (also: woman)"
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

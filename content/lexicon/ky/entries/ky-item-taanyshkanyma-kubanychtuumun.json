@@ -1,0 +1,11 @@
+{
+  "id": "ky-item-taanyshkanyma-kubanychtuumun",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Таанышканыма кубанычтуумун",
+    "transliteration": "taanyshkanyma kubanychtuumun",
+    "gloss": "Nice to meet you",
+    "usageNote": "Said right after being introduced to someone new."
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

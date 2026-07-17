@@ -1,0 +1,10 @@
+{
+  "id": "ky-item-yntymaktuu",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Ынтымактуу",
+    "transliteration": "yntymaktuu",
+    "gloss": "Close-knit, friendly (of a family)"
+  },
+  "sourceRef": "ky-resource-manual-family"
+}

@@ -1,0 +1,9 @@
+{
+  "id": "ky-sent-greet-not-ready",
+  "kind": "sentence",
+  "payload": {
+    "text": "Мен бүгүн даяр эмесмин.",
+    "translation": "I'm not ready today."
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

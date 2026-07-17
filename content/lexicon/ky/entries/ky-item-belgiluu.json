@@ -1,0 +1,10 @@
+{
+  "id": "ky-item-belgiluu",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Белгилүү",
+    "transliteration": "belgiluu",
+    "gloss": "Well-known, famous"
+  },
+  "sourceRef": "ky-resource-manual-family"
+}

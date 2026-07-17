@@ -1,0 +1,9 @@
+{
+  "id": "ky-sent-family-ermek-helps",
+  "kind": "sentence",
+  "payload": {
+    "text": "Эрмек энесине {{c1::жардам}} берет.",
+    "translation": "Ermek helps his mother."
+  },
+  "sourceRef": "ky-resource-manual-family"
+}

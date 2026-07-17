@@ -1,0 +1,11 @@
+{
+  "id": "ky-item-kaytalap-koyunuzchu",
+  "kind": "lexeme",
+  "payload": {
+    "script": "Кайталап коюңузчу",
+    "transliteration": "kaytalap koyunuzchu",
+    "gloss": "Repeat, please (polite)",
+    "usageNote": "The particle -чу softens a request into a polite \"please\"."
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}
