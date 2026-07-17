@@ -9,6 +9,8 @@ const httpsCert = process.env.PREVIEW_HTTPS_CERT;
 const httpsKey = process.env.PREVIEW_HTTPS_KEY;
 
 export default defineConfig({
+  // GitHub Pages serves at /BetterBeaver/; CI sets BASE_PATH (deploy.yml).
+  base: process.env.BASE_PATH,
   preview:
     httpsCert !== undefined && httpsKey !== undefined
       ? {
