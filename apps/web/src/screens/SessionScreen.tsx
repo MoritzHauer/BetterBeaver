@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import type {
   BuildQuestion,
@@ -902,17 +902,22 @@ function SummaryPanel({
 }
 
 /**
- * Runs one task or review session: presents `questions` one at a time,
- * grades each answer via `onGrade`, and shows a summary panel after the
- * last question. Shared by the task-practice and review flows; the caller
- * decides what happens after (`onFinished`) and on early exit (`onExit`).
+ * Runs one task, review, or pooled unit-practice session: presents
+ * `questions` one at a time, grades each answer via `onGrade`, and shows a
+ * summary panel after the last question. Shared by the task-practice,
+ * review, and unit-practice flows; the caller decides what happens after
+ * (`onFinished`) and on early exit (`onExit`).
  *
  * Every question resolves to a list of `(unitId, quality)` outcomes (the
  * outcome-list contract, plan 0002): single-unit questions apply one, a
  * cleared matching board applies N. `onGrade` is applied once per outcome;
  * `onAllAnswered` (optional) fires once, at grade time of the last
  * question, for callers that record task attempts — so exiting after the
- * final answer still counts as a completed attempt.
+ * final answer still counts as a completed attempt. `onTaskAnswered` (plan
+ * 0010, optional, only meaningful with `taskIds`) fires once per task, as
+ * soon as that task's own questions are all answered — granular, unlike
+ * `onAllAnswered`, so a pooled multi-task session credits each task as it
+ * finishes rather than only at session-end.
  */
 export function SessionScreen({
   title,
@@ -920,8 +925,12 @@ export function SessionScreen({
   topicId,
   readAloudLang,
   lookup,
+  taskIds,
+  pinnedTaskIds,
+  onTogglePin,
   onGrade,
   onAllAnswered,
+  onTaskAnswered,
   onFinished,
   onExit,
   loadStreak,
@@ -936,8 +945,20 @@ export function SessionScreen({
    * prompt, the cloze/build/scramble revealed sentence, matching's matched
    * cards) — never to a not-yet-answered question. */
   lookup: TapLookup;
+  /** Parallel array to `questions` (plan 0010): index *i*'s task, if the
+   * question at index *i* came from one. Only the pooled unit-practice
+   * session passes this — `TaskSession`/`ReviewSession` omit it, so the pin
+   * control never renders there. */
+  taskIds?: (string | undefined)[];
+  pinnedTaskIds?: ReadonlySet<string>;
+  onTogglePin?: (taskId: string) => void;
   onGrade: (unitId: string, quality: Quality) => Promise<void>;
   onAllAnswered?: () => void;
+  /** Fires once per task, the moment every question tagged with that task's
+   * id has been answered (plan 0010) — distinct from `onAllAnswered`, which
+   * only fires once the whole session is done. Only meaningful when
+   * `taskIds` is passed. */
+  onTaskAnswered?: (taskId: string) => void;
   onFinished: (summary: SessionSummary) => void;
   onExit: () => void;
   /** Fetches the current streak for the summary panel (plan 0003). */
@@ -947,6 +968,20 @@ export function SessionScreen({
   const [summary, setSummary] = useState<SessionSummary>(emptySummary);
   const [done, setDone] = useState(false);
   const answeredCount = useRef(0);
+
+  // Per-task question totals (plan 0010), recomputed only when `taskIds`
+  // changes: how many questions belong to each distinct task id, so
+  // `noteAnswered` can tell when a given task's questions are all answered.
+  const taskTotals = useMemo(() => {
+    const totals = new Map<string, number>();
+    for (const taskId of taskIds ?? []) {
+      if (taskId !== undefined) {
+        totals.set(taskId, (totals.get(taskId) ?? 0) + 1);
+      }
+    }
+    return totals;
+  }, [taskIds]);
+  const taskAnsweredCount = useRef(new Map<string, number>());
 
   const question = questions[index];
 
@@ -961,11 +996,22 @@ export function SessionScreen({
   }
 
   /** Called once per question, when its outcome(s) are applied (each
-   * interaction component guards against re-entry, so exactly once). */
+   * interaction component guards against re-entry, so exactly once). Reads
+   * the current question's task id via `index` — called before `advance()`
+   * shifts it, so it still points at the just-answered question. */
   function noteAnswered() {
     answeredCount.current += 1;
     if (answeredCount.current === questions.length) {
       onAllAnswered?.();
+    }
+    const taskId = taskIds?.[index];
+    if (taskId !== undefined) {
+      const counts = taskAnsweredCount.current;
+      const nextCount = (counts.get(taskId) ?? 0) + 1;
+      counts.set(taskId, nextCount);
+      if (nextCount === taskTotals.get(taskId)) {
+        onTaskAnswered?.(taskId);
+      }
     }
   }
 
@@ -1007,6 +1053,8 @@ export function SessionScreen({
     }
   }
 
+  const currentTaskId = taskIds?.[index];
+
   return (
     <main className="session">
       <header className="session-header">
@@ -1027,6 +1075,14 @@ export function SessionScreen({
             }}
           />
         </div>
+        {currentTaskId !== undefined ? (
+          <button
+            className="plain"
+            onClick={() => onTogglePin?.(currentTaskId)}
+          >
+            {pinnedTaskIds?.has(currentTaskId) ? "📌 Pinned" : "📌 Pin"}
+          </button>
+        ) : null}
       </header>
       <h1>{title}</h1>
 

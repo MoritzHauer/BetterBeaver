@@ -3,6 +3,7 @@ import type { Content, Item, Task, Unit } from "@betterbeaver/schema";
 import {
   buildTaskSession,
   buildReviewSession,
+  buildUnitSession,
   checkScrambleAnswer,
   checkMatchingPair,
   matchingOutcomes,
@@ -1064,5 +1065,103 @@ describe("buildReviewSession", () => {
         stem: note.stem,
       },
     ]);
+  });
+});
+
+describe("buildUnitSession", () => {
+  it("tags every question with its source task, then shuffles the combined list once (plan 0010)", () => {
+    // A recall task (no rng draws) plus the recognize task/items reused from
+    // the "recognize" fixtures above, pooled into one unit with two tasks.
+    const recallTaskU: Task = {
+      id: "t-task-recall-u",
+      type: "recall",
+      itemIds: [c3.id],
+    };
+    const unit: Unit = {
+      id: "t-unit-session",
+      lessonId: "t-topic",
+      title: "Unit Session",
+      goal: "Goal",
+      itemIds: [c1.id, c2.id, c3.id, c4.id],
+      taskIds: [recallTaskU.id, recognizeTask.id],
+      noteIds: [],
+    };
+    const content: Content = {
+      topic: {
+        id: "t-topic",
+        code: "t",
+        domainId: "t",
+        title: "Topic",
+        description: "",
+        lessonIds: [unit.id],
+      },
+      lessons: [],
+      units: [unit],
+      items: [c1, c2, c3, c4],
+      tasks: [recallTaskU, recognizeTask],
+      resources: [],
+      notes: [],
+    };
+
+    // First 6 draws reproduce the recognize task's two questions exactly as
+    // in "buildTaskSession: recognize" above (recallTaskU draws nothing).
+    // The final 2 draws are the combine-step Fisher-Yates over the 3
+    // resulting pairs: both 0 -> [P0, P1, P2] rotates to [P1, P2, P0].
+    const rng = queueRng([0.9, 0.1, 0.5, 0.9, 0.1, 0.5, 0, 0]);
+
+    const pairs = buildUnitSession(unit, content, rng);
+
+    expect(pairs).toEqual([
+      {
+        taskId: recognizeTask.id,
+        question: {
+          kind: "recognize",
+          unitId: c1.id,
+          prompt: "Term 1",
+          choices: [
+            "Definition 3",
+            "Definition 2",
+            "Definition 1",
+            "Definition 4",
+          ],
+          correctIndex: 2,
+        },
+      },
+      {
+        taskId: recognizeTask.id,
+        question: {
+          kind: "recognize",
+          unitId: c2.id,
+          prompt: "Term 2",
+          choices: [
+            "Definition 3",
+            "Definition 1",
+            "Definition 2",
+            "Definition 4",
+          ],
+          correctIndex: 2,
+        },
+      },
+      {
+        taskId: recallTaskU.id,
+        question: {
+          kind: "recall",
+          unitId: c3.id,
+          prompt: "Term 3",
+          reveal: ["Definition 3"],
+        },
+      },
+    ]);
+  });
+
+  it("pools every task's questions, not just the first", () => {
+    const questions = buildUnitSession(
+      conceptUnit,
+      conceptContent,
+      queueRng([0.9, 0.1, 0.5, 0.9, 0.1, 0.5, 0, 0]),
+    ).map((pair) => pair.question);
+    // conceptUnit has exactly one task (recognizeTask, 2 items) -> 2 questions.
+    expect(questions).toHaveLength(2);
+    expect(questions.every((q) => q.kind === "recognize")).toBe(true);
   });
 });

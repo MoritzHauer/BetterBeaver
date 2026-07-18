@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { Content, Item, Task } from "@betterbeaver/schema";
+import type { Content, Item, Task, Unit } from "@betterbeaver/schema";
 import type {
   ContentSource,
   DomainContent,
@@ -13,7 +13,9 @@ import {
   buildAdhocSession,
   buildReviewSession,
   buildTaskSession,
+  buildUnitSession,
   dueDomainUnits,
+  isLessonComplete,
   noteUnitId,
   recordGrade,
   symmetricLinks,
@@ -51,6 +53,14 @@ type Screen =
       lessonId: string;
       unitId: string;
       taskId: string;
+    }
+  // Pooled unit-level practice (plan 0010): one shuffled session across an
+  // entire unit's task set, launched by UnitScreen's sticky Practice bar.
+  | {
+      screen: "unit-session";
+      topicId: string;
+      lessonId: string;
+      unitId: string;
     }
   // Review, Vocabulary, and ad-hoc study are domain-scoped (plan 0006): the
   // review queue, lists, and streak all key on the domain now, not the topic.
@@ -100,6 +110,59 @@ function TaskSession({
       lookup={lookup}
       onGrade={handleGrade}
       onAllAnswered={() => void progressStore.markTaskAttempted(task.id)}
+      onFinished={onDone}
+      onExit={onDone}
+      loadStreak={() => progressStore.getStreak(domainId)}
+    />
+  );
+}
+
+/** Wires the engine's pooled unit-practice session building to
+ * `SessionScreen` (plan 0010): one shuffled session across every task in the
+ * unit, tagged per-question so `SessionScreen` can render a pin control and
+ * report `onTaskAnswered` granularly (rather than only at session-end, the
+ * way `TaskSession`'s single-task `onAllAnswered` does). */
+function UnitSession({
+  content,
+  unit,
+  lookup,
+  pinnedTaskIds,
+  onTogglePin,
+  onDone,
+}: {
+  content: Content;
+  unit: Unit;
+  /** Tap-to-lookup dependencies (plan 0006 step 4), for post-answer reveal
+   * surfaces (SessionScreen's pinned rules). */
+  lookup: TapLookup;
+  pinnedTaskIds: ReadonlySet<string>;
+  onTogglePin: (taskId: string) => void;
+  onDone: () => void;
+}) {
+  const domainId = content.topic.domainId;
+  const pairs = useMemo(
+    () => buildUnitSession(unit, content, Math.random),
+    // Keyed by unit.id only, same reshuffle-guard rule as TaskSession.
+    [unit.id],
+  );
+  const questions = useMemo(() => pairs.map((pair) => pair.question), [pairs]);
+  const taskIds = useMemo(() => pairs.map((pair) => pair.taskId), [pairs]);
+
+  async function handleGrade(unitId: string, quality: Quality) {
+    await recordGrade(progressStore, unitId, quality, new Date(), domainId);
+  }
+
+  return (
+    <SessionScreen
+      title={unit.title}
+      questions={questions}
+      topicId={content.topic.id}
+      lookup={lookup}
+      taskIds={taskIds}
+      pinnedTaskIds={pinnedTaskIds}
+      onTogglePin={onTogglePin}
+      onGrade={handleGrade}
+      onTaskAnswered={(taskId) => void progressStore.markTaskAttempted(taskId)}
       onFinished={onDone}
       onExit={onDone}
       loadStreak={() => progressStore.getStreak(domainId)}
@@ -287,6 +350,15 @@ export function App() {
     null,
   );
   const [domainTopicsContent, setDomainTopicsContent] = useState<Content[]>([]);
+  // Every topic's full content, keyed by topic id (plan 0010): loaded
+  // unconditionally once `topics` is populated, so `TopicListScreen` can show
+  // per-topic lesson-completion progress without extending the lightweight
+  // `TopicSummary`. Bundled content is already fully in memory, so loading
+  // every topic up front costs nothing (`bundled.ts`'s `loadTopic` just wraps
+  // an in-memory `Map`).
+  const [topicsContentMap, setTopicsContentMap] = useState<
+    Map<string, Content>
+  >(new Map());
   const [attemptedTaskIds, setAttemptedTaskIds] = useState<Set<string>>(
     new Set(),
   );
@@ -298,11 +370,13 @@ export function App() {
   // user entry store's current contents without requiring a navigation.
   const [domainEpoch, setDomainEpoch] = useState(0);
   // Bumped whenever a task's pinned state is toggled (plan 0008), so
-  // UnitScreen re-reads the pin store without requiring a navigation.
+  // UnitSession re-reads the pin store without requiring a navigation.
   const [pinEpoch, setPinEpoch] = useState(0);
   // The current topic's domain's pinned task ids, re-read whenever pinEpoch
-  // bumps (plan 0008); only ever consumed by UnitScreen, but computed here
-  // (not inside the screen-specific branch below) since it's a hook.
+  // bumps (plan 0008); only ever consumed by UnitSession (plan 0010: pin
+  // moved from UnitScreen's task list into the pooled practice session), but
+  // computed here (not inside the screen-specific branch below) since it's a
+  // hook.
   const pinnedTaskIds = useMemo(
     () =>
       content !== null
@@ -331,6 +405,52 @@ export function App() {
     reloadAttemptedTaskIds();
   }, [contentSourceResult]);
 
+  // Loads every topic's full content once `topics` is populated (plan 0010),
+  // for TopicListScreen's per-topic progress bars — unconditional, not gated
+  // on the active screen.
+  useEffect(() => {
+    if (!("source" in contentSourceResult) || topics.length === 0) {
+      return;
+    }
+    let cancelled = false;
+    Promise.all(
+      topics.map((topic) => contentSourceResult.source.loadTopic(topic.id)),
+    ).then((loaded) => {
+      if (cancelled) {
+        return;
+      }
+      setTopicsContentMap(
+        new Map(
+          loaded.map((topicContent) => [topicContent.topic.id, topicContent]),
+        ),
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [contentSourceResult, topics]);
+
+  // Per-topic lesson-completion counts (plan 0010), derived from
+  // `topicsContentMap` + `attemptedTaskIds` via the same `isLessonComplete`
+  // TopicScreen already uses.
+  const topicProgress = useMemo(() => {
+    const result = new Map<string, { completed: number; total: number }>();
+    for (const [topicId, topicContent] of topicsContentMap) {
+      const completed = topicContent.topic.lessonIds.filter((lessonId) => {
+        const lesson = topicContent.lessons.find((l) => l.id === lessonId);
+        return (
+          lesson !== undefined &&
+          isLessonComplete(lesson, topicContent.units, attemptedTaskIds)
+        );
+      }).length;
+      result.set(topicId, {
+        completed,
+        total: topicContent.topic.lessonIds.length,
+      });
+    }
+    return result;
+  }, [topicsContentMap, attemptedTaskIds]);
+
   useEffect(() => {
     if (!("source" in contentSourceResult)) {
       return;
@@ -339,7 +459,8 @@ export function App() {
       screen.screen === "topic" ||
       screen.screen === "lesson" ||
       screen.screen === "unit" ||
-      screen.screen === "task"
+      screen.screen === "task" ||
+      screen.screen === "unit-session"
     ) {
       contentSourceResult.source.loadTopic(screen.topicId).then(setContent);
     }
@@ -361,7 +482,8 @@ export function App() {
         : screen.screen === "topic" ||
             screen.screen === "lesson" ||
             screen.screen === "unit" ||
-            screen.screen === "task"
+            screen.screen === "task" ||
+            screen.screen === "unit-session"
           ? topics.find((topic) => topic.id === screen.topicId)?.domainId
           : undefined;
     if (domainId === undefined) {
@@ -413,6 +535,7 @@ export function App() {
       <TopicListScreen
         domains={domains}
         topics={topics}
+        topicProgress={topicProgress}
         onSelectTopic={(topicId) => goToTopic(topicId)}
         onDomainVocabulary={(domainId) =>
           setScreen({ screen: "vocab", domainId })
@@ -426,7 +549,8 @@ export function App() {
     screen.screen === "topic" ||
     screen.screen === "lesson" ||
     screen.screen === "unit" ||
-    screen.screen === "task"
+    screen.screen === "task" ||
+    screen.screen === "unit-session"
   ) {
     // domainContent is gated here too (not just content): unit notes and
     // task-session post-answer reveals need the domain's merged entry pool
@@ -500,22 +624,15 @@ export function App() {
         <UnitScreen
           content={content}
           unitId={screen.unitId}
-          attemptedTaskIds={attemptedTaskIds}
-          pinnedTaskIds={pinnedTaskIds}
           lookup={lookup}
-          onPractice={(taskId) =>
+          onPractice={() =>
             setScreen({
-              screen: "task",
+              screen: "unit-session",
               topicId: screen.topicId,
               lessonId: screen.lessonId,
               unitId: screen.unitId,
-              taskId,
             })
           }
-          onTogglePin={(taskId) => {
-            togglePinnedTask(content.topic.domainId, taskId);
-            setPinEpoch((epoch) => epoch + 1);
-          }}
           onGradeNote={(noteId, grade) => {
             void recordGrade(
               progressStore,
@@ -532,6 +649,38 @@ export function App() {
               lessonId: screen.lessonId,
             })
           }
+        />
+      );
+    }
+
+    if (screen.screen === "unit-session") {
+      const unit = content.units.find((u) => u.id === screen.unitId);
+      if (unit === undefined) {
+        return (
+          <main>
+            <p>Unknown unit: {screen.unitId}</p>
+          </main>
+        );
+      }
+      return (
+        <UnitSession
+          content={content}
+          unit={unit}
+          lookup={lookup}
+          pinnedTaskIds={pinnedTaskIds}
+          onTogglePin={(taskId) => {
+            togglePinnedTask(content.topic.domainId, taskId);
+            setPinEpoch((epoch) => epoch + 1);
+          }}
+          onDone={() => {
+            reloadAttemptedTaskIds();
+            setScreen({
+              screen: "unit",
+              topicId: screen.topicId,
+              lessonId: screen.lessonId,
+              unitId: screen.unitId,
+            });
+          }}
         />
       );
     }

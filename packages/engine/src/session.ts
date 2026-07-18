@@ -1,4 +1,4 @@
-import type { Content, Item, Task } from "@betterbeaver/schema";
+import type { Content, Item, Task, Unit } from "@betterbeaver/schema";
 import {
   gapClozeMarkup,
   itemDisplayText,
@@ -521,6 +521,38 @@ export function buildTaskSession(
       task.type satisfies never;
       throw new Error(`unknown task type: ${task.type as string}`);
   }
+}
+
+/**
+ * Builds one pooled, shuffled session across an entire content `Unit`'s task
+ * set (plan 0010): every `taskIds` entry's questions (via `buildTaskSession`)
+ * are tagged with that task's id, concatenated, then shuffled once as a
+ * whole — no sampling/capping, no per-task grouping preserved.
+ *
+ * Returns `{ question, taskId }` pairs rather than bare `Question[]`: a
+ * `Question`'s own `unitId` field is an SRS scheduling-unit id (unrelated to
+ * which content `Unit`/`Task` produced it), and a `NoteQuestion` or
+ * `matching` board has no field that reverse-maps to a task at all. Tracking
+ * `taskId` at construction time is the only reliable way to carry it
+ * forward.
+ */
+export function buildUnitSession(
+  unit: Unit,
+  content: Content,
+  rng: Rng,
+): { question: Question; taskId: string }[] {
+  const taskById = new Map(content.tasks.map((task) => [task.id, task]));
+  const pairs = unit.taskIds.flatMap((taskId) => {
+    const task = taskById.get(taskId);
+    if (task === undefined) {
+      return [];
+    }
+    return buildTaskSession(task, content, rng).map((question) => ({
+      question,
+      taskId,
+    }));
+  });
+  return shuffle(pairs, rng);
 }
 
 /**

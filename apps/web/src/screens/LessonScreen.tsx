@@ -1,5 +1,6 @@
 import type { Content } from "@betterbeaver/schema";
 import { isUnitComplete, isUnitUnlocked } from "@betterbeaver/engine";
+import { LockableProgress } from "../components/ProgressBar";
 import type { PracticeTarget } from "./TopicScreen";
 import { lessonPracticeTargets } from "./TopicScreen";
 
@@ -68,7 +69,6 @@ export function LessonScreen({
           const attemptedCount = unit.taskIds.filter((id) =>
             attemptedTaskIds.has(id),
           ).length;
-          const progress = `${attemptedCount} of ${unit.taskIds.length} tasks`;
           return (
             <li key={unit.id} className={`card${unlocked ? "" : " locked"}`}>
               <button
@@ -90,7 +90,11 @@ export function LessonScreen({
                 </strong>
                 {complete ? <span className="done-mark"> &#10003;</span> : null}
                 <p>{unit.goal}</p>
-                <p className="status">{unlocked ? progress : "locked"}</p>
+                <LockableProgress
+                  unlocked={unlocked}
+                  value={attemptedCount}
+                  max={unit.taskIds.length}
+                />
               </button>
             </li>
           );

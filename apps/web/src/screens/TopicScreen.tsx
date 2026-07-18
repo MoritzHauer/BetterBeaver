@@ -8,6 +8,7 @@ import {
   isUnitComplete,
   isUnitUnlocked,
 } from "@betterbeaver/engine";
+import { LockableProgress } from "../components/ProgressBar";
 
 /** One practice-able task and where it lives, for the shuffle buttons (plan 0008). */
 export interface PracticeTarget {
@@ -173,7 +174,6 @@ export function TopicScreen({
             const unit = content.units.find((u) => u.id === id);
             return unit !== undefined && isUnitComplete(unit, attemptedTaskIds);
           }).length;
-          const progress = `${completeCount} of ${lesson.unitIds.length} units`;
           return (
             <li key={lesson.id} className={`card${unlocked ? "" : " locked"}`}>
               <button
@@ -196,7 +196,11 @@ export function TopicScreen({
                 </strong>
                 {complete ? <span className="done-mark"> &#10003;</span> : null}
                 <p>{lesson.goal}</p>
-                <p className="status">{unlocked ? progress : "locked"}</p>
+                <LockableProgress
+                  unlocked={unlocked}
+                  value={completeCount}
+                  max={lesson.unitIds.length}
+                />
               </button>
             </li>
           );

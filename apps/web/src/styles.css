@@ -553,19 +553,103 @@ button.speaker {
   margin-bottom: 1rem;
 }
 
-/* Unit screen kind-partitioned sections (Theory/Vocabulary/Concepts/
- * Examples/Quiz restructure): plain `<details open>` disclosure widgets, no
- * new tab-state component. */
-.unit-section {
-  margin: 1.5rem 0;
+/* Unit screen: paginated Trail direction (plan 0010) — a dot-trail of
+ * Overview/Theory/Vocabulary/Concepts/Examples pages, each sized to fit one
+ * mobile screen, plus a persistent sticky Practice bar. Root needs the same
+ * bottom padding `main.session` uses so the sticky bar never hides the last
+ * item of a page (that class is SessionScreen-specific, so this is its own). */
+main.unit-screen {
+  padding-bottom: 9rem;
 }
 
-.unit-section > summary {
+.trail {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  margin: 0.5rem 0 1.5rem;
+}
+
+.trail::before {
+  content: "";
+  position: absolute;
+  left: 0.5rem;
+  right: 0.5rem;
+  height: 1px;
+  background: var(--card-border);
+  z-index: 0;
+}
+
+.trail .dot {
+  position: relative;
+  z-index: 1;
+  width: 0.5rem;
+  height: 0.5rem;
+  min-height: 0;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  transition:
+    width 150ms ease,
+    background-color 150ms ease;
+}
+
+.trail .dot.active {
+  width: 1.5rem;
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.5rem;
+  font-size: 0.8rem;
   font-weight: 800;
-  font-size: 1.3rem;
-  line-height: 1.2;
-  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent);
+}
+
+.sub-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
   margin-bottom: 0.75rem;
+}
+
+.sub-pager button {
+  min-width: 44px;
+}
+
+/* Practice bar (plan 0010): persistent across every Unit page, amber-filled
+ * like `.action-bar`'s verdict states. Composes `.action-bar`/`.action-bar-
+ * inner` for the shared fixed-bottom position/layout (see UnitScreen.tsx —
+ * rendered as `className="action-bar unit-practice-bar"`), overriding only
+ * what's actually different: color, and a tighter inner gap. */
+.unit-practice-bar {
+  background: var(--primary);
+  color: var(--on-primary);
+  border-top: 1px solid var(--primary);
+}
+
+.unit-practice-bar-inner {
+  gap: 0.35rem;
+}
+
+.unit-practice-bar button {
+  background: var(--on-primary);
+  color: var(--primary);
+  border-color: transparent;
+}
+
+.unit-practice-bar .status {
+  color: var(--on-primary);
+  opacity: 0.85;
 }
 
 .vocab-table {
