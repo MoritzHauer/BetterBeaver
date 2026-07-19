@@ -21,6 +21,7 @@ export function TopicListScreen({
   onSelectTopic,
   onDomainVocabulary,
   onDomainReview,
+  onAuthor,
 }: {
   domains: DomainSummary[];
   topics: TopicSummary[];
@@ -31,6 +32,8 @@ export function TopicListScreen({
   onSelectTopic: (topicId: string) => void;
   onDomainVocabulary: (domainId: string) => void;
   onDomainReview: (domainId: string) => void;
+  /** Author entry (plan 0012); absent when the backend isn't configured. */
+  onAuthor?: () => void;
 }) {
   return (
     <main>
@@ -84,6 +87,13 @@ export function TopicListScreen({
           </ul>
         </section>
       ))}
+      {onAuthor !== undefined && (
+        <p className="author-entry">
+          <button className="plain" onClick={onAuthor}>
+            ✏️ Edit content
+          </button>
+        </p>
+      )}
     </main>
   );
 }

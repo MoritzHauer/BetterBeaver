@@ -13,6 +13,7 @@
     "@betterbeaver/engine": "workspace:*",
     "@betterbeaver/schema": "workspace:*",
     "@betterbeaver/srs": "workspace:*",
+    "@supabase/supabase-js": "^2.110.7",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },

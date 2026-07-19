@@ -39,6 +39,10 @@ import {
 } from "./screens/VocabularyScreen";
 import { ErrorScreen } from "./screens/ErrorScreen";
 import { StartScreen } from "./screens/StartScreen";
+import { AuthorScreen } from "./screens/AuthorScreen";
+import { EditScreen } from "./screens/EditScreen";
+import { PrivacyScreen } from "./screens/PrivacyScreen";
+import { getSupabase } from "./backend/supabase";
 
 type Screen =
   | { screen: "topics" }
@@ -65,7 +69,12 @@ type Screen =
   // review queue, lists, and streak all key on the domain now, not the topic.
   | { screen: "review"; domainId: string }
   | { screen: "vocab"; domainId: string }
-  | { screen: "adhoc"; domainId: string; mode: AdhocMode; itemIds: string[] };
+  | { screen: "adhoc"; domainId: string; mode: AdhocMode; itemIds: string[] }
+  // Authoring (plan 0012 step 2): sign-in + document list, the editor, and
+  // the static privacy note. Learner flows never route here.
+  | { screen: "author" }
+  | { screen: "edit"; docId: string }
+  | { screen: "privacy" };
 
 type ContentSourceResult = { source: ContentSource } | { errors: string[] };
 
@@ -543,6 +552,27 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     return <StartScreen onStart={() => setStarted(true)} />;
   }
 
+  if (screen.screen === "author") {
+    return (
+      <AuthorScreen
+        onOpenDocument={(docId) => setScreen({ screen: "edit", docId })}
+        onPrivacy={() => setScreen({ screen: "privacy" })}
+        onBack={() => setScreen({ screen: "topics" })}
+      />
+    );
+  }
+  if (screen.screen === "edit") {
+    return (
+      <EditScreen
+        docId={screen.docId}
+        onBack={() => setScreen({ screen: "author" })}
+      />
+    );
+  }
+  if (screen.screen === "privacy") {
+    return <PrivacyScreen onBack={() => setScreen({ screen: "author" })} />;
+  }
+
   if (screen.screen === "topics") {
     const hasDownload =
       update !== null &&
@@ -586,6 +616,11 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           }
           onDomainReview={(domainId) =>
             setScreen({ screen: "review", domainId })
+          }
+          onAuthor={
+            getSupabase() !== null
+              ? () => setScreen({ screen: "author" })
+              : undefined
           }
         />
       </>

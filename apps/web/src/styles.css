@@ -796,3 +796,115 @@ main.unit-screen {
   flex: 1 1 12rem;
   font-size: 0.9rem;
 }
+
+/* Authoring screens (plan 0012 step 2). Form controls inherit the
+ * input[type="text"] look; the editor stays plain — it's a tool, not the
+ * learner experience. */
+input[type="email"],
+.editor textarea,
+.editor select {
+  font: inherit;
+  color: inherit;
+  width: 100%;
+  min-height: 44px;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--card-border);
+  border-radius: 0.75rem;
+  background: var(--card-bg);
+}
+
+.field {
+  display: block;
+  margin: 0.75rem 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.field input,
+.field textarea,
+.field select {
+  margin-top: 0.25rem;
+  font-weight: 400;
+}
+
+.field .status {
+  display: block;
+  font-weight: 400;
+}
+
+.editor-list {
+  list-style: none;
+  margin: 0.5rem 0;
+  padding: 0;
+}
+
+.editor-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--card-border);
+  overflow-wrap: anywhere;
+}
+
+.editor-row-actions {
+  display: flex;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+.editor-row-actions .plain {
+  min-height: 36px;
+  padding: 0.3rem 0.5rem;
+}
+
+.editor-add {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0.5rem 0 1.25rem;
+}
+
+.editor-add input,
+.editor-add select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.editor-add button {
+  flex-shrink: 0;
+}
+
+.editor-publish {
+  margin-top: 1.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.editor-publish ul {
+  flex-basis: 100%;
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.error-text {
+  color: var(--incorrect-fill, #b3261e);
+}
+
+button.danger {
+  color: var(--incorrect-fill, #b3261e);
+}
+
+.link-button {
+  display: inline;
+  padding: 0;
+  min-height: 0;
+  text-decoration: underline;
+}
+
+.author-entry {
+  margin-top: 2rem;
+  text-align: center;
+}

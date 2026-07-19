@@ -1,0 +1,69 @@
+import {
+  CONTENT_SCHEMA_VERSION,
+  type DomainDocument,
+  type TopicDocument,
+} from "@betterbeaver/schema";
+import {
+  ContentValidationError,
+  createDocumentContentSource,
+} from "@betterbeaver/engine";
+import { bundledAssetStems } from "../content/bundled";
+import { getSupabase } from "./supabase";
+
+/**
+ * Publish-time validation (plan 0012 §3): the draft, assembled with the
+ * published rest of the catalog, must form a valid content set. Symmetric
+ * by construction — a topic draft is checked against its published domain,
+ * a domain draft against every published topic of that domain — because the
+ * whole listed set is always assembled. Returns human-readable errors;
+ * empty means publishable.
+ */
+export async function validateForPublish(
+  docId: string,
+  kind: "topic" | "domain",
+  draft: TopicDocument | DomainDocument,
+): Promise<string[]> {
+  const supabase = getSupabase();
+  if (supabase === null) {
+    return ["backend not configured"];
+  }
+  const { data, error } = await supabase
+    .from("catalog")
+    .select("id,kind,published,schema_version");
+  if (error) {
+    return [`could not load the published catalog: ${error.message}`];
+  }
+  const topics = new Map<string, TopicDocument>();
+  const domains = new Map<string, DomainDocument>();
+  for (const row of data as {
+    id: string;
+    kind: "topic" | "domain";
+    published: unknown;
+    schema_version: number;
+  }[]) {
+    if (row.schema_version > CONTENT_SCHEMA_VERSION) {
+      return [
+        `the published catalog contains newer-schema content (${row.id}) — update the app before publishing`,
+      ];
+    }
+    if (row.kind === "topic") {
+      topics.set(row.id, row.published as TopicDocument);
+    } else {
+      domains.set(row.id, row.published as DomainDocument);
+    }
+  }
+  if (kind === "topic") {
+    topics.set(docId, draft as TopicDocument);
+  } else {
+    domains.set(docId, draft as DomainDocument);
+  }
+  try {
+    createDocumentContentSource(topics, domains, bundledAssetStems());
+    return [];
+  } catch (validationError) {
+    if (validationError instanceof ContentValidationError) {
+      return validationError.errors;
+    }
+    throw validationError;
+  }
+}

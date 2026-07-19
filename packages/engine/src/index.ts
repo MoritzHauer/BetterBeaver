@@ -1,4 +1,5 @@
 export * from "./adhoc.js";
+export * from "./documentEdit.js";
 export * from "./documentSource.js";
 export * from "./domain.js";
 export * from "./interfaces.js";
