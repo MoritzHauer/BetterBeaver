@@ -19,6 +19,25 @@
  */
 export const CONTENT_SCHEMA_VERSION = 1;
 
+/**
+ * Backend/cache document identity: `<kind>:<content-id>` (e.g.
+ * `topic:kyrgyz`, `domain:ky`). Topics and domains are separate id
+ * namespaces in the content model (a `demo` topic and a `demo` domain
+ * legitimately coexist), but documents share one primary key — the prefix
+ * keeps them from colliding.
+ */
+export function documentId(
+  kind: "topic" | "domain",
+  contentId: string,
+): string {
+  return `${kind}:${contentId}`;
+}
+
+/** Inverse of `documentId`; returns the raw id unchanged if unprefixed. */
+export function contentIdOf(docId: string): string {
+  return docId.replace(/^(topic|domain):/, "");
+}
+
 export interface TopicDocumentNote {
   /** Note ids derive as `<topic.code>-note-<stem>` inside `validateContent`. */
   stem: string;

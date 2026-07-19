@@ -11,7 +11,7 @@
 -- ---------------------------------------------------------------- tables
 
 create table public.documents (
-  id                text primary key,
+  id                text primary key,  -- '<kind>:<content-id>', e.g. 'topic:kyrgyz' — topics and domains are separate content-id namespaces
   kind              text not null check (kind in ('topic', 'domain')),
   published         jsonb,
   published_version int  not null default 0,
@@ -81,6 +81,11 @@ $$;
 
 revoke all on public.documents, public.versions, public.maintainers,
   public.admins, public.proposals from anon, authenticated;
+
+-- The service key (seed/export scripts, admin surgery) gets full access;
+-- it bypasses RLS by role attribute but still needs table grants.
+grant all on public.documents, public.versions, public.maintainers,
+  public.admins, public.proposals to service_role;
 
 grant select on public.documents to authenticated;
 grant insert (id, kind, draft, schema_version, created_by)

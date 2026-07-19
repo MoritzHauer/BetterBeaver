@@ -6,9 +6,10 @@
 //   SUPABASE_URL=https://<ref>.supabase.co \
 //   SUPABASE_ANON_KEY=... \
 //   node scripts/export-content.ts
-import type {
-  DomainDocument,
-  TopicDocument,
+import {
+  contentIdOf,
+  type DomainDocument,
+  type TopicDocument,
 } from "../packages/schema/src/documents.ts";
 import { writeDomainDocument, writeTopicDocument } from "./content-fs.ts";
 
@@ -34,9 +35,9 @@ const rows = (await response.json()) as {
 
 for (const row of rows) {
   if (row.kind === "topic") {
-    writeTopicDocument(row.id, row.published as TopicDocument);
+    writeTopicDocument(contentIdOf(row.id), row.published as TopicDocument);
   } else {
-    writeDomainDocument(row.id, row.published as DomainDocument);
+    writeDomainDocument(contentIdOf(row.id), row.published as DomainDocument);
   }
 }
 

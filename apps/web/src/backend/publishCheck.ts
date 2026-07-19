@@ -1,5 +1,6 @@
 import {
   CONTENT_SCHEMA_VERSION,
+  contentIdOf,
   type DomainDocument,
   type TopicDocument,
 } from "@betterbeaver/schema";
@@ -46,16 +47,17 @@ export async function validateForPublish(
         `the published catalog contains newer-schema content (${row.id}) — update the app before publishing`,
       ];
     }
+    // Backend document ids are kind-prefixed; the builder keys on content ids.
     if (row.kind === "topic") {
-      topics.set(row.id, row.published as TopicDocument);
+      topics.set(contentIdOf(row.id), row.published as TopicDocument);
     } else {
-      domains.set(row.id, row.published as DomainDocument);
+      domains.set(contentIdOf(row.id), row.published as DomainDocument);
     }
   }
   if (kind === "topic") {
-    topics.set(docId, draft as TopicDocument);
+    topics.set(contentIdOf(docId), draft as TopicDocument);
   } else {
-    domains.set(docId, draft as DomainDocument);
+    domains.set(contentIdOf(docId), draft as DomainDocument);
   }
   try {
     createDocumentContentSource(topics, domains, bundledAssetStems());

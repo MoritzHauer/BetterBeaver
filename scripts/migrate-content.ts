@@ -5,7 +5,10 @@
 //   SUPABASE_URL=https://<ref>.supabase.co \
 //   SUPABASE_SERVICE_ROLE_KEY=... \
 //   node scripts/migrate-content.ts [--force]
-import { CONTENT_SCHEMA_VERSION } from "../packages/schema/src/documents.ts";
+import {
+  CONTENT_SCHEMA_VERSION,
+  documentId,
+} from "../packages/schema/src/documents.ts";
 import { loadContentDocuments } from "./content-fs.ts";
 
 const url = process.env.SUPABASE_URL;
@@ -46,8 +49,16 @@ if (existing.length > 0 && !process.argv.includes("--force")) {
 
 const { topics, domains } = loadContentDocuments();
 const rows = [
-  ...[...topics].map(([id, doc]) => ({ id, kind: "topic", doc })),
-  ...[...domains].map(([id, doc]) => ({ id, kind: "domain", doc })),
+  ...[...topics].map(([id, doc]) => ({
+    id: documentId("topic", id),
+    kind: "topic",
+    doc,
+  })),
+  ...[...domains].map(([id, doc]) => ({
+    id: documentId("domain", id),
+    kind: "domain",
+    doc,
+  })),
 ];
 
 await rest("documents?on_conflict=id", {

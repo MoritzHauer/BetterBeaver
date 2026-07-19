@@ -28,7 +28,7 @@ supabase db push                    # applies pending migrations
    Maintainers are assigned the same way for now (in-app listing/maintainer UI is post-handoff):
    ```sql
    insert into public.maintainers (doc_id, user_id)
-     select 'kyrgyz', id from auth.users where email = 'author@example.com';
+     select 'topic:kyrgyz', id from auth.users where email = 'author@example.com';
    ```
 
 ## App configuration

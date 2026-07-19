@@ -1,4 +1,8 @@
-import type { DomainDocument, TopicDocument } from "@betterbeaver/schema";
+import {
+  contentIdOf,
+  type DomainDocument,
+  type TopicDocument,
+} from "@betterbeaver/schema";
 import {
   ContentValidationError,
   createDocumentContentSource,
@@ -58,10 +62,12 @@ function toDocumentMaps(docs: CachedDocument[]): {
   const topics = new Map<string, TopicDocument>();
   const domains = new Map<string, DomainDocument>();
   for (const record of docs) {
+    // Cache/backend ids are kind-prefixed (`topic:demo` vs `domain:demo`);
+    // the builder's maps key on bare content ids.
     if (record.kind === "topic") {
-      topics.set(record.id, record.doc as TopicDocument);
+      topics.set(contentIdOf(record.id), record.doc as TopicDocument);
     } else {
-      domains.set(record.id, record.doc as DomainDocument);
+      domains.set(contentIdOf(record.id), record.doc as DomainDocument);
     }
   }
   return { topics, domains };
