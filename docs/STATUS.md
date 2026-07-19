@@ -17,6 +17,7 @@ One line per plan, plus what deliberately doesn't exist yet. Update when a plan 
 | [0009 Artwork and icons](plans/0009-artwork-and-icons.md)                             | implemented 2026-07-17 (steps 1–6) — beaver mascot artwork, full app-icon set (favicon/PWA/maskable/apple-touch), start screen, hand-authored SVG UI icons                                                                                                                                                    |
 | [0010 Unit screen redesign](plans/0010-unit-screen-redesign.md)                       | implemented 2026-07-18 (steps 1–6, `pnpm check` green, browser-verified, code-reviewed) — paginated Unit screen (dot-trail, per-note/chunked overflow), pooled shuffled unit-practice session, pin moves into `SessionScreen`, graphical progress bars on Lesson/Topic/TopicList                              |
 | [0011 Unit screen follow-ups](plans/0011-unit-screen-follow-ups.md)                   | implemented 2026-07-18 — scrollable Vocabulary (dropped its sub-pager), compact Practice bar with a real question/flashcard count (`countUnitQuestions`), persistent back-arrow header shared with the dot-trail                                                                                              |
+| [0012 Content backend & editing](plans/0012-content-backend-and-editing.md)           | designed 2026-07-19 (10-question grilling + 2 adversarial review rounds, approved), not yet implemented — Supabase content backend, JSON documents, in-app editing with per-document maintainers, proposals, opt-in learner updates; steps 1–2 scheduled next, step 3 as post-handoff specs                   |
 
 ## Works today
 
@@ -25,7 +26,7 @@ Offline-first PWA; bundled content (Kyrgyz + demo topics) validated at startup; 
 ## Not yet built
 
 - **User settings** — no settings screen, no persisted preferences.
-- **Remote/selective content download** — all content is build-time bundled (fine at current ~500 KB); the `ContentSource` seam is where a remote source plugs in (milestone 3).
+- **Remote/selective content download** — all content is build-time bundled; the design for the remote source (and in-app editing on top of it) is pinned by [plan 0012](plans/0012-content-backend-and-editing.md), implementation scheduled as its steps 1–2.
 - **Play Store packaging** — PWA installs from the browser; TWA/Bubblewrap when a store listing is wanted.
 - **Manual ingest backlog** — 13 of the Peace Corps manual's 15 lessons remain (plan 0007 scoped 7, shipped 2): 5 scoped with line ranges (Transportation, Bazaar, Post Office, Appearance, Weather) and 8 unscoped (Food, Apartment, Kiosk, Grocery, Department Store, Health, Daily Routine, At Work — each needs its own line-range pass first). Each is a run of the `/ingest` pipeline; per-lesson labor varies (see plan 0007's resolved questions).
 - **Kyrgyz audio/picture tasks** — the task types ship (plan 0002) but no Kyrgyz unit uses them; blocked on the audio-production pipeline (TTS vs. recordings — open since plan 0002).

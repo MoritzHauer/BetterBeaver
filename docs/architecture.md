@@ -1,6 +1,6 @@
 # Architecture
 
-Status: living document · Created 2026-07-06 · Last updated 2026-07-18 (reflects plans 0001–0009 as shipped) · Normative sources: the [plans](plans/); requirements and decision index: [design.md](design.md)
+Status: living document · Created 2026-07-06 · Last updated 2026-07-19 (reflects plans 0001–0011 as shipped, plan 0012 as designed) · Normative sources: the [plans](plans/); requirements and decision index: [design.md](design.md)
 
 ## Invariants (hold across all milestones)
 
@@ -86,8 +86,8 @@ graph TD
         sources --> ingest
     end
 
-    subgraph distribution ["Distribution (M3)"]
-        catalog["Remote topic catalog<br/>(DB or static packs — decided at M3)"]
+    subgraph distribution ["Distribution (designed: plan 0012)"]
+        catalog["Supabase content backend<br/>jsonb documents (draft/published/history) ·<br/>maintainers · proposals · catalog view · publish RPC"]
     end
     ingest --> catalog
 
@@ -120,6 +120,6 @@ graph TD
     syncstore <--> syncBackend
 ```
 
-Milestone scope, order, and rationale live in [plan 0001's roadmap](plans/0001-content-schema-and-kyrgyz-slice.md#roadmap-later-milestones--order-decided-at-each-retro) (order decided at each retro) — not duplicated here. M2 landed as plan 0007: `/ingest` is a human-in-the-loop checklist skill, not an automated pipeline. Architecturally, each remaining milestone is one of only three kinds of change: a new implementation of a pinned interface (M3 `RemoteContentSource`, M5 sync-backed `ProgressStore`), a union extension in the core (M4 item kinds and task types), or something entirely outside the app (M3 catalog, M5 sync service).
+Milestone scope, order, and rationale live in [plan 0001's roadmap](plans/0001-content-schema-and-kyrgyz-slice.md#roadmap-later-milestones--order-decided-at-each-retro) (order decided at each retro) — not duplicated here. M2 landed as plan 0007: `/ingest` is a human-in-the-loop checklist skill, not an automated pipeline. **M3's open question ("DB or static packs") is now decided by [plan 0012](plans/0012-content-backend-and-editing.md)**: a Supabase backend storing whole JSON documents, with in-app editing (per-document maintainers, drafts, atomic publish, proposals) on top — a scope beyond the original M3 because editing, not just distribution, became the requirement; accounts arrive for authors only (an explicit amendment of the M5 "accounts are opt-in, later" decision — learners stay account-free). Plan 0012 §9 also pins the M5 progress-sync design (local-first `SyncedProgressStore`, merge rules) without scheduling it. Architecturally, each remaining milestone is still one of only three kinds of change: a new implementation of a pinned interface (`RemoteContentSource`, sync-backed `ProgressStore`), a union extension in the core (M4 item kinds and task types), or something entirely outside the app (the Supabase backend, the sync service).
 
 The target diagram is a direction, not a commitment: each milestone's concrete design is decided when it starts, constrained only by the four invariants and the two pinned interfaces.
