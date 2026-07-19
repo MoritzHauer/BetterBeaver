@@ -312,6 +312,26 @@ export function EditScreen({
     | { s: "done" }
   >({ s: "idle" });
   const dirtyRef = useRef(false);
+  const workingRef = useRef<AnyDoc | null>(null);
+  workingRef.current = working;
+
+  // A pending debounced save must survive leaving the editor: flush it on
+  // unmount, and warn before the tab closes — navigation must never drop an
+  // edit (plan 0012 §7 autosave).
+  useEffect(() => {
+    const warn = (event: BeforeUnloadEvent) => {
+      if (dirtyRef.current) {
+        event.preventDefault();
+      }
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => {
+      window.removeEventListener("beforeunload", warn);
+      if (dirtyRef.current && workingRef.current !== null) {
+        void saveDraft(docId, workingRef.current);
+      }
+    };
+  }, [docId]);
 
   useEffect(() => {
     loadDocument(docId).then(

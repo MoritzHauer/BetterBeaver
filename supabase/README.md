@@ -44,6 +44,17 @@ Unset → the app runs bundled-only (dev convenience and the permanent escape ha
 
 The `service_role` key bypasses everything — it is used only by `scripts/migrate-content.ts`, run locally, never committed, never in CI.
 
+## Publishing local content/ edits (ingest, schema bumps)
+
+Content authored locally in the `content/` tree (an `/ingest` run, or the admin republish step of a `CONTENT_SCHEMA_VERSION` bump) ships with:
+
+```sh
+corepack pnpm check   # validates the content/ tree — must be green first
+SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... node scripts/republish-content.ts
+```
+
+Only changed documents get a version bump (with a `versions` history row — never use `migrate-content.ts --force` for this, it resets history); new documents are inserted unlisted until the admin lists them (`update public.documents set listed = true where id = '<doc id>';` in the SQL editor — the `set_listed` RPC needs a signed-in admin, which the SQL editor is not). In-app drafts are left alone: a maintainer publishing over a script-bumped version hits the RPC's "reload" conflict, by design.
+
 ## Refreshing the bundled seed
 
 Part of every `CONTENT_SCHEMA_VERSION` bump (plan 0012 §8), or whenever the frozen seed should catch up:

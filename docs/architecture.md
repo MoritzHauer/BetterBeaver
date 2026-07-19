@@ -1,6 +1,6 @@
 # Architecture
 
-Status: living document · Created 2026-07-06 · Last updated 2026-07-19 (reflects plans 0001–0011 as shipped, plan 0012 as designed) · Normative sources: the [plans](plans/); requirements and decision index: [design.md](design.md)
+Status: living document · Created 2026-07-06 · Last updated 2026-07-19 (reflects plans 0001–0011 as shipped, plan 0012 steps 1–2 as shipped, step 3 as [specs](specs/)) · Normative sources: the [plans](plans/); requirements and decision index: [design.md](design.md)
 
 ## Invariants (hold across all milestones)
 

@@ -41,7 +41,7 @@
   --fg: #221a10;
   --card-bg: #f8f4ee;
   --card-border: #ddd5c9;
-  --locked-fg: #8a8378;
+  --locked-fg: #6e6759;
   --primary: #e08820;
   --primary-pressed: #c27314;
   --on-primary: #241503;
@@ -53,6 +53,12 @@
   --incorrect-bg: rgba(198, 40, 40, 0.12);
   --incorrect-fill: #c62828;
   --on-fill: #ffffff;
+  /* Text-on-background tokens (ui-review 2026-07-19): fills are for
+   * surfaces under --on-fill, never for text — these are the AA text/border
+   * counterparts per theme. */
+  --error-text: #c62828;
+  --done-text: #1e5c22;
+  --input-border: #8f8779;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -61,7 +67,7 @@
     --fg: #efe9df;
     --card-bg: #221e17;
     --card-border: #40392e;
-    --locked-fg: #7d766a;
+    --locked-fg: #948c7e;
     --primary: #e08820;
     --primary-pressed: #f39c3a;
     --on-primary: #241503;
@@ -73,6 +79,9 @@
     --incorrect-bg: rgba(239, 83, 80, 0.15);
     --incorrect-fill: #8e1f1c;
     --on-fill: #ffffff;
+    --error-text: #ef5350;
+    --done-text: #4caf50;
+    --input-border: #767061;
   }
 }
 
@@ -154,7 +163,8 @@ button.plain {
 }
 
 :focus-visible {
-  outline: 2px solid var(--primary);
+  /* --accent, not --primary: the amber that is AA against --bg (W1). */
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -173,9 +183,11 @@ button.plain {
   background: var(--card-bg);
 }
 
-/* Direct child only: a whole-card tap target. Buttons nested deeper in a
- * card (e.g. a task card's Practice button) keep the normal button system. */
-.card > button {
+/* Direct child only: a whole-card tap target for card LIST ROWS. Buttons
+ * nested deeper in a card (e.g. a task card's Practice button) — and
+ * classed action buttons inside card panels (publish, sign-in; ui-review
+ * 2026-07-19 C1) — keep the normal button system. */
+.card > button:not(.primary):not(.plain) {
   display: block;
   width: 100%;
   padding: 1rem;
@@ -306,7 +318,8 @@ main.session {
 .progress-fill {
   height: 100%;
   border-radius: inherit;
-  background: var(--primary);
+  /* --accent, not --primary: 3:1 against the track in light mode (F3). */
+  background: var(--accent);
   transition: width 250ms ease;
 }
 
@@ -399,7 +412,7 @@ input[type="text"] {
   width: 100%;
   min-height: 44px;
   padding: 0.6rem 0.75rem;
-  border: 1px solid var(--card-border);
+  border: 1px solid var(--input-border); /* not --card-border: 3:1 field boundary (F2) */
   border-radius: 0.75rem;
   background: var(--card-bg);
 }
@@ -430,7 +443,7 @@ input[type="text"] {
 
 .badge.done {
   background: var(--correct-bg);
-  color: var(--correct-border);
+  color: var(--done-text);
 }
 
 .card.review.primary {
@@ -660,7 +673,7 @@ main.unit-screen {
 
 .unit-practice-count {
   font-size: 0.85rem;
-  opacity: 0.75;
+  opacity: 0.85; /* ≥0.82 keeps AA on --primary (F4) */
 }
 
 .vocab-table {
@@ -808,7 +821,7 @@ input[type="email"],
   width: 100%;
   min-height: 44px;
   padding: 0.6rem 0.75rem;
-  border: 1px solid var(--card-border);
+  border: 1px solid var(--input-border); /* not --card-border: 3:1 field boundary (F2) */
   border-radius: 0.75rem;
   background: var(--card-bg);
 }
@@ -890,11 +903,11 @@ input[type="email"],
 }
 
 .error-text {
-  color: var(--incorrect-fill, #b3261e);
+  color: var(--error-text);
 }
 
 button.danger {
-  color: var(--incorrect-fill, #b3261e);
+  color: var(--error-text);
 }
 
 .link-button {
