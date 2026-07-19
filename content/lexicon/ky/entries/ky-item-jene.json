@@ -2,9 +2,9 @@
   "id": "ky-item-jene",
   "kind": "lexeme",
   "payload": {
+    "gloss": "Older brother's wife, sister-in-law",
     "script": "Жеңе",
-    "transliteration": "jene",
-    "gloss": "Older brother's wife, sister-in-law"
+    "transliteration": "jene"
   },
   "sourceRef": "ky-resource-manual-family"
 }

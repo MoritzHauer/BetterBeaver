@@ -2,9 +2,9 @@
   "id": "ky-item-jakshy-kal",
   "kind": "lexeme",
   "payload": {
+    "gloss": "Bye (informal)",
     "script": "Жакшы кал",
-    "transliteration": "jakshy kal",
-    "gloss": "Bye (informal)"
+    "transliteration": "jakshy kal"
   },
   "sourceRef": "ky-resource-manual-greetings"
 }

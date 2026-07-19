@@ -1,8 +1,7 @@
 {
   "id": "ky-unit-greet-requests",
-  "lessonId": "ky-lesson-greetings",
-  "title": "Polite requests and farewells",
   "goal": "Make polite requests, apologize, and take your leave.",
+  "title": "Polite requests and farewells",
   "itemIds": [
     "ky-item-kechiresiz",
     "ky-item-kaytalap-koyunuzchu",
@@ -34,6 +33,11 @@
     "ky-item-jardam-berip-koyunuzchu",
     "ky-item-kiruugo-mumkunbu"
   ],
+  "noteIds": [
+    "ky-note-greetings-sabak-7",
+    "ky-note-commands-and-requests",
+    "ky-note-greetings-set-expressions"
+  ],
   "taskIds": [
     "ky-task-requests-recognize",
     "ky-task-matching-7-2",
@@ -46,10 +50,6 @@
     "ky-task-matching-11",
     "ky-task-requests-recall"
   ],
-  "noteIds": [
-    "ky-note-greetings-sabak-7",
-    "ky-note-commands-and-requests",
-    "ky-note-greetings-set-expressions"
-  ],
+  "lessonId": "ky-lesson-greetings",
   "unlocksAfterUnitId": "ky-unit-greet-introductions"
 }

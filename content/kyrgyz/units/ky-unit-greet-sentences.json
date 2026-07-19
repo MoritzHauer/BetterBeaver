@@ -1,8 +1,7 @@
 {
   "id": "ky-unit-greet-sentences",
-  "lessonId": "ky-lesson-greetings",
-  "title": "Putting it together",
   "goal": "Build full greeting and introduction sentences from the words you have learned.",
+  "title": "Putting it together",
   "itemIds": [
     "ky-sent-greet-name",
     "ky-sent-greet-how-things",
@@ -20,11 +19,12 @@
     "ky-sent-greet-not-ready",
     "ky-sent-greet-three-classes"
   ],
+  "noteIds": [],
   "taskIds": [
     "ky-task-greet-cloze",
     "ky-task-greet-scramble",
     "ky-task-greet-build"
   ],
-  "noteIds": [],
+  "lessonId": "ky-lesson-greetings",
   "unlocksAfterUnitId": "ky-unit-greet-requests"
 }

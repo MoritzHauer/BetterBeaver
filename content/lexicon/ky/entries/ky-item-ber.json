@@ -2,9 +2,9 @@
   "id": "ky-item-ber",
   "kind": "lexeme",
   "payload": {
+    "gloss": "Give! (command)",
     "script": "Бер",
-    "transliteration": "ber",
-    "gloss": "Give! (command)"
+    "transliteration": "ber"
   },
   "sourceRef": "ky-resource-manual-greetings"
 }

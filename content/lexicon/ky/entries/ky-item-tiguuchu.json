@@ -2,9 +2,9 @@
   "id": "ky-item-tiguuchu",
   "kind": "lexeme",
   "payload": {
+    "gloss": "Seamstress",
     "script": "Тигүүчү",
-    "transliteration": "tiguuchu",
-    "gloss": "Seamstress"
+    "transliteration": "tiguuchu"
   },
   "sourceRef": "ky-resource-manual-family"
 }

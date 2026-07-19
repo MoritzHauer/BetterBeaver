@@ -1,8 +1,7 @@
 {
   "id": "ky-unit-script-consonants",
-  "lessonId": "ky-lesson-script-survival",
-  "title": "Consonants and Kyrgyz letters",
   "goal": "Read the consonants most likely to mislead, plus the three letters unique to Kyrgyz.",
+  "title": "Consonants and Kyrgyz letters",
   "itemIds": [
     "ky-item-letter-ng",
     "ky-item-letter-oe",
@@ -14,7 +13,8 @@
     "ky-item-letter-es",
     "ky-item-letter-ha"
   ],
-  "taskIds": ["ky-task-script-kyrgyz-letters", "ky-task-script-consonants"],
   "noteIds": [],
+  "taskIds": ["ky-task-script-kyrgyz-letters", "ky-task-script-consonants"],
+  "lessonId": "ky-lesson-script-survival",
   "unlocksAfterUnitId": "ky-unit-script-vowels"
 }

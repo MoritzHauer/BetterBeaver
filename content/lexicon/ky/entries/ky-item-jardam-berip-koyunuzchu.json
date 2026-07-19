@@ -2,9 +2,9 @@
   "id": "ky-item-jardam-berip-koyunuzchu",
   "kind": "lexeme",
   "payload": {
+    "gloss": "Help me, please!",
     "script": "Жардам берип коюңузчу!",
-    "transliteration": "jardam berip koyunuzchu",
-    "gloss": "Help me, please!"
+    "transliteration": "jardam berip koyunuzchu"
   },
   "sourceRef": "ky-resource-manual-greetings"
 }

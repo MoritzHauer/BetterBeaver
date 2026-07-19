@@ -2,9 +2,9 @@
   "id": "ky-item-aga",
   "kind": "lexeme",
   "payload": {
+    "gloss": "Older brother",
     "script": "Ага",
-    "transliteration": "aga",
-    "gloss": "Older brother"
+    "transliteration": "aga"
   },
   "sourceRef": "ky-resource-manual-family"
 }

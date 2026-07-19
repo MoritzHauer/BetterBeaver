@@ -2,10 +2,10 @@
   "id": "ky-item-ozunchu",
   "kind": "lexeme",
   "payload": {
-    "script": "Өзүнчү?",
-    "transliteration": "ozunchu",
     "gloss": "And you? (returning a question)",
-    "usageNote": "Tacked onto the end of a question you've just been asked, to bounce it back."
+    "script": "Өзүнчү?",
+    "usageNote": "Tacked onto the end of a question you've just been asked, to bounce it back.",
+    "transliteration": "ozunchu"
   },
   "sourceRef": "ky-resource-manual-greetings"
 }

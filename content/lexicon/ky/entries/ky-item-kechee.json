@@ -2,9 +2,9 @@
   "id": "ky-item-kechee",
   "kind": "lexeme",
   "payload": {
+    "gloss": "Yesterday",
     "script": "Кечээ",
-    "transliteration": "kechee",
-    "gloss": "Yesterday"
+    "transliteration": "kechee"
   },
   "sourceRef": "ky-resource-manual-greetings"
 }

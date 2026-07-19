@@ -2,9 +2,9 @@
   "id": "ky-item-korushkoncho",
   "kind": "lexeme",
   "payload": {
+    "gloss": "See you again",
     "script": "Көрүшкөнчө",
-    "transliteration": "korushkoncho",
-    "gloss": "See you again"
+    "transliteration": "korushkoncho"
   },
   "sourceRef": "ky-resource-manual-greetings"
 }

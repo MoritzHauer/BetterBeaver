@@ -2,10 +2,15 @@
   "id": "ky-item-salamatta-bolunuz",
   "kind": "lexeme",
   "payload": {
-    "script": "Саламатта болуңуз!",
-    "transliteration": "salamatta bolunuz",
     "gloss": "Good bye! (said by the one leaving, to those staying)",
-    "links": [{ "type": "synonym", "entryId": "ky-item-salamatta-kalynyz" }]
+    "links": [
+      {
+        "type": "synonym",
+        "entryId": "ky-item-salamatta-kalynyz"
+      }
+    ],
+    "script": "Саламатта болуңуз!",
+    "transliteration": "salamatta bolunuz"
   },
   "sourceRef": "ky-resource-manual-greetings"
 }

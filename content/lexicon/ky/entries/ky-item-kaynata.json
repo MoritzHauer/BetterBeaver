@@ -2,13 +2,19 @@
   "id": "ky-item-kaynata",
   "kind": "lexeme",
   "payload": {
-    "script": "Кайната",
-    "transliteration": "kaynata",
     "gloss": "Father-in-law",
+    "script": "Кайната",
     "components": [
-      { "script": "кайн", "gloss": "in-law" },
-      { "script": "ата", "gloss": "father" }
-    ]
+      {
+        "gloss": "in-law",
+        "script": "кайн"
+      },
+      {
+        "gloss": "father",
+        "script": "ата"
+      }
+    ],
+    "transliteration": "kaynata"
   },
   "sourceRef": "ky-resource-manual-family"
 }

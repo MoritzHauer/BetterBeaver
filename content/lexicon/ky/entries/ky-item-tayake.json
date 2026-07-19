@@ -2,9 +2,9 @@
   "id": "ky-item-tayake",
   "kind": "lexeme",
   "payload": {
+    "gloss": "Maternal uncle (mother's brother)",
     "script": "Тайаке",
-    "transliteration": "tayake",
-    "gloss": "Maternal uncle (mother's brother)"
+    "transliteration": "tayake"
   },
   "sourceRef": "ky-resource-manual-family"
 }

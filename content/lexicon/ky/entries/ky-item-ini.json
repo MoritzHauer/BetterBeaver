@@ -2,9 +2,9 @@
   "id": "ky-item-ini",
   "kind": "lexeme",
   "payload": {
+    "gloss": "Younger brother",
     "script": "Ини",
-    "transliteration": "ini",
-    "gloss": "Younger brother"
+    "transliteration": "ini"
   },
   "sourceRef": "ky-resource-manual-family"
 }

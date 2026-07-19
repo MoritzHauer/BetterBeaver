@@ -2,9 +2,9 @@
   "id": "ky-item-okuuchu",
   "kind": "lexeme",
   "payload": {
+    "gloss": "Student",
     "script": "Окуучу",
-    "transliteration": "okuuchu",
-    "gloss": "Student"
+    "transliteration": "okuuchu"
   },
   "sourceRef": "ky-resource-manual-greetings"
 }

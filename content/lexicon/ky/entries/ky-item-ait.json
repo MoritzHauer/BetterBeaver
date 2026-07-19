@@ -2,9 +2,9 @@
   "id": "ky-item-ait",
   "kind": "lexeme",
   "payload": {
+    "gloss": "Tell! / Say! (command)",
     "script": "Айт",
-    "transliteration": "ait",
-    "gloss": "Tell! / Say! (command)"
+    "transliteration": "ait"
   },
   "sourceRef": "ky-resource-manual-greetings"
 }

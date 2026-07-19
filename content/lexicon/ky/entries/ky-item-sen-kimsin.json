@@ -2,9 +2,9 @@
   "id": "ky-item-sen-kimsin",
   "kind": "lexeme",
   "payload": {
+    "gloss": "Who are you?",
     "script": "Сен кимсиң?",
-    "transliteration": "sen kimsin",
-    "gloss": "Who are you?"
+    "transliteration": "sen kimsin"
   },
   "sourceRef": "ky-resource-manual-greetings"
 }

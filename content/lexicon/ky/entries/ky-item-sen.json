@@ -2,11 +2,16 @@
   "id": "ky-item-sen",
   "kind": "lexeme",
   "payload": {
-    "script": "сен",
-    "transliteration": "sen",
     "gloss": "you (informal singular)",
+    "links": [
+      {
+        "type": "synonym",
+        "entryId": "ky-item-siz"
+      }
+    ],
+    "script": "сен",
     "usageNote": "For friends, children, and people younger than you. When unsure, use сиз.",
-    "links": [{ "type": "synonym", "entryId": "ky-item-siz" }]
+    "transliteration": "sen"
   },
   "sourceRef": "ky-resource-competencies"
 }

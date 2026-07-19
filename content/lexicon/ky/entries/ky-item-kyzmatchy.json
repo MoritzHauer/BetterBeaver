@@ -2,9 +2,9 @@
   "id": "ky-item-kyzmatchy",
   "kind": "lexeme",
   "payload": {
+    "gloss": "Office worker",
     "script": "Кызматчы",
-    "transliteration": "kyzmatchy",
-    "gloss": "Office worker"
+    "transliteration": "kyzmatchy"
   },
   "sourceRef": "ky-resource-manual-family"
 }

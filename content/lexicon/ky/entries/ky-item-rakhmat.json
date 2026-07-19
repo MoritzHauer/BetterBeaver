@@ -2,10 +2,10 @@
   "id": "ky-item-rakhmat",
   "kind": "lexeme",
   "payload": {
-    "script": "Рахмат",
-    "transliteration": "rahmat",
     "gloss": "Thanks",
-    "usageNote": "Also: Чоң рахмат (more emphatic, 'thanks a lot')."
+    "script": "Рахмат",
+    "usageNote": "Also: Чоң рахмат (more emphatic, 'thanks a lot').",
+    "transliteration": "rahmat"
   },
   "sourceRef": "ky-resource-competencies"
 }

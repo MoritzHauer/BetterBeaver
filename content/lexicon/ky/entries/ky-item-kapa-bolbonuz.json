@@ -2,9 +2,9 @@
   "id": "ky-item-kapa-bolbonuz",
   "kind": "lexeme",
   "payload": {
+    "gloss": "Please, don't get upset!",
     "script": "Капа болбоңуз!",
-    "transliteration": "kapa bolbonuz",
-    "gloss": "Please, don't get upset!"
+    "transliteration": "kapa bolbonuz"
   },
   "sourceRef": "ky-resource-manual-greetings"
 }

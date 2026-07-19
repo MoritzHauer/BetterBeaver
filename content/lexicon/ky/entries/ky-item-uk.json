@@ -2,9 +2,9 @@
   "id": "ky-item-uk",
   "kind": "lexeme",
   "payload": {
+    "gloss": "Listen! (command)",
     "script": "Ук",
-    "transliteration": "uk",
-    "gloss": "Listen! (command)"
+    "transliteration": "uk"
   },
   "sourceRef": "ky-resource-manual-greetings"
 }

@@ -1,8 +1,7 @@
 {
   "id": "ky-unit-family-members",
-  "lessonId": "ky-lesson-family",
-  "title": "Family members",
   "goal": "Name every member of the family, on both the paternal and maternal sides.",
+  "title": "Family members",
   "itemIds": [
     "ky-item-uy-bulo",
     "ky-item-chong-ata",
@@ -25,6 +24,7 @@
     "ky-item-kyz",
     "ky-item-bala"
   ],
+  "noteIds": ["ky-note-family-readings"],
   "taskIds": [
     "ky-task-family-recognize",
     "ky-task-family-matching-1-1",
@@ -34,5 +34,5 @@
     "ky-task-family-matching-3-1",
     "ky-task-family-recall"
   ],
-  "noteIds": ["ky-note-family-readings"]
+  "lessonId": "ky-lesson-family"
 }

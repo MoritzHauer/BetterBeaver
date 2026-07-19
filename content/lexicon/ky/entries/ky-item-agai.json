@@ -2,9 +2,9 @@
   "id": "ky-item-agai",
   "kind": "lexeme",
   "payload": {
+    "gloss": "respectful address for a male teacher",
     "script": "агай",
-    "transliteration": "agai",
-    "gloss": "respectful address for a male teacher"
+    "transliteration": "agai"
   },
   "sourceRef": "ky-resource-competencies"
 }

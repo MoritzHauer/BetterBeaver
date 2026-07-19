@@ -2,9 +2,9 @@
   "id": "ky-item-daryger",
   "kind": "lexeme",
   "payload": {
+    "gloss": "Doctor",
     "script": "Дарыгер",
-    "transliteration": "daryger",
-    "gloss": "Doctor"
+    "transliteration": "daryger"
   },
   "sourceRef": "ky-resource-manual-family"
 }

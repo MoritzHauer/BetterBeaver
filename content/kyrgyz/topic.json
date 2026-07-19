@@ -2,11 +2,11 @@
   "id": "kyrgyz",
   "code": "ky",
   "title": "Kyrgyz",
-  "description": "Kyrgyz language survival basics: read the Cyrillic script, greet people, introduce yourself, and talk about family.",
   "domainId": "ky",
   "lessonIds": [
     "ky-lesson-script-survival",
     "ky-lesson-greetings",
     "ky-lesson-family"
-  ]
+  ],
+  "description": "Kyrgyz language survival basics: read the Cyrillic script, greet people, introduce yourself, and talk about family."
 }

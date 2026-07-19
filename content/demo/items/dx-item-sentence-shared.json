@@ -3,8 +3,8 @@
   "kind": "sentence",
   "payload": {
     "text": "{{c1::I}} {{c2::like}} tea.",
-    "translation": "I like tea.",
-    "audioRef": "dx-audio-sentence-shared"
+    "audioRef": "dx-audio-sentence-shared",
+    "translation": "I like tea."
   },
   "sourceRef": "dx-resource-placeholder"
 }

@@ -2,11 +2,16 @@
   "id": "ky-item-taanyshyp-algyla",
   "kind": "lexeme",
   "payload": {
-    "script": "Таанышып алгыла",
-    "transliteration": "taanyshyp algyla",
     "gloss": "Introduce yourselves to each other (to a group)",
+    "links": [
+      {
+        "type": "synonym",
+        "entryId": "ky-item-taanyshyp-koy"
+      }
+    ],
+    "script": "Таанышып алгыла",
     "usageNote": "The plural -гыла form of Таанышып ал, used when addressing more than one person.",
-    "links": [{ "type": "synonym", "entryId": "ky-item-taanyshyp-koy" }]
+    "transliteration": "taanyshyp algyla"
   },
   "sourceRef": "ky-resource-manual-greetings"
 }

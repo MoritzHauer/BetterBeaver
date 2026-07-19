@@ -2,9 +2,9 @@
   "id": "ky-item-jezde",
   "kind": "lexeme",
   "payload": {
+    "gloss": "Older sister's husband, brother-in-law",
     "script": "Жезде",
-    "transliteration": "jezde",
-    "gloss": "Older sister's husband, brother-in-law"
+    "transliteration": "jezde"
   },
   "sourceRef": "ky-resource-manual-family"
 }

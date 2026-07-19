@@ -1,8 +1,7 @@
 {
   "id": "dx-unit-words",
-  "lessonId": "dx-lesson-showcase",
-  "title": "Everyday words",
   "goal": "Placeholder vocabulary exercising every lexeme-based task type.",
+  "title": "Everyday words",
   "itemIds": [
     "dx-item-word-hello",
     "dx-item-word-yes",
@@ -10,6 +9,7 @@
     "dx-item-word-sun",
     "dx-item-word-house"
   ],
+  "noteIds": [],
   "taskIds": [
     "dx-task-recognize-words",
     "dx-task-recall-words",
@@ -18,5 +18,5 @@
     "dx-task-shadowing-words",
     "dx-task-picture-words"
   ],
-  "noteIds": []
+  "lessonId": "dx-lesson-showcase"
 }

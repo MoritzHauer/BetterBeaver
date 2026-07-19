@@ -2,9 +2,9 @@
   "id": "dx-item-word-hello",
   "kind": "lexeme",
   "payload": {
+    "gloss": "hello (greeting)",
     "script": "Hello",
-    "transliteration": "heh-loh",
-    "gloss": "hello (greeting)"
+    "transliteration": "heh-loh"
   },
   "sourceRef": "dx-resource-placeholder"
 }

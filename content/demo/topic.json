@@ -2,7 +2,7 @@
   "id": "demo",
   "code": "dx",
   "title": "Exercise-type showcase",
-  "description": "Throwaway English-language demo topic exercising every task type and validator edge case; example inputs, not pedagogy.",
   "domainId": "demo",
-  "lessonIds": ["dx-lesson-showcase"]
+  "lessonIds": ["dx-lesson-showcase"],
+  "description": "Throwaway English-language demo topic exercising every task type and validator edge case; example inputs, not pedagogy."
 }

@@ -2,9 +2,9 @@
   "id": "ky-item-amerikanykpyz",
   "kind": "lexeme",
   "payload": {
+    "gloss": "We are Americans",
     "script": "Американыкпыз",
-    "transliteration": "amerikanykpyz",
-    "gloss": "We are Americans"
+    "transliteration": "amerikanykpyz"
   },
   "sourceRef": "ky-resource-manual-greetings"
 }

@@ -2,9 +2,9 @@
   "id": "dx-item-word-thanks",
   "kind": "lexeme",
   "payload": {
+    "gloss": "thank you (gratitude)",
     "script": "Thank you",
-    "transliteration": "thank-you",
-    "gloss": "thank you (gratitude)"
+    "transliteration": "thank-you"
   },
   "sourceRef": "dx-resource-placeholder"
 }

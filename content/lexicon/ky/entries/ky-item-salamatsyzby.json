@@ -2,10 +2,10 @@
   "id": "ky-item-salamatsyzby",
   "kind": "lexeme",
   "payload": {
-    "script": "Саламатсызбы?",
-    "transliteration": "salamatsyzby",
     "gloss": "Hello (polite greeting; literally 'Are you healthy?')",
-    "usageNote": "Works at any time of day. Use it with elders, teachers, and strangers; the younger person greets first."
+    "script": "Саламатсызбы?",
+    "usageNote": "Works at any time of day. Use it with elders, teachers, and strangers; the younger person greets first.",
+    "transliteration": "salamatsyzby"
   },
   "sourceRef": "ky-resource-lessons"
 }

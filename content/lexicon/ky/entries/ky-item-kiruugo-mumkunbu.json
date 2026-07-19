@@ -2,9 +2,9 @@
   "id": "ky-item-kiruugo-mumkunbu",
   "kind": "lexeme",
   "payload": {
+    "gloss": "May I come in?",
     "script": "Кирүүгө мүмкүнбү?",
-    "transliteration": "kiruugo mumkunbu",
-    "gloss": "May I come in?"
+    "transliteration": "kiruugo mumkunbu"
   },
   "sourceRef": "ky-resource-manual-greetings"
 }

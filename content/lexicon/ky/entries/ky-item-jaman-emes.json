@@ -2,9 +2,9 @@
   "id": "ky-item-jaman-emes",
   "kind": "lexeme",
   "payload": {
+    "gloss": "Not bad (literally 'it is not bad')",
     "script": "Жаман эмес",
-    "transliteration": "jaman emes",
-    "gloss": "Not bad (literally 'it is not bad')"
+    "transliteration": "jaman emes"
   },
   "sourceRef": "ky-resource-competencies"
 }

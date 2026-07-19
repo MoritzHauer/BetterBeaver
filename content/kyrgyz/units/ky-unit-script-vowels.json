@@ -1,8 +1,7 @@
 {
   "id": "ky-unit-script-vowels",
-  "lessonId": "ky-lesson-script-survival",
-  "title": "Vowels",
   "goal": "Read every Cyrillic vowel, including the ones that do not sound the way they look.",
+  "title": "Vowels",
   "itemIds": [
     "ky-item-letter-a",
     "ky-item-letter-ye",
@@ -15,6 +14,7 @@
     "ky-item-letter-yu",
     "ky-item-letter-ya"
   ],
+  "noteIds": ["ky-note-alphabet-map"],
   "taskIds": ["ky-task-script-vowels"],
-  "noteIds": ["ky-note-alphabet-map"]
+  "lessonId": "ky-lesson-script-survival"
 }

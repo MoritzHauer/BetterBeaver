@@ -2,10 +2,15 @@
   "id": "ky-item-karyndash",
   "kind": "lexeme",
   "payload": {
-    "script": "Карындаш",
-    "transliteration": "karyndash",
     "gloss": "Younger sister (used by a man)",
-    "links": [{ "type": "synonym", "entryId": "ky-item-sindi" }]
+    "links": [
+      {
+        "type": "synonym",
+        "entryId": "ky-item-sindi"
+      }
+    ],
+    "script": "Карындаш",
+    "transliteration": "karyndash"
   },
   "sourceRef": "ky-resource-manual-family"
 }

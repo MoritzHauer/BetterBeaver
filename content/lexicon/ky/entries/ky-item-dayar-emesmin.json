@@ -2,9 +2,9 @@
   "id": "ky-item-dayar-emesmin",
   "kind": "lexeme",
   "payload": {
+    "gloss": "I am not ready",
     "script": "Даяр эмесмин",
-    "transliteration": "dayar emesmin",
-    "gloss": "I am not ready"
+    "transliteration": "dayar emesmin"
   },
   "sourceRef": "ky-resource-manual-greetings"
 }

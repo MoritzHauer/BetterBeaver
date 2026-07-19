@@ -2,9 +2,9 @@
   "id": "ky-item-salamatchylyk",
   "kind": "lexeme",
   "payload": {
+    "gloss": "I am well (reply to the polite greeting; literally 'health')",
     "script": "Саламатчылык!",
-    "transliteration": "salamatchylyk",
-    "gloss": "I am well (reply to the polite greeting; literally 'health')"
+    "transliteration": "salamatchylyk"
   },
   "sourceRef": "ky-resource-competencies"
 }

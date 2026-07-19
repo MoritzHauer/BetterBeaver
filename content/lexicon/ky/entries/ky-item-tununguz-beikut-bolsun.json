@@ -2,9 +2,9 @@
   "id": "ky-item-tununguz-beikut-bolsun",
   "kind": "lexeme",
   "payload": {
+    "gloss": "Good night",
     "script": "Түнүңүз бейкут болсун",
-    "transliteration": "tununguz beikut bolsun",
-    "gloss": "Good night"
+    "transliteration": "tununguz beikut bolsun"
   },
   "sourceRef": "ky-resource-manual-greetings"
 }

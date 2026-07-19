@@ -1,8 +1,7 @@
 {
   "id": "ky-unit-greet-introductions",
-  "lessonId": "ky-lesson-greetings",
-  "title": "Introducing yourself and others",
   "goal": "Introduce yourself and others, and give basic personal information including origin, occupation, and marital status.",
+  "title": "Introducing yourself and others",
   "itemIds": [
     "ky-item-menin-atym",
     "ky-item-senin-atyng-kim",
@@ -39,6 +38,16 @@
     "ky-item-boydokmun",
     "ky-item-albette"
   ],
+  "noteIds": [
+    "ky-note-introducing-yourself",
+    "ky-note-greetings-sabak-4",
+    "ky-note-greetings-sabak-5",
+    "ky-note-greetings-sabak-6",
+    "ky-note-personal-pronouns",
+    "ky-note-plural-nouns",
+    "ky-note-possessive-endings",
+    "ky-note-genitive-case"
+  ],
   "taskIds": [
     "ky-task-people-recognize",
     "ky-task-personal-recognize",
@@ -53,15 +62,6 @@
     "ky-task-people-recall",
     "ky-task-personal-recall"
   ],
-  "noteIds": [
-    "ky-note-introducing-yourself",
-    "ky-note-greetings-sabak-4",
-    "ky-note-greetings-sabak-5",
-    "ky-note-greetings-sabak-6",
-    "ky-note-personal-pronouns",
-    "ky-note-plural-nouns",
-    "ky-note-possessive-endings",
-    "ky-note-genitive-case"
-  ],
+  "lessonId": "ky-lesson-greetings",
   "unlocksAfterUnitId": "ky-unit-greet-choosing"
 }

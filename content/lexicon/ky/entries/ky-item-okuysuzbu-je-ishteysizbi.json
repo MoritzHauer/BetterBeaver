@@ -2,10 +2,10 @@
   "id": "ky-item-okuysuzbu-je-ishteysizbi",
   "kind": "lexeme",
   "payload": {
-    "script": "Сиз окуйсузбу же иштейсизби?",
-    "transliteration": "siz okuysuzbu je ishteysizbi",
     "gloss": "Do you study or work? (polite)",
-    "usageNote": "же \"or\" joins the two yes/no questions into one choice question."
+    "script": "Сиз окуйсузбу же иштейсизби?",
+    "usageNote": "же \"or\" joins the two yes/no questions into one choice question.",
+    "transliteration": "siz okuysuzbu je ishteysizbi"
   },
   "sourceRef": "ky-resource-manual-greetings"
 }

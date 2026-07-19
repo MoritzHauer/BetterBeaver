@@ -2,10 +2,10 @@
   "id": "ky-item-ishter-kanday",
   "kind": "lexeme",
   "payload": {
-    "script": "Иштер кандай?",
-    "transliteration": "ishter kanday",
     "gloss": "How are you? (informal; literally 'How are the works?')",
-    "usageNote": "Follows a greeting. Кандай? alone works too."
+    "script": "Иштер кандай?",
+    "usageNote": "Follows a greeting. Кандай? alone works too.",
+    "transliteration": "ishter kanday"
   },
   "sourceRef": "ky-resource-manual-greetings"
 }

@@ -2,10 +2,10 @@
   "id": "ky-item-boydokmun",
   "kind": "lexeme",
   "payload": {
-    "script": "Бойдокмун",
-    "transliteration": "boydokmun",
     "gloss": "I'm single",
-    "usageNote": "бойдок \"single/unmarried\" plus the first-person ending -мун."
+    "script": "Бойдокмун",
+    "usageNote": "бойдок \"single/unmarried\" plus the first-person ending -мун.",
+    "transliteration": "boydokmun"
   },
   "sourceRef": "ky-resource-manual-greetings"
 }

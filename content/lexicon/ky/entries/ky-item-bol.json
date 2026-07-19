@@ -2,9 +2,9 @@
   "id": "ky-item-bol",
   "kind": "lexeme",
   "payload": {
+    "gloss": "Be! (command)",
     "script": "Бол",
-    "transliteration": "bol",
-    "gloss": "Be! (command)"
+    "transliteration": "bol"
   },
   "sourceRef": "ky-resource-manual-greetings"
 }

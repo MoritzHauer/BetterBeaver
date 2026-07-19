@@ -2,9 +2,9 @@
   "id": "ky-item-kuyoo",
   "kind": "lexeme",
   "payload": {
+    "gloss": "Husband",
     "script": "Күйөө",
-    "transliteration": "kuyoo",
-    "gloss": "Husband"
+    "transliteration": "kuyoo"
   },
   "sourceRef": "ky-resource-manual-greetings"
 }

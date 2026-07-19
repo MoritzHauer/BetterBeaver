@@ -2,10 +2,10 @@
   "id": "dx-item-word-house",
   "kind": "lexeme",
   "payload": {
-    "script": "House",
-    "transliteration": "house",
     "gloss": "a house",
-    "imageRef": "dx-img-house"
+    "script": "House",
+    "imageRef": "dx-img-house",
+    "transliteration": "house"
   },
   "sourceRef": "dx-resource-placeholder"
 }

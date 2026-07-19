@@ -2,11 +2,16 @@
   "id": "ky-item-salamatsyzdarby",
   "kind": "lexeme",
   "payload": {
-    "script": "Саламатсыздарбы?",
-    "transliteration": "salamatsyzdarby",
     "gloss": "Hello (polite, to a group)",
+    "links": [
+      {
+        "type": "synonym",
+        "entryId": "ky-item-salamatsyzby"
+      }
+    ],
+    "script": "Саламатсыздарбы?",
     "usageNote": "The plural form of Саламатсызбы?, for greeting more than one person.",
-    "links": [{ "type": "synonym", "entryId": "ky-item-salamatsyzby" }]
+    "transliteration": "salamatsyzdarby"
   },
   "sourceRef": "ky-resource-manual-greetings"
 }

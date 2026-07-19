@@ -2,10 +2,10 @@
   "id": "ky-item-jazuuchu",
   "kind": "lexeme",
   "payload": {
-    "script": "Жазуучу",
-    "transliteration": "jazuuchu",
     "gloss": "Writer",
-    "usageNote": "-чу marks \"the person who does\", added to the verb stem жаз- \"to write\"."
+    "script": "Жазуучу",
+    "usageNote": "-чу marks \"the person who does\", added to the verb stem жаз- \"to write\".",
+    "transliteration": "jazuuchu"
   },
   "sourceRef": "ky-resource-manual-family"
 }

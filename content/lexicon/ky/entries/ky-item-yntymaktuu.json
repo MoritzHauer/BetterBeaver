@@ -2,9 +2,9 @@
   "id": "ky-item-yntymaktuu",
   "kind": "lexeme",
   "payload": {
+    "gloss": "Close-knit, friendly (of a family)",
     "script": "Ынтымактуу",
-    "transliteration": "yntymaktuu",
-    "gloss": "Close-knit, friendly (of a family)"
+    "transliteration": "yntymaktuu"
   },
   "sourceRef": "ky-resource-manual-family"
 }

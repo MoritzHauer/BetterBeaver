@@ -2,9 +2,9 @@
   "id": "ky-item-tushunbey-kaldym",
   "kind": "lexeme",
   "payload": {
+    "gloss": "I don't understand (literally \"I ended up not understanding\")",
     "script": "Түшүнбөй калдым",
-    "transliteration": "tushunboy kaldym",
-    "gloss": "I don't understand (literally \"I ended up not understanding\")"
+    "transliteration": "tushunboy kaldym"
   },
   "sourceRef": "ky-resource-manual-greetings"
 }

@@ -2,9 +2,9 @@
   "id": "ky-item-kyz",
   "kind": "lexeme",
   "payload": {
+    "gloss": "Girl / daughter",
     "script": "Кыз",
-    "transliteration": "kyz",
-    "gloss": "Girl / daughter"
+    "transliteration": "kyz"
   },
   "sourceRef": "ky-resource-manual-family"
 }

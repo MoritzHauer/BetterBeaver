@@ -1,8 +1,8 @@
 {
   "id": "ky-lesson-family",
-  "topicId": "kyrgyz",
-  "title": "Family",
   "goal": "Identify family members, describe your family and its size, and say what family members do for work.",
+  "title": "Family",
+  "topicId": "kyrgyz",
   "unitIds": [
     "ky-unit-family-members",
     "ky-unit-family-occupations",

@@ -2,9 +2,9 @@
   "id": "ky-item-biz",
   "kind": "lexeme",
   "payload": {
+    "gloss": "We",
     "script": "Биз",
-    "transliteration": "biz",
-    "gloss": "We"
+    "transliteration": "biz"
   },
   "sourceRef": "ky-resource-manual-greetings"
 }

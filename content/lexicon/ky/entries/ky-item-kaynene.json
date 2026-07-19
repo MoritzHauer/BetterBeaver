@@ -2,13 +2,19 @@
   "id": "ky-item-kaynene",
   "kind": "lexeme",
   "payload": {
-    "script": "Кайнэне",
-    "transliteration": "kaynene",
     "gloss": "Mother-in-law",
+    "script": "Кайнэне",
     "components": [
-      { "script": "кайн", "gloss": "in-law" },
-      { "script": "эне", "gloss": "mother" }
-    ]
+      {
+        "gloss": "in-law",
+        "script": "кайн"
+      },
+      {
+        "gloss": "mother",
+        "script": "эне"
+      }
+    ],
+    "transliteration": "kaynene"
   },
   "sourceRef": "ky-resource-manual-family"
 }

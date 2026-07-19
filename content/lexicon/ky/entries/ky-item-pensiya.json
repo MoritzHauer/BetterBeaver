@@ -2,10 +2,15 @@
   "id": "ky-item-pensiya",
   "kind": "lexeme",
   "payload": {
-    "script": "Пенсия",
-    "transliteration": "pensiya",
     "gloss": "Pension, retirement",
-    "links": [{ "type": "synonym", "entryId": "ky-item-pensiyada" }]
+    "links": [
+      {
+        "type": "synonym",
+        "entryId": "ky-item-pensiyada"
+      }
+    ],
+    "script": "Пенсия",
+    "transliteration": "pensiya"
   },
   "sourceRef": "ky-resource-manual-family"
 }

@@ -2,10 +2,10 @@
   "id": "ky-item-ejeke",
   "kind": "lexeme",
   "payload": {
-    "script": "эжеке",
-    "transliteration": "ejeke",
     "gloss": "respectful address for an older woman (literally 'older sister')",
-    "usageNote": "From эже 'older sister'; the -ке makes it a respectful form of address."
+    "script": "эжеке",
+    "usageNote": "From эже 'older sister'; the -ке makes it a respectful form of address.",
+    "transliteration": "ejeke"
   },
   "sourceRef": "ky-resource-competencies"
 }

@@ -2,10 +2,10 @@
   "id": "ky-item-aksakal",
   "kind": "lexeme",
   "payload": {
-    "script": "аксакал",
-    "transliteration": "aksakal",
     "gloss": "respected elder man (literally 'white beard')",
-    "usageNote": "Greet an аксакал with Ассалом алейкум."
+    "script": "аксакал",
+    "usageNote": "Greet an аксакал with Ассалом алейкум.",
+    "transliteration": "aksakal"
   },
   "sourceRef": "ky-resource-competencies"
 }

@@ -2,9 +2,9 @@
   "id": "ky-item-kechiresiz",
   "kind": "lexeme",
   "payload": {
+    "gloss": "Excuse me",
     "script": "Кечиресиз",
-    "transliteration": "kechiresiz",
-    "gloss": "Excuse me"
+    "transliteration": "kechiresiz"
   },
   "sourceRef": "ky-resource-manual-greetings"
 }

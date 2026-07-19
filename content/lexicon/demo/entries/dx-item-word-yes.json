@@ -2,9 +2,9 @@
   "id": "dx-item-word-yes",
   "kind": "lexeme",
   "payload": {
+    "gloss": "yes (affirmative)",
     "script": "Yes",
-    "transliteration": "yes",
-    "gloss": "yes (affirmative)"
+    "transliteration": "yes"
   },
   "sourceRef": "dx-resource-placeholder"
 }

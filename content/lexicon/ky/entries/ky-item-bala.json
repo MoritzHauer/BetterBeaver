@@ -2,9 +2,9 @@
   "id": "ky-item-bala",
   "kind": "lexeme",
   "payload": {
+    "gloss": "Child / boy / son",
     "script": "Бала",
-    "transliteration": "bala",
-    "gloss": "Child / boy / son"
+    "transliteration": "bala"
   },
   "sourceRef": "ky-resource-manual-family"
 }

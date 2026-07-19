@@ -2,10 +2,15 @@
   "id": "ky-item-jap",
   "kind": "lexeme",
   "payload": {
-    "script": "Жап",
-    "transliteration": "jap",
     "gloss": "Close! (command)",
-    "links": [{ "type": "antonym", "entryId": "ky-item-ach" }]
+    "links": [
+      {
+        "type": "antonym",
+        "entryId": "ky-item-ach"
+      }
+    ],
+    "script": "Жап",
+    "transliteration": "jap"
   },
   "sourceRef": "ky-resource-manual-greetings"
 }

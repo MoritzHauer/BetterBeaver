@@ -2,9 +2,9 @@
   "id": "ky-item-kechirip-koyunuz",
   "kind": "lexeme",
   "payload": {
+    "gloss": "I'm sorry!",
     "script": "Кечирип коюңуз!",
-    "transliteration": "kechirip koyunuz",
-    "gloss": "I'm sorry!"
+    "transliteration": "kechirip koyunuz"
   },
   "sourceRef": "ky-resource-manual-greetings"
 }

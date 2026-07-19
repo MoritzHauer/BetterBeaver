@@ -2,9 +2,9 @@
   "id": "ky-item-biz-taanyshpyz",
   "kind": "lexeme",
   "payload": {
+    "gloss": "We already know each other",
     "script": "Биз таанышпыз",
-    "transliteration": "biz taanyshpyz",
-    "gloss": "We already know each other"
+    "transliteration": "biz taanyshpyz"
   },
   "sourceRef": "ky-resource-manual-greetings"
 }

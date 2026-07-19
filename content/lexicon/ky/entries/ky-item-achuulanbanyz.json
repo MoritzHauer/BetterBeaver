@@ -2,9 +2,9 @@
   "id": "ky-item-achuulanbanyz",
   "kind": "lexeme",
   "payload": {
+    "gloss": "Please, don't be angry!",
     "script": "Ачууланбаңыз!",
-    "transliteration": "achuulanbanyz",
-    "gloss": "Please, don't be angry!"
+    "transliteration": "achuulanbanyz"
   },
   "sourceRef": "ky-resource-manual-greetings"
 }

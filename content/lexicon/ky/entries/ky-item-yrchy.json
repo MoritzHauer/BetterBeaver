@@ -2,9 +2,9 @@
   "id": "ky-item-yrchy",
   "kind": "lexeme",
   "payload": {
+    "gloss": "Singer",
     "script": "Ырчы",
-    "transliteration": "yrchy",
-    "gloss": "Singer"
+    "transliteration": "yrchy"
   },
   "sourceRef": "ky-resource-manual-family"
 }

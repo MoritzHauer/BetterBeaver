@@ -2,10 +2,15 @@
   "id": "ky-item-turmushka-chykkansynby",
   "kind": "lexeme",
   "payload": {
-    "script": "Турмушка чыккансыңбы?",
-    "transliteration": "turmushka chykkansynby",
     "gloss": "Are you married? (asked of a woman)",
-    "links": [{ "type": "synonym", "entryId": "ky-item-uylongonsunbu" }]
+    "links": [
+      {
+        "type": "synonym",
+        "entryId": "ky-item-uylongonsunbu"
+      }
+    ],
+    "script": "Турмушка чыккансыңбы?",
+    "transliteration": "turmushka chykkansynby"
   },
   "sourceRef": "ky-resource-manual-greetings"
 }

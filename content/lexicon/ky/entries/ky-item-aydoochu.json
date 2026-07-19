@@ -2,9 +2,9 @@
   "id": "ky-item-aydoochu",
   "kind": "lexeme",
   "payload": {
+    "gloss": "Driver",
     "script": "Айдоочу",
-    "transliteration": "aydoochu",
-    "gloss": "Driver"
+    "transliteration": "aydoochu"
   },
   "sourceRef": "ky-resource-manual-family"
 }

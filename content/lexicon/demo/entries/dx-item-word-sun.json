@@ -2,11 +2,11 @@
   "id": "dx-item-word-sun",
   "kind": "lexeme",
   "payload": {
-    "script": "Sun",
-    "transliteration": "sun",
     "gloss": "the sun",
+    "script": "Sun",
     "audioRef": "dx-audio-sun",
-    "imageRef": "dx-img-sun"
+    "imageRef": "dx-img-sun",
+    "transliteration": "sun"
   },
   "sourceRef": "dx-resource-placeholder"
 }

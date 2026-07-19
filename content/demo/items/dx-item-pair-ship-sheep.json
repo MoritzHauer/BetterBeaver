@@ -2,8 +2,14 @@
   "id": "dx-item-pair-ship-sheep",
   "kind": "pair",
   "payload": {
-    "a": { "script": "ship", "audioRef": "dx-audio-pair-a" },
-    "b": { "script": "sheep", "audioRef": "dx-audio-pair-b" },
+    "a": {
+      "script": "ship",
+      "audioRef": "dx-audio-pair-a"
+    },
+    "b": {
+      "script": "sheep",
+      "audioRef": "dx-audio-pair-b"
+    },
     "contrast": "short i /ɪ/ vs long ee /iː/"
   },
   "sourceRef": "dx-resource-placeholder"

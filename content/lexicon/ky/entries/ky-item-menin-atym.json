@@ -2,10 +2,10 @@
   "id": "ky-item-menin-atym",
   "kind": "lexeme",
   "payload": {
-    "script": "Менин атым ...",
-    "transliteration": "menin atym ...",
     "gloss": "My name is ...",
-    "usageNote": "Literally 'my name-my': ат 'name' takes the possessive ending -ым."
+    "script": "Менин атым ...",
+    "usageNote": "Literally 'my name-my': ат 'name' takes the possessive ending -ым.",
+    "transliteration": "menin atym ..."
   },
   "sourceRef": "ky-resource-manual-greetings"
 }

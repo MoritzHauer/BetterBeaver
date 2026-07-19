@@ -2,9 +2,9 @@
   "id": "ky-item-taarynbanyz",
   "kind": "lexeme",
   "payload": {
+    "gloss": "Don't be offended!",
     "script": "Таарынбаңыз!",
-    "transliteration": "taarynbanyz",
-    "gloss": "Don't be offended!"
+    "transliteration": "taarynbanyz"
   },
   "sourceRef": "ky-resource-manual-greetings"
 }

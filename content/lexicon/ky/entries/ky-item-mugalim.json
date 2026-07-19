@@ -2,9 +2,9 @@
   "id": "ky-item-mugalim",
   "kind": "lexeme",
   "payload": {
+    "gloss": "Teacher",
     "script": "Мугалим",
-    "transliteration": "mugalim",
-    "gloss": "Teacher"
+    "transliteration": "mugalim"
   },
   "sourceRef": "ky-resource-manual-greetings"
 }

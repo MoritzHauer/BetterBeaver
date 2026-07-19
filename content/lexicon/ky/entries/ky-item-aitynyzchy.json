@@ -2,9 +2,9 @@
   "id": "ky-item-aitynyzchy",
   "kind": "lexeme",
   "payload": {
+    "gloss": "Tell me, please (polite)",
     "script": "Айтыңызчы",
-    "transliteration": "aitynyzchy",
-    "gloss": "Tell me, please (polite)"
+    "transliteration": "aitynyzchy"
   },
   "sourceRef": "ky-resource-manual-greetings"
 }
