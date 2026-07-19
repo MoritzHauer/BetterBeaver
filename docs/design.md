@@ -1,0 +1,89 @@
+# Requirements and design decisions
+
+Status: living document — **update this file whenever a plan adds, changes, or retires a requirement or decision.** It is the starting point for understanding the product; together with the referenced plan sections it is sufficient to re-implement the app from scratch on a different tech stack (everything here except the "Current tech stack" section is stack-agnostic).
+
+Reading order for a newcomer: this file → [architecture.md](architecture.md) → [STATUS.md](STATUS.md) → the individual [plans](plans/) as needed.
+
+## Product
+
+BetterBeaver is a spaced-repetition learning app for arbitrary topics. Languages are the first vertical (Kyrgyz), but the core is topic-generic: a mushroom-ID or software-architecture topic must fit without core changes. It ships to real users — never design for a single user; multi-language seams (English glosses first) exist from the start.
+
+## Requirements
+
+### Functional
+
+**Content model** (normative detail: [plan 0001 §Domain model](plans/0001-content-schema-and-kyrgyz-slice.md), amended by plans [0006](plans/0006-domain-lexicon.md) and [0008](plans/0008-lesson-layer-and-exercise-polish.md)):
+
+- **Domain** — a subject area (`language` or `general`) owning one canonical **lexicon**: dictionary entries (`lexeme` for languages, `concept` for general domains), thematic **families**, and typed symmetric **links** (synonym/antonym, related/contrast) authored on one side only.
+- **Topic → Lesson → Unit** hierarchy. Units are daily-sized and own the actual content: **items** (learnables), **tasks** (exercises), **notes** (explanatory markdown). Lessons and units unlock sequentially, but any lock is skippable after a confirmation.
+- **Items** are typed by `kind` — `lexeme`, `concept`, `sentence` (with optional Anki-style cloze markup), `pair` (near-homophones) — with all topic-specific data in the payload; the core never knows about languages. Lexemes/concepts live in the domain lexicon and are shared across topics (one SRS state per word); sentences and pairs are topic-owned. Dialogue "texts" are not a separate kind: a note (readable) plus per-line sentence items (drillable).
+- All shipped content is **validated** against a closed list of referential-integrity and shape rules (dangling refs, ownership, id prefixes, per-type floors, …) — the classes lettered (a)–(s)+ across plans 0001/0002/0004/0006. Invalid content is a build error, surfaced as a developer-facing error screen.
+
+**Study loop**:
+
+- **Eleven task types**: recognize (MCQ), recall (self-graded), cloze (typed, per blank), matching (2–5 pairs), scramble, build (word bank with distractors), listen, dictation, shadowing, minimal-pair, picture. Grading is either **auto** (wrong → quality 2, correct → 4) or **self** (Again 2 / Hard 3 / Good 5). Contract per type: [plan 0002 §Task-type catalogue](plans/0002-exercise-type-showcase.md), [plan 0005](plans/0005-sentence-building.md).
+- **SRS**: SM-2, with semantics, grade mappings, and expected sequences pinned in [plan 0001 §Learner state](plans/0001-content-schema-and-kyrgyz-slice.md) — re-implementations must reproduce them exactly. Scheduling operates on **scheduling units**, not items: a cloze blank schedules individually, a note schedules as one self-graded flashcard, everything else per item. First graded result schedules; answers on scheduled-but-not-due units are practice-only. Due dates are day-granular UTC.
+- **Review queue per domain**, deduplicated across topics, pinned tasks first, then due-ascending. Reviews use recall presentation for lexemes/concepts/plain sentences; cloze blanks and pairs review as their auto-graded question.
+- **Progress**: unit completion is _derived_ (all tasks attempted at least once) — never stored. A per-domain daily **streak** (local calendar day, no freezes). Practice buttons at unit, lesson, and topic level (higher levels shuffle over unlocked children).
+- **Hints**: cloze blanks get a reveal-the-English hint; build tasks hide the English prompt behind a hint button. Example sentences hide their translation until tapped.
+
+**Vocabulary** ([plan 0004](plans/0004-vocabulary-mode.md), [plan 0006](plans/0006-domain-lexicon.md)):
+
+- Browse the whole domain lexicon (search, grouped); create/edit/delete named word lists; a built-in undeletable "Saved words" inbox; shipped read-only families.
+- **Learner-created entries** (not validator-checked, merged into the pool at load, full study/SRS/link parity with shipped entries).
+- **Ad-hoc study** of any list/unit/family in learner-chosen modes (flashcards, MCQ, matching incl. dynamic 5-pair sampling, listening), with runtime floors replacing validator guarantees (e.g. ≥4 distinct display texts for MCQ).
+- **Tap-to-lookup** on any target-language word on non-graded surfaces only (post-answer, vocabulary rows, notes) — best-effort: exact match, then longest ≥3-char prefix (works because Kyrgyz is suffixing); a miss offers "add this word", never silence. Popup shows entry, links, families, optional hand-authored compound breakdown, save action.
+- **Read-aloud**: recorded audio asset if present, else on-device TTS when a local voice matches the domain's declared language; feature hides gracefully otherwise.
+
+**Data**: all learner state (SRS records, attempted tasks, streaks, lists, user entries, pins) lives on the device; one-click JSON export and restore-style import are the durability floor until opt-in sync exists.
+
+**Content authoring**: content is hand-curated data files in the repo, produced via a human-in-the-loop checklist workflow (`/ingest`, [plan 0007](plans/0007-ingest-kyrgyz-manual.md)) — explicitly _not_ an automated extractor (source OCR too noisy; selection is pedagogy).
+
+### Non-functional (the four invariants — normative: [architecture.md](architecture.md))
+
+1. **Headless core** — all domain logic in platform-agnostic packages; apps are thin views.
+2. **Content behind `ContentSource`** — the schema is the contract regardless of transport.
+3. **Offline-first** — fully functional without network after first load (this is why network-backed TTS voices are rejected and all assets are precached).
+4. **Privacy by default** — learner data stays on-device unless the user opts into sync; no telemetry.
+
+Plus: WCAG AA contrast in both color modes, animation off under `prefers-reduced-motion`, touch targets ≥ 44 px, installable on a phone home screen.
+
+## Design decisions
+
+One line each; the linked plan section is normative. Add a row when a new plan pins a decision; strike/replace a row when a later plan amends it (0002, 0004, 0006, 0008 each amend predecessors — the amendment sections at their tops are the change log).
+
+| Decision                                                                                                       | Why                                                                                                          | Where                                                                                                           |
+| -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| Topic-generic core; all specifics in `kind`-discriminated payloads                                             | Predecessor died by hard-coding language concepts into the core                                              | [0001 §Context/Domain model](plans/0001-content-schema-and-kyrgyz-slice.md)                                     |
+| SM-2 with pinned constants; no custom SRS math ever added since                                                | Boring, known algorithm; every feature (notes, pins, ad-hoc) reuses it unchanged                             | [0001](plans/0001-content-schema-and-kyrgyz-slice.md), reaffirmed 0004/0008                                     |
+| Day-granular UTC due dates                                                                                     | "Due tomorrow" regardless of study time; revisit at timezone diversity (M5)                                  | [0001 §Learner state](plans/0001-content-schema-and-kyrgyz-slice.md)                                            |
+| Unit completion derived from attempted-task set, never stored                                                  | One source of truth, no cached flag to invalidate                                                            | [0001](plans/0001-content-schema-and-kyrgyz-slice.md)                                                           |
+| Two pinned async interfaces (`ContentSource`, `ProgressStore`) from day 1                                      | Remote content (M3) and sync (M5) become swaps, not rewrites                                                 | [0001 §Tech stack](plans/0001-content-schema-and-kyrgyz-slice.md)                                               |
+| PWA first; native app is a contingency, not a milestone                                                        | Fastest loop, no store gate; core packages would be reused unchanged                                         | [0001 §Roadmap](plans/0001-content-schema-and-kyrgyz-slice.md)                                                  |
+| Scheduling units ≠ items (cloze per blank, notes as flashcards)                                                | Anki-style granularity without changing storage keys or SM-2                                                 | [0002 §Engine](plans/0002-exercise-type-showcase.md), [0008 §6](plans/0008-lesson-layer-and-exercise-polish.md) |
+| One shared typed-input normalization rule (NFC, casefold, apostrophe-strip, punctuation→space)                 | Fair grading of `don't` vs `well-known` without per-type rules                                               | [0002](plans/0002-exercise-type-showcase.md)                                                                    |
+| Outcome-list grading contract (every question → list of unit/quality pairs)                                    | One uniform grade path for single questions and matching boards                                              | [0002 §Engine](plans/0002-exercise-type-showcase.md)                                                            |
+| No ASR/pronunciation scoring; shadowing + self-grade instead                                                   | Research verdict: out of scope                                                                               | [0002 §Non-goals](plans/0002-exercise-type-showcase.md)                                                         |
+| Plain CSS, self-hosted font, synthesized audio tones — no UI/animation/sound libraries                         | Polish without dependencies; offline precache stays small                                                    | [0003](plans/0003-ui-polish.md)                                                                                 |
+| Streak = any graded answer marks the local day; no freezes/XP/social mechanics                                 | Motivates a solo learner; the rest is noise at this scale                                                    | [0003 §Streak/Non-goals](plans/0003-ui-polish.md)                                                               |
+| Native `speechSynthesis` for read-aloud, local voices only, assets win over TTS                                | Zero deps; network voices would silently break offline-first                                                 | [0004 §TTS](plans/0004-vocabulary-mode.md)                                                                      |
+| Runtime mode floors for ad-hoc study (validator can't see learner lists)                                       | Same guarantees as validator classes, enforced where content is dynamic                                      | [0004 §Design](plans/0004-vocabulary-mode.md)                                                                   |
+| Per-domain lexicon is canonical; topics reference entries; item ids never change in migrations                 | One word = one SRS state across topics; learner data survives every restructure                              | [0006](plans/0006-domain-lexicon.md)                                                                            |
+| Tap-to-lookup is best-effort prefix matching, only on non-graded surfaces                                      | Kyrgyz is suffixing so prefixes work; mid-question taps would leak answers                                   | [0006 §Tap-to-lookup](plans/0006-domain-lexicon.md)                                                             |
+| Links authored one side, symmetric closure derived at load                                                     | Half the authoring, no double-authoring drift                                                                | [0006 §Entry shape](plans/0006-domain-lexicon.md)                                                               |
+| localStorage migrations are presence-based and self-erasing                                                    | Run once, survive partial failure, never clobber imported data                                               | [0006 §Lists…](plans/0006-domain-lexicon.md)                                                                    |
+| Export/import JSON as durability floor before sync exists                                                      | Irreplaceable learner data must be backupable the moment it can exist                                        | [0006 §Export](plans/0006-domain-lexicon.md)                                                                    |
+| Texts = notes + sentence items; no passage/dialogue kind or player                                             | Reuses the whole existing pipeline; zero schema/engine change                                                | [0007 §Decision 1](plans/0007-ingest-kyrgyz-manual.md)                                                          |
+| `/ingest` is a human-in-the-loop checklist, not extraction code                                                | OCR too noisy; content selection is design work, never delegated                                             | [0007 §Decision 2](plans/0007-ingest-kyrgyz-manual.md)                                                          |
+| Topic → Lesson → Unit (unit = daily-sized practice/unlock boundary)                                            | Flat units grew too large for one sitting                                                                    | [0008 §1](plans/0008-lesson-layer-and-exercise-polish.md)                                                       |
+| Locks are skippable via confirmation                                                                           | Adult solo learners over hard gates                                                                          | [0008 §2](plans/0008-lesson-layer-and-exercise-polish.md)                                                       |
+| Matching capped at 5 pairs; dynamic matching only in Vocabulary                                                | Board size from real use; authored tasks stay static content                                                 | [0008 §4](plans/0008-lesson-layer-and-exercise-polish.md)                                                       |
+| Compound breakdown is a hand-authored optional field, no morphological analyzer                                | Opportunistic annotation beats speculative NLP                                                               | [0008 §8](plans/0008-lesson-layer-and-exercise-polish.md)                                                       |
+| Flat-vector beaver mascot, warm palette; raster art generated outside, UI icons hand-authored SVG              | Right tool per asset class                                                                                   | [0009](plans/0009-artwork-and-icons.md)                                                                         |
+| Unit-screen practice count reflects real question/flashcard count (`countUnitQuestions`), not task-group count | `unit.taskIds.length` undercounted actual session length (e.g. a `matching` task with 5 items is 1 question) | [0011](plans/0011-unit-screen-follow-ups.md)                                                                    |
+
+## Current tech stack (the replaceable part)
+
+pnpm TypeScript monorepo, strict mode. `packages/schema` (zod entities + validator), `packages/srs` (pure SM-2), `packages/engine` (sessions, queues, progress; owns the pinned interfaces), `apps/web` (Vite + React PWA; the only I/O: `localStorage` adapter, bundled-content adapter via `import.meta.glob`, browser APIs). Content is JSON/markdown under `content/`, validated at startup. Quality gate: `corepack pnpm check`. Deployment: GitHub Actions builds and publishes to GitHub Pages on every push to `main`. Rationale for these picks: [plan 0001 §Tech stack](plans/0001-content-schema-and-kyrgyz-slice.md).
+
+A re-implementation must keep: the domain model, the pinned SM-2 semantics and grade mappings, the validator rule classes, the task-type contracts, the four invariants, and the layering rule (no domain logic in the view layer). Everything else — build tool, UI framework, storage backend, package layout — is swappable.

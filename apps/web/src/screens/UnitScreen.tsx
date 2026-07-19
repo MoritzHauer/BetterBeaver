@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Content, Item } from "@betterbeaver/schema";
 import { stripClozeMarkup } from "@betterbeaver/schema";
 import type { SelfGrade } from "@betterbeaver/srs";
+import { countUnitQuestions } from "@betterbeaver/engine";
 import type { TapLookup } from "../components/TappableText";
 import { TappableText } from "../components/TappableText";
 import { NoteView } from "../components/NoteView";
@@ -13,10 +14,10 @@ type LexemeItem = Extract<Item, { kind: "lexeme" }>;
 type ConceptItem = Extract<Item, { kind: "concept" }>;
 type ExampleItem = Extract<Item, { kind: "sentence" | "pair" }>;
 
-// Chunk sizes for the Vocabulary/Concepts/Examples sub-pagers (plan 0010
-// design section 4). ponytail: picked for a typical phone viewport, not
-// measured — tune once real content shows one is visibly wrong.
-const VOCAB_CHUNK_SIZE = 6;
+// Chunk sizes for the Concepts/Examples sub-pagers (plan 0010 design section
+// 4; Vocabulary lost its sub-pager in plan 0011 — scrollable instead).
+// ponytail: picked for a typical phone viewport, not measured — tune once
+// real content shows one is visibly wrong.
 const CONCEPT_CHUNK_SIZE = 6;
 const EXAMPLE_CHUNK_SIZE = 4;
 
@@ -28,7 +29,8 @@ type PageKind = "overview" | "theory" | "vocabulary" | "concepts" | "examples";
 
 /** Splits `items` into fixed-size chunks, last chunk possibly shorter.
  * A plain array utility, not a pagination framework (plan 0010 non-goals) —
- * each of the three call sites still owns its own page-index `useState`. */
+ * each of the two call sites (Concepts, Examples — Vocabulary lost its
+ * chunking in plan 0011) still owns its own page-index `useState`. */
 function chunk<T>(items: T[], size: number): T[][] {
   const chunks: T[][] = [];
   for (let i = 0; i < items.length; i += size) {
@@ -37,10 +39,10 @@ function chunk<T>(items: T[], size: number): T[][] {
   return chunks;
 }
 
-/** "‹ Note 2 of 5 ›"-style sub-pager, shared shape across Theory/Vocabulary/
- * Concepts/Examples sub-pagination (plan 0010 design section 4) — no shared
- * component beyond this presentational control, each caller keeps its own
- * index state. */
+/** "‹ Note 2 of 5 ›"-style sub-pager, shared shape across Theory/Concepts/
+ * Examples sub-pagination (plan 0010 design section 4; Vocabulary lost its
+ * sub-pager in plan 0011) — no shared component beyond this presentational
+ * control, each caller keeps its own index state. */
 function SubPager({
   index,
   count,
@@ -185,7 +187,6 @@ export function UnitScreen({
   // design section 4: no shared pagination abstraction — one useState each).
   const [page, setPage] = useState(0);
   const [noteIndex, setNoteIndex] = useState(0);
-  const [vocabPage, setVocabPage] = useState(0);
   const [conceptPage, setConceptPage] = useState(0);
   const [examplePage, setExamplePage] = useState(0);
 
@@ -284,10 +285,6 @@ export function UnitScreen({
     );
   }
 
-  const vocabChunks = chunk(lexemes, VOCAB_CHUNK_SIZE);
-  const vocabRows =
-    vocabChunks[Math.min(vocabPage, vocabChunks.length - 1)] ?? [];
-
   const conceptChunks = chunk(concepts, CONCEPT_CHUNK_SIZE);
   const conceptRows =
     conceptChunks[Math.min(conceptPage, conceptChunks.length - 1)] ?? [];
@@ -304,25 +301,25 @@ export function UnitScreen({
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
-      <div className="trail">
-        {pages.map((pageKind, index) => (
-          <button
-            key={pageKind}
-            type="button"
-            className={`dot${index === page ? " active" : ""}`}
-            aria-label={`Page ${index + 1} of ${pages.length}`}
-            onClick={() => setPage(index)}
-          />
-        ))}
-      </div>
+      <header className="screen-header">
+        <button className="plain exit" aria-label="Back" onClick={onBack}>
+          &larr;
+        </button>
+        <div className="trail">
+          {pages.map((pageKind, index) => (
+            <button
+              key={pageKind}
+              type="button"
+              className={`dot${index === page ? " active" : ""}`}
+              aria-label={`Page ${index + 1} of ${pages.length}`}
+              onClick={() => setPage(index)}
+            />
+          ))}
+        </div>
+      </header>
 
       {currentPage === "overview" ? (
         <>
-          <button onClick={onBack}>
-            &larr;{" "}
-            {content.lessons.find((l) => l.id === unit.lessonId)?.title ??
-              content.topic.title}
-          </button>
           <h1>{unit.title}</h1>
           <p>{unit.goal}</p>
         </>
@@ -360,17 +357,6 @@ export function UnitScreen({
           <p className="eyebrow">
             <span aria-hidden="true">🔤</span> Vocabulary
           </p>
-          {vocabChunks.length > 1 ? (
-            <SubPager
-              index={vocabPage}
-              count={vocabChunks.length}
-              label="Page"
-              onPrev={() => setVocabPage((p) => Math.max(0, p - 1))}
-              onNext={() =>
-                setVocabPage((p) => Math.min(vocabChunks.length - 1, p + 1))
-              }
-            />
-          ) : null}
           <table className="vocab-table">
             <thead>
               <tr>
@@ -380,7 +366,7 @@ export function UnitScreen({
               </tr>
             </thead>
             <tbody>
-              {vocabRows.map((item) => (
+              {lexemes.map((item) => (
                 <tr key={item.id}>
                   <td>
                     <button
@@ -475,8 +461,12 @@ export function UnitScreen({
 
       <div className="action-bar unit-practice-bar">
         <div className="action-bar-inner unit-practice-bar-inner">
-          <button onClick={onPractice}>Practice this unit</button>
-          <p className="status">{unit.taskIds.length} tasks, shuffled order</p>
+          <button className="unit-practice-button" onClick={onPractice}>
+            <span>Practice</span>
+            <span className="unit-practice-count">
+              {countUnitQuestions(unit, content)}
+            </span>
+          </button>
         </div>
       </div>
 

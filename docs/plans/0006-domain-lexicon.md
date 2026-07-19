@@ -1,6 +1,6 @@
 # Plan 0006: Domain lexicon — central vocabulary, tap-to-lookup, own words
 
-Status: approved after 2 adversarial review rounds (16 + 6 findings addressed; round-3 verdict: APPROVE) · Owner: Moe · Date: 2026-07-15 · Prerequisite: plans 0004 and 0005 complete (they are) · Direction pinned by grilling session 2026-07-15: per-domain lexicon canonical via migration, typed one-side-authored symmetric links, families as shipped lists, best-effort tap lookup, per-domain review
+Status: implemented (2026-07-15, steps 1–5 + browser verification) · approved after 2 adversarial review rounds (16 + 6 findings addressed; round-3 verdict: APPROVE) · Owner: Moe · Date: 2026-07-15 · Prerequisite: plans 0004 and 0005 complete (they are) · Direction pinned by grilling session 2026-07-15: per-domain lexicon canonical via migration, typed one-side-authored symmetric links, families as shipped lists, best-effort tap lookup, per-domain review
 
 ## Amendments to prior plans
 

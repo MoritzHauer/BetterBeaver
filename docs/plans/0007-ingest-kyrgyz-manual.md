@@ -1,6 +1,6 @@
 # Plan 0007: Ingest the Peace Corps Kyrgyz manual into real units
 
-Status: **reviewed — ready to execute** (3 adversarial review rounds, all findings fixed; see below) · Owner: Moe · Date: 2026-07-16 · Prerequisite: plan 0006 complete (it is)
+Status: **implemented** (2026-07-17, steps 1–4, landed with plan 0008's content pass; the 13-lesson backlog is tracked in [STATUS.md](../STATUS.md)) · 3 adversarial review rounds, all findings fixed · Owner: Moe · Date: 2026-07-16 · Prerequisite: plan 0006 complete (it is)
 
 ## Purpose
 

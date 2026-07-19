@@ -556,6 +556,55 @@ export function buildUnitSession(
 }
 
 /**
+ * Counts the actual questions/flashcards `buildUnitSession` would produce
+ * for `unit`, without building any `Question` objects or requiring an `Rng`
+ * (plan 0011): mirrors `buildTaskSession`'s per-type question count, since
+ * `unit.taskIds.length` alone counts task groups, not individual questions
+ * (e.g. a 5-item `recall` task is 5 questions; a `matching` task is 1
+ * question regardless of item count; a `cloze` task is one question per
+ * blank across its items).
+ */
+function countTaskQuestions(task: Task, itemById: Map<string, Item>): number {
+  switch (task.type) {
+    case "matching":
+      return 1;
+    case "cloze":
+      return task.itemIds.reduce((sum, itemId) => {
+        const item = itemById.get(itemId);
+        if (item === undefined || item.kind !== "sentence") {
+          return sum;
+        }
+        const parsed = parseClozeMarkup(item.payload.text);
+        return sum + (parsed.valid ? parsed.blanks.length : 0);
+      }, 0);
+    case "recall":
+    case "recognize":
+    case "scramble":
+    case "listen":
+    case "dictation":
+    case "shadowing":
+    case "minimal-pair":
+    case "picture":
+    case "build":
+      return task.itemIds.length;
+    default:
+      task.type satisfies never;
+      throw new Error(`unknown task type: ${task.type as string}`);
+  }
+}
+
+export function countUnitQuestions(unit: Unit, content: Content): number {
+  const taskById = new Map(content.tasks.map((task) => [task.id, task]));
+  const itemById = new Map(content.items.map((item) => [item.id, item]));
+  return unit.taskIds.reduce((total, taskId) => {
+    const task = taskById.get(taskId);
+    return task === undefined
+      ? total
+      : total + countTaskQuestions(task, itemById);
+  }, 0);
+}
+
+/**
  * Builds a review session, one question per due unit (amendment 3, plan
  * 0002): `lexeme`/`concept`/plain-`sentence` units use the recall
  * presentation (self-graded); a due cloze blank uses that blank's cloze

@@ -7,6 +7,7 @@ import {
   checkScrambleAnswer,
   checkMatchingPair,
   matchingOutcomes,
+  countUnitQuestions,
   type MatchingQuestion,
   type Rng,
 } from "./session.js";
@@ -1163,5 +1164,59 @@ describe("buildUnitSession", () => {
     // conceptUnit has exactly one task (recognizeTask, 2 items) -> 2 questions.
     expect(questions).toHaveLength(2);
     expect(questions.every((q) => q.kind === "recognize")).toBe(true);
+  });
+});
+
+describe("countUnitQuestions", () => {
+  it("counts one question per item for a plain task type", () => {
+    expect(countUnitQuestions(conceptUnit, conceptContent)).toBe(2);
+  });
+
+  it("counts a matching task as exactly 1, regardless of item count", () => {
+    expect(countUnitQuestions(matchingUnit, matchingContent)).toBe(1);
+  });
+
+  it("counts a cloze task as one question per blank across its items", () => {
+    expect(countUnitQuestions(clozeUnit, clozeContent)).toBe(3);
+  });
+
+  it("matches buildUnitSession's actual output length for a mixed unit", () => {
+    const recallTaskU: Task = {
+      id: "t-task-recall-u2",
+      type: "recall",
+      itemIds: [c3.id],
+    };
+    const unit: Unit = {
+      id: "t-unit-session-2",
+      lessonId: "t-topic",
+      title: "Unit Session",
+      goal: "Goal",
+      itemIds: [c1.id, c2.id, c3.id, c4.id],
+      taskIds: [recallTaskU.id, recognizeTask.id],
+      noteIds: [],
+    };
+    const content: Content = {
+      topic: {
+        id: "t-topic",
+        code: "t",
+        domainId: "t",
+        title: "Topic",
+        description: "",
+        lessonIds: [unit.id],
+      },
+      lessons: [],
+      units: [unit],
+      items: [c1, c2, c3, c4],
+      tasks: [recallTaskU, recognizeTask],
+      resources: [],
+      notes: [],
+    };
+    expect(countUnitQuestions(unit, content)).toBe(
+      buildUnitSession(
+        unit,
+        content,
+        queueRng([0.9, 0.1, 0.5, 0.9, 0.1, 0.5, 0, 0]),
+      ).length,
+    );
   });
 });

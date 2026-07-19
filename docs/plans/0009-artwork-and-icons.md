@@ -1,6 +1,6 @@
 # Plan 0009: Artwork and icons
 
-Status: **draft** · Owner: Moe · Date: 2026-07-17 · Style reference: `docs/plans/assets/0009-style-reference.png`
+Status: **implemented** (2026-07-17, steps 1–6) · Owner: Moe · Date: 2026-07-17 · Style reference: `docs/plans/assets/0009-style-reference.png`
 
 ## Purpose
 

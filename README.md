@@ -2,6 +2,12 @@
 
 This is a general learning platform upgrade your skills on a daily level.BetterBeaver helps you get better every day with focused learning, repeatable practice, and skill-building across any topic.
 
+## Documentation
+
+Start with [docs/design.md](docs/design.md) (requirements and design decisions), then
+[docs/architecture.md](docs/architecture.md), [docs/STATUS.md](docs/STATUS.md), and the
+[plans](docs/plans/) for full detail.
+
 ## Development
 
 ```sh
