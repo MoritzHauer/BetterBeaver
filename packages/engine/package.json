@@ -11,5 +11,8 @@
   "dependencies": {
     "@betterbeaver/schema": "workspace:*",
     "@betterbeaver/srs": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.0"
   }
 }

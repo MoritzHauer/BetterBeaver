@@ -7,7 +7,8 @@ import type { TapLookup } from "../components/TappableText";
 import { TappableText } from "../components/TappableText";
 import { NoteView } from "../components/NoteView";
 import { EntryPopup } from "../components/EntryPopup";
-import { getLexiconAssetUrl, getNoteMarkdown } from "../content/bundled";
+import { getLexiconAssetUrl } from "../content/bundled";
+import { getNoteMarkdown } from "../content/source";
 import { SpeakerButton } from "../tts";
 
 type LexemeItem = Extract<Item, { kind: "lexeme" }>;

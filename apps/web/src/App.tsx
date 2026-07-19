@@ -9,7 +9,6 @@ import type {
 } from "@betterbeaver/engine";
 import type { AdhocMode } from "@betterbeaver/engine";
 import {
-  ContentValidationError,
   buildAdhocSession,
   buildReviewSession,
   buildTaskSession,
@@ -23,7 +22,7 @@ import {
 import type { Quality } from "@betterbeaver/srs";
 import { recallQuality } from "@betterbeaver/srs";
 import type { TapLookup } from "./components/TappableText";
-import { createBundledContentSource } from "./content/bundled";
+import type { ContentInit, ContentUpdate } from "./content/source";
 import { resolvedLinksByEntryId } from "./content/links";
 import { createLocalStorageProgressStore } from "./progress/local-storage";
 import { createLocalStorageVocabListStore } from "./progress/vocab-lists";
@@ -323,17 +322,31 @@ function AdhocSession({
   );
 }
 
-export function App() {
-  const contentSourceResult = useMemo((): ContentSourceResult => {
-    try {
-      return { source: createBundledContentSource() };
-    } catch (error) {
-      if (error instanceof ContentValidationError) {
-        return { errors: error.errors };
-      }
-      throw error;
+export function App({ contentInit }: { contentInit: ContentInit }) {
+  const contentSourceResult: ContentSourceResult = contentInit.result;
+
+  // Opt-in content updates (plan 0012 §6): check in the background, show a
+  // notice, change nothing until the user accepts. acceptUpdate reloads the
+  // app on success, so `updating` never needs resetting on that path.
+  const [update, setUpdate] = useState<ContentUpdate | null>(null);
+  const [updateError, setUpdateError] = useState<string | null>(null);
+  const [updating, setUpdating] = useState(false);
+  useEffect(() => {
+    void contentInit.checkForUpdate().then(setUpdate);
+  }, [contentInit]);
+  async function handleAcceptUpdate() {
+    if (update === null) {
+      return;
     }
-  }, []);
+    setUpdating(true);
+    setUpdateError(null);
+    try {
+      await contentInit.acceptUpdate(update);
+    } catch (error) {
+      setUpdateError(error instanceof Error ? error.message : String(error));
+      setUpdating(false);
+    }
+  }
 
   const [screen, setScreen] = useState<Screen>({ screen: "topics" });
   // ponytail: welcome cover shows on every load (plan 0009); persist a
@@ -531,17 +544,51 @@ export function App() {
   }
 
   if (screen.screen === "topics") {
+    const hasDownload =
+      update !== null &&
+      (update.changed.length > 0 || update.removedIds.length > 0);
     return (
-      <TopicListScreen
-        domains={domains}
-        topics={topics}
-        topicProgress={topicProgress}
-        onSelectTopic={(topicId) => goToTopic(topicId)}
-        onDomainVocabulary={(domainId) =>
-          setScreen({ screen: "vocab", domainId })
-        }
-        onDomainReview={(domainId) => setScreen({ screen: "review", domainId })}
-      />
+      <>
+        {update !== null && (
+          <div className="update-banner" role="status">
+            <span>
+              {hasDownload
+                ? "A content update is available."
+                : "Update the app (reload the page) to receive the newest content."}
+              {updateError !== null && (
+                <>
+                  {" "}
+                  <strong>{updateError}</strong>
+                </>
+              )}
+            </span>
+            {hasDownload && (
+              <button
+                className="primary"
+                disabled={updating}
+                onClick={() => void handleAcceptUpdate()}
+              >
+                {updating ? "Updating…" : "Update now"}
+              </button>
+            )}
+            <button className="plain" onClick={() => setUpdate(null)}>
+              Later
+            </button>
+          </div>
+        )}
+        <TopicListScreen
+          domains={domains}
+          topics={topics}
+          topicProgress={topicProgress}
+          onSelectTopic={(topicId) => goToTopic(topicId)}
+          onDomainVocabulary={(domainId) =>
+            setScreen({ screen: "vocab", domainId })
+          }
+          onDomainReview={(domainId) =>
+            setScreen({ screen: "review", domainId })
+          }
+        />
+      </>
     );
   }
 

@@ -22,7 +22,8 @@ import { recallQuality, recognizeQuality } from "@betterbeaver/srs";
 import type { TapLookup } from "../components/TappableText";
 import { TappableText } from "../components/TappableText";
 import { NoteView } from "../components/NoteView";
-import { getAssetUrl, getNoteMarkdown } from "../content/bundled";
+import { getAssetUrl } from "../content/bundled";
+import { getNoteMarkdown } from "../content/source";
 import { SpeakerButton } from "../tts";
 import { playCorrect, playFanfare, playWrong } from "../sounds";
 

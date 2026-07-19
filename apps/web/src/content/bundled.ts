@@ -1,16 +1,11 @@
-import { validateContent } from "@betterbeaver/schema";
-import type { Content } from "@betterbeaver/schema";
-import { ContentValidationError, symmetricLinks } from "@betterbeaver/engine";
-import type {
-  ContentSource,
-  DomainContent,
-  DomainSummary,
-  TopicSummary,
-} from "@betterbeaver/engine";
+import type { DomainDocument, TopicDocument } from "@betterbeaver/schema";
+import type { AssetStems } from "@betterbeaver/engine";
 
 // Eager globs so every bundled topic is statically included and available
 // synchronously (no network fetch, no async import) — this is what makes
-// the app work offline after first load.
+// the app work offline after first load. Since plan 0012 this tree is the
+// frozen first-run seed (refreshed by scripts/export-content.ts, never
+// hand-edited); the live content lives in the backend.
 const topicFiles = import.meta.glob("../../../../content/*/topic.json", {
   eager: true,
   import: "default",
@@ -43,7 +38,9 @@ const noteFiles = import.meta.glob("../../../../content/*/notes/*.md", {
 // Extension lists only (`.wav`/`.svg` for now) — real content later adds
 // more (png/jpg/opus/…) additively; see plan 0002. Any new extension must
 // also be added to the PWA precache globPatterns in vite.config.ts, or the
-// asset won't be available offline.
+// asset won't be available offline. Assets are NOT part of the content
+// documents (plan 0012 §2): they stay bundled and frozen until the asset
+// pipeline lands, so these maps are the asset truth for remote content too.
 const audioFiles = import.meta.glob("../../../../content/*/assets/audio/*", {
   eager: true,
   import: "default",
@@ -164,8 +161,8 @@ const lexiconImageUrlsByDir = stemMapByDir(lexiconImageFiles, domainDirOf);
 
 // A topic's domain (for the `getAssetUrl` fallback, plan 0006's pinned asset
 // resolution): read straight off the raw topic.json, so it's available even
-// before `createBundledContentSource` validates anything. If content is
-// malformed, validation fails startup before any screen calls `getAssetUrl`.
+// before the content source validates anything. If content is malformed,
+// validation fails startup before any screen calls `getAssetUrl`.
 const domainIdByTopicId = new Map<string, string>(
   [...topicsByDir].map(([dir, values]) => [
     dir,
@@ -175,166 +172,58 @@ const domainIdByTopicId = new Map<string, string>(
   ]),
 );
 
-/** Reports ids occurring more than once in `ids` by pushing formatted messages into `errors`. */
-function reportDuplicates(ids: string[], noun: string, errors: string[]): void {
-  const seen = new Set<string>();
-  const duplicates = new Set<string>();
-  for (const id of ids) {
-    if (seen.has(id)) {
-      duplicates.add(id);
-    }
-    seen.add(id);
-  }
-  for (const id of duplicates) {
-    errors.push(`${id}: duplicate ${noun} id across the bundle`);
-  }
-}
-
 /**
- * Creates a `ContentSource` backed by content bundled into the app at build
- * time (`content/<topicId>/...` plus `content/lexicon/<domainId>/...`,
- * loaded via `import.meta.glob`). Validates every topic (together with its
- * domain) synchronously at construction time; throws
- * `ContentValidationError` on any failure so the app can show a startup
- * error screen instead of serving broken content.
+ * The bundled content assembled as content documents (plan 0012): the
+ * frozen first-run seed, in exactly the shape the backend stores and the
+ * IndexedDB cache holds. Validation happens in
+ * `createDocumentContentSource`, never here.
  */
-export function createBundledContentSource(): ContentSource {
-  const contentByTopicId = new Map<string, Content>();
-  const domainContentById = new Map<string, DomainContent>();
-  const allErrors: string[] = [];
-
-  for (const [dir, topicFileValues] of topicsByDir) {
-    // Each topic directory has exactly one topic.json; the glob still
-    // yields an array, so take its single entry.
-    const topic = topicFileValues[0];
-    const domainId = domainIdByTopicId.get(dir) ?? "";
-    const noteStemMap = notesByDir.get(dir) ?? new Map<string, string>();
-    const result = validateContent({
-      topic,
-      lessons: lessonsByDir.get(dir) ?? [],
-      units: unitsByDir.get(dir) ?? [],
-      items: itemsByDir.get(dir) ?? [],
-      tasks: tasksByDir.get(dir) ?? [],
-      // resources.json's default export is itself the array of resources,
-      // so the grouped glob value is one level too deep — flatten it.
-      resources: (resourcesByDir.get(dir) ?? []).flat(),
-      noteStems: [...noteStemMap.keys()],
-      audioStems: [...(audioUrlsByDir.get(dir)?.keys() ?? [])],
-      imageStems: [...(imageUrlsByDir.get(dir)?.keys() ?? [])],
-      domain: (domainsByDir.get(domainId) ?? [])[0],
-      entries: entriesByDir.get(domainId) ?? [],
-      families: familiesByDir.get(domainId) ?? [],
-      lexiconAudioStems: [
-        ...(lexiconAudioUrlsByDir.get(domainId)?.keys() ?? []),
-      ],
-      lexiconImageStems: [
-        ...(lexiconImageUrlsByDir.get(domainId)?.keys() ?? []),
-      ],
-    });
-    if ("errors" in result) {
-      allErrors.push(...result.errors.map((error) => `${dir}: ${error}`));
-      continue;
-    }
-    // Note/asset lookups are keyed by directory name but called with the
-    // topic id (getNoteMarkdown/getAssetUrl), so the two must coincide.
-    if (result.content.topic.id !== dir) {
-      allErrors.push(
-        `${dir}: topic id "${result.content.topic.id}" must equal its directory name`,
-      );
-      continue;
-    }
-    contentByTopicId.set(result.content.topic.id, result.content);
-    if (!domainContentById.has(result.domain.id)) {
-      domainContentById.set(result.domain.id, {
-        domain: result.domain,
-        entries: result.entries,
-        families: result.families,
-        linksByEntryId: symmetricLinks(result.entries),
-      });
-    }
-  }
-
-  // Cross-domain checks (plan 0006): duplicate domain codes, and any item id
-  // (topic-owned or entry) appearing twice across the whole bundle — every
-  // `bb.item.<id>` key must be globally unambiguous.
-  reportDuplicates(
-    [...domainContentById.values()].map((d) => d.domain.code),
-    "domain code",
-    allErrors,
-  );
-  const entryIdsByDomain = new Map(
-    [...domainContentById.values()].map((d) => [
-      d.domain.id,
-      new Set(d.entries.map((e) => e.id)),
+export function bundledTopicDocuments(): Map<string, TopicDocument> {
+  return new Map(
+    [...topicsByDir].map(([dir, topicFileValues]) => [
+      dir,
+      {
+        // Each topic directory has exactly one topic.json; the glob still
+        // yields an array, so take its single entry.
+        topic: topicFileValues[0],
+        lessons: lessonsByDir.get(dir) ?? [],
+        units: unitsByDir.get(dir) ?? [],
+        items: itemsByDir.get(dir) ?? [],
+        tasks: tasksByDir.get(dir) ?? [],
+        // resources.json's default export is itself the array of resources,
+        // so the grouped glob value is one level too deep — flatten it.
+        resources: (resourcesByDir.get(dir) ?? []).flat(),
+        notes: [...(notesByDir.get(dir) ?? new Map<string, string>())].map(
+          ([stem, markdown]) => ({ stem, markdown }),
+        ),
+      },
     ]),
   );
-  const allItemIds = [
-    ...[...contentByTopicId].flatMap(([topicId, content]) => {
-      const entryIds =
-        entryIdsByDomain.get(domainIdByTopicId.get(topicId) ?? "") ??
-        new Set<string>();
-      return content.items
-        .map((item) => item.id)
-        .filter((id) => !entryIds.has(id));
-    }),
-    ...[...entryIdsByDomain.values()].flatMap((ids) => [...ids]),
-  ];
-  reportDuplicates(allItemIds, "item", allErrors);
-
-  if (allErrors.length > 0) {
-    throw new ContentValidationError(allErrors);
-  }
-
-  return {
-    listTopics(): Promise<TopicSummary[]> {
-      return Promise.resolve(
-        [...contentByTopicId.values()].map((content) => ({
-          id: content.topic.id,
-          title: content.topic.title,
-          description: content.topic.description,
-          domainId: content.topic.domainId,
-        })),
-      );
-    },
-    loadTopic(id: string): Promise<Content> {
-      const content = contentByTopicId.get(id);
-      if (content === undefined) {
-        return Promise.reject(
-          new ContentValidationError([`unknown topic: ${id}`]),
-        );
-      }
-      return Promise.resolve(content);
-    },
-    listDomains(): Promise<DomainSummary[]> {
-      return Promise.resolve(
-        [...domainContentById.values()].map(({ domain }) => ({
-          id: domain.id,
-          title: domain.title,
-          kind: domain.kind,
-        })),
-      );
-    },
-    loadDomain(id: string): Promise<DomainContent> {
-      const domainContent = domainContentById.get(id);
-      if (domainContent === undefined) {
-        return Promise.reject(
-          new ContentValidationError([`unknown domain: ${id}`]),
-        );
-      }
-      return Promise.resolve(domainContent);
-    },
-  };
 }
 
-/**
- * Returns the raw markdown for a bundled note, given the topic's directory
- * name (equal to the topic id in bundled content) and the note's file stem.
- */
-export function getNoteMarkdown(
-  topicDir: string,
-  stem: string,
-): string | undefined {
-  return notesByDir.get(topicDir)?.get(stem);
+export function bundledDomainDocuments(): Map<string, DomainDocument> {
+  return new Map(
+    [...domainsByDir].map(([dir, domainFileValues]) => [
+      dir,
+      {
+        domain: domainFileValues[0],
+        entries: entriesByDir.get(dir) ?? [],
+        families: familiesByDir.get(dir) ?? [],
+      },
+    ]),
+  );
+}
+
+/** Asset stem inventories for validation — always bundled (plan 0012 §2). */
+export function bundledAssetStems(): AssetStems {
+  const stems = (byDir: Map<string, Map<string, string>>) =>
+    new Map([...byDir].map(([dir, urls]) => [dir, [...urls.keys()]]));
+  return {
+    audioByTopic: stems(audioUrlsByDir),
+    imageByTopic: stems(imageUrlsByDir),
+    audioByDomain: stems(lexiconAudioUrlsByDir),
+    imageByDomain: stems(lexiconImageUrlsByDir),
+  };
 }
 
 /**
@@ -378,8 +267,7 @@ export function getLexiconAssetUrl(
 
 /**
  * Every bundled topic's id and its domain id, read straight off the raw
- * topic.json (like `domainIdByTopicId`) so it's available before
- * `createBundledContentSource` validates anything. Feeds the startup
+ * topic.json so it's available before any validation. Feeds the startup
  * localStorage migrations (plan 0006), which must run before any screen
  * reads `bb.vocablists.<domainId>`.
  */

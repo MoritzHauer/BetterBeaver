@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { bundledDomainIds, bundledTopicDomainIds } from "./content/bundled";
+import { initContentSource } from "./content/source";
 import { runStorageMigrations } from "./progress/migrations";
 import "./styles.css";
 
@@ -17,8 +18,12 @@ if (!rootElement) {
   throw new Error("Root element not found");
 }
 
-createRoot(rootElement).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-);
+// Async boot (plan 0012): the content source reads the IndexedDB document
+// cache before first render — milliseconds, and never the network.
+void initContentSource().then((contentInit) => {
+  createRoot(rootElement).render(
+    <StrictMode>
+      <App contentInit={contentInit} />
+    </StrictMode>,
+  );
+});

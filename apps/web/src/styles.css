@@ -776,3 +776,23 @@ main.unit-screen {
   font-size: 1.1rem;
   padding: 0.85rem 1rem;
 }
+
+/* Opt-in content-update notice (plan 0012): shown on the home screen only,
+ * never blocks anything, and nothing changes until "Update now". */
+.update-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 60ch;
+  margin: 0.75rem auto 0;
+  padding: 0.6rem 0.9rem;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 0.75rem;
+}
+
+.update-banner span {
+  flex: 1 1 12rem;
+  font-size: 0.9rem;
+}
