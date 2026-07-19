@@ -14,4 +14,4 @@ Commands (from repo root):
 
 See `docs/plans/0001-content-schema-and-kyrgyz-slice.md` for the domain model and architecture.
 
-`docs/STATUS.md` tracks plan status and known gaps — update it whenever a plan lands or a listed gap changes. `docs/design.md` is the requirements + design-decision index — update it whenever a plan adds, amends, or retires a requirement or decision.
+`docs/STATUS.md` tracks plan status and the prioritized handoff backlog — update it whenever a plan lands or a listed gap changes. `docs/design.md` is the requirements + design-decision index — update it whenever a plan adds, amends, or retires a requirement or decision. `docs/specs/` holds self-contained implementer specs for backlog items — implement them via `/delegate` without reopening their design.

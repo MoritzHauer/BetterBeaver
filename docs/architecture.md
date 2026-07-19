@@ -9,9 +9,9 @@ Status: living document · Created 2026-07-06 · Last updated 2026-07-19 (reflec
 3. **Offline-first** — fully functional without network; network only for topic download and opt-in sync (later milestones).
 4. **Privacy by default** — learner data stays on the device unless the user opts into sync. No telemetry.
 
-## Current architecture (after plans 0001–0009)
+## Current architecture (after plans 0001–0012 steps 1–2)
 
-A pnpm TypeScript monorepo: three headless packages (pure, no I/O, no React), one Vite + React PWA, and hand-curated content as JSON/markdown in the repo — per-domain lexicons plus per-topic lesson trees.
+A pnpm TypeScript monorepo: three headless packages (pure, no I/O, no React), one Vite + React PWA, and a Supabase content backend (schema in `supabase/migrations/`, content as jsonb documents). The `content/` tree in the repo — per-domain lexicons plus per-topic lesson trees — is the frozen first-run seed and the local working copy for `/ingest`; the backend is the content truth.
 
 ```mermaid
 graph TD
@@ -28,8 +28,12 @@ graph TD
         bundledSrc["Content boot (plan 0012 step 1):<br/>IndexedDB doc cache first, bundled seed fallback →<br/>engine's createDocumentContentSource ·<br/>opt-in update banner · asset URL maps stay bundled"]
         stores["localStorage stores: progress · vocab lists ·<br/>user entries · pinned tasks · streaks ·<br/>self-erasing migrations · JSON backup"]
         app["App.tsx — screen state machine"]
-        screens["Screens: Start · TopicList · Topic · Lesson · Unit ·<br/>Session (task/review/ad-hoc) · Vocabulary · Error<br/>Components: TappableText · EntryPopup ·<br/>AddWordForm · NoteView · icons · TTS helper"]
+        screens["Screens: Start · TopicList · Topic · Lesson · Unit ·<br/>Session (task/review/ad-hoc) · Vocabulary · Error ·<br/>Author · Edit · Privacy (plan 0012 step 2)<br/>Components: TappableText · EntryPopup ·<br/>AddWordForm · NoteView · icons · TTS helper"]
     end
+
+    supabase["Supabase backend (plan 0012)<br/>documents (draft/published/history) · maintainers ·<br/>proposals · catalog view · publish RPC · RLS"]
+    supabase -->|"catalog GET (anon) · update accept"| bundledSrc
+    app -->|"authoring: magic link + drafts + publish"| supabase
 
     engine --> schema
     engine --> srs
@@ -87,7 +91,7 @@ graph TD
         sources --> ingest
     end
 
-    subgraph distribution ["Distribution (designed: plan 0012)"]
+    subgraph distribution ["Distribution (shipped: plan 0012 steps 1–2)"]
         catalog["Supabase content backend<br/>jsonb documents (draft/published/history) ·<br/>maintainers · proposals · catalog view · publish RPC"]
     end
     ingest --> catalog
@@ -107,8 +111,8 @@ graph TD
     pwa --> engine
     native -.-> engine
 
-    bundled["BundledContentSource"]
-    remote["RemoteContentSource (M3)<br/>download + local cache"]
+    bundled["Bundled seed (fallback)"]
+    remote["Remote document source (shipped)<br/>IndexedDB cache + opt-in update"]
     bundled -.->|ContentSource| engine
     remote -.->|ContentSource| engine
     catalog --> remote
@@ -121,6 +125,6 @@ graph TD
     syncstore <--> syncBackend
 ```
 
-Milestone scope, order, and rationale live in [plan 0001's roadmap](plans/0001-content-schema-and-kyrgyz-slice.md#roadmap-later-milestones--order-decided-at-each-retro) (order decided at each retro) — not duplicated here. M2 landed as plan 0007: `/ingest` is a human-in-the-loop checklist skill, not an automated pipeline. **M3's open question ("DB or static packs") is now decided by [plan 0012](plans/0012-content-backend-and-editing.md)**: a Supabase backend storing whole JSON documents, with in-app editing (per-document maintainers, drafts, atomic publish, proposals) on top — a scope beyond the original M3 because editing, not just distribution, became the requirement; accounts arrive for authors only (an explicit amendment of the M5 "accounts are opt-in, later" decision — learners stay account-free). Plan 0012 §9 also pins the M5 progress-sync design (local-first `SyncedProgressStore`, merge rules) without scheduling it. Architecturally, each remaining milestone is still one of only three kinds of change: a new implementation of a pinned interface (`RemoteContentSource`, sync-backed `ProgressStore`), a union extension in the core (M4 item kinds and task types), or something entirely outside the app (the Supabase backend, the sync service).
+Milestone scope, order, and rationale live in [plan 0001's roadmap](plans/0001-content-schema-and-kyrgyz-slice.md#roadmap-later-milestones--order-decided-at-each-retro) (order decided at each retro) — not duplicated here. M2 landed as plan 0007: `/ingest` is a human-in-the-loop checklist skill, not an automated pipeline. **M3 landed as [plan 0012](plans/0012-content-backend-and-editing.md) steps 1–2**: a Supabase backend storing whole JSON documents, with in-app editing (per-document maintainers, drafts, atomic publish) on top — a scope beyond the original M3 because editing, not just distribution, became the requirement; accounts arrive for authors only (an explicit amendment of the M5 "accounts are opt-in, later" decision — learners stay account-free). The remaining plan 0012 scope — proposals, asset pipeline, editor long tail, and the M5 progress sync pinned by §9 — exists as implementer-ready [specs](specs/), prioritized in [STATUS's handoff backlog](STATUS.md#handoff-backlog-not-yet-built). Architecturally, each remaining milestone is still one of only three kinds of change: a new implementation of a pinned interface (`RemoteContentSource`, sync-backed `ProgressStore`), a union extension in the core (M4 item kinds and task types), or something entirely outside the app (the Supabase backend, the sync service).
 
 The target diagram is a direction, not a commitment: each milestone's concrete design is decided when it starts, constrained only by the four invariants and the two pinned interfaces.
