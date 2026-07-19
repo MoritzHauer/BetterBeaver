@@ -1,0 +1,14 @@
+{
+  "id": "ky-task-commands-recognize",
+  "type": "recognize",
+  "itemIds": [
+    "ky-item-korgoz",
+    "ky-item-ait",
+    "ky-item-ber",
+    "ky-item-jap",
+    "ky-item-ach",
+    "ky-item-uk",
+    "ky-item-bol"
+  ],
+  "instructions": "Pick the correct meaning for each command."
+}

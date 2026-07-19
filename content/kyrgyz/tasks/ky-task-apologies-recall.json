@@ -1,0 +1,15 @@
+{
+  "id": "ky-task-apologies-recall",
+  "type": "recall",
+  "itemIds": [
+    "ky-item-kechirip-koyunuz",
+    "ky-item-ayyp-mende",
+    "ky-item-achuulanbanyz",
+    "ky-item-kapa-bolbonuz",
+    "ky-item-taarynbanyz",
+    "ky-item-sizden-otunom",
+    "ky-item-jardam-berip-koyunuzchu",
+    "ky-item-kiruugo-mumkunbu"
+  ],
+  "instructions": "Say the Kyrgyz out loud from the English meaning, then reveal and grade yourself."
+}

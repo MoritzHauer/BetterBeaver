@@ -18,7 +18,7 @@
     "ky-sent-family-ermek-helps",
     "ky-sent-family-uncle-doctor"
   ],
-  "noteIds": ["ky-note-family-dialogues", "ky-note-family-extended-reading"],
+  "noteIds": ["ky-note-family-dialogues"],
   "taskIds": [
     "ky-task-family-cloze",
     "ky-task-family-scramble",

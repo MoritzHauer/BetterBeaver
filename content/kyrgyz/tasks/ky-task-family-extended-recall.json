@@ -1,0 +1,17 @@
+{
+  "id": "ky-task-family-extended-recall",
+  "type": "recall",
+  "itemIds": [
+    "ky-item-tayata",
+    "ky-item-tayene",
+    "ky-item-tayake",
+    "ky-item-tayeje",
+    "ky-item-jezde",
+    "ky-item-jene",
+    "ky-item-jeen",
+    "ky-item-kaynata",
+    "ky-item-kaynene",
+    "ky-item-kuyo-inlaw"
+  ],
+  "instructions": "Say the Kyrgyz out loud from the English meaning, then reveal and grade yourself."
+}

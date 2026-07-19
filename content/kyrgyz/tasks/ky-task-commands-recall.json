@@ -1,0 +1,14 @@
+{
+  "id": "ky-task-commands-recall",
+  "type": "recall",
+  "itemIds": [
+    "ky-item-korgoz",
+    "ky-item-ait",
+    "ky-item-ber",
+    "ky-item-jap",
+    "ky-item-ach",
+    "ky-item-uk",
+    "ky-item-bol"
+  ],
+  "instructions": "Say the Kyrgyz out loud from the English meaning, then reveal and grade yourself."
+}

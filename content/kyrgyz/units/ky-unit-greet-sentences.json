@@ -26,5 +26,5 @@
     "ky-task-greet-build"
   ],
   "lessonId": "ky-lesson-greetings",
-  "unlocksAfterUnitId": "ky-unit-greet-requests"
+  "unlocksAfterUnitId": "ky-unit-greet-apologies"
 }

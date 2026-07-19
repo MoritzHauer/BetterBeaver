@@ -1,0 +1,23 @@
+{
+  "id": "ky-unit-greet-commands",
+  "goal": "Give and understand simple one-word commands.",
+  "title": "Simple commands",
+  "itemIds": [
+    "ky-item-korgoz",
+    "ky-item-ait",
+    "ky-item-ber",
+    "ky-item-jap",
+    "ky-item-ach",
+    "ky-item-uk",
+    "ky-item-bol"
+  ],
+  "noteIds": ["ky-note-commands-and-requests"],
+  "taskIds": [
+    "ky-task-commands-recognize",
+    "ky-task-matching-8-2",
+    "ky-task-matching-9-1",
+    "ky-task-commands-recall"
+  ],
+  "lessonId": "ky-lesson-greetings",
+  "unlocksAfterUnitId": "ky-unit-greet-requests"
+}

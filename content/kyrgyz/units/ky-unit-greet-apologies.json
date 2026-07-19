@@ -1,0 +1,24 @@
+{
+  "id": "ky-unit-greet-apologies",
+  "goal": "Apologize, soothe hurt feelings, and ask for a favour.",
+  "title": "Apologies and favours",
+  "itemIds": [
+    "ky-item-kechirip-koyunuz",
+    "ky-item-ayyp-mende",
+    "ky-item-achuulanbanyz",
+    "ky-item-kapa-bolbonuz",
+    "ky-item-taarynbanyz",
+    "ky-item-sizden-otunom",
+    "ky-item-jardam-berip-koyunuzchu",
+    "ky-item-kiruugo-mumkunbu"
+  ],
+  "noteIds": [],
+  "taskIds": [
+    "ky-task-apologies-recognize",
+    "ky-task-matching-10-2",
+    "ky-task-matching-11",
+    "ky-task-apologies-recall"
+  ],
+  "lessonId": "ky-lesson-greetings",
+  "unlocksAfterUnitId": "ky-unit-greet-farewells"
+}

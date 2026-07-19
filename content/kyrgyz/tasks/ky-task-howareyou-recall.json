@@ -1,0 +1,19 @@
+{
+  "id": "ky-task-howareyou-recall",
+  "type": "recall",
+  "itemIds": [
+    "ky-item-ozunchu",
+    "ky-item-ishteringiz-kanday",
+    "ky-item-ishteringiz-jakshyby",
+    "ky-item-den-soolugunuz-kanday",
+    "ky-item-sancha-jashtasyz",
+    "ky-item-kaidan-keldingiz",
+    "ky-item-okuysuzbu-je-ishteysizbi",
+    "ky-item-salamatsyzdarby",
+    "ky-item-kandaysynar",
+    "ky-item-ishteriner-kanday",
+    "ky-item-den-soolugunar-kanday",
+    "ky-item-kudayga-shugur"
+  ],
+  "instructions": "Say the Kyrgyz out loud from the English meaning, then reveal and grade yourself."
+}

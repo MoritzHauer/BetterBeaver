@@ -5,8 +5,14 @@
   "topicId": "kyrgyz",
   "unitIds": [
     "ky-unit-greet-choosing",
+    "ky-unit-greet-howareyou",
     "ky-unit-greet-introductions",
+    "ky-unit-greet-acquainted",
+    "ky-unit-greet-personal",
     "ky-unit-greet-requests",
+    "ky-unit-greet-commands",
+    "ky-unit-greet-farewells",
+    "ky-unit-greet-apologies",
     "ky-unit-greet-sentences"
   ],
   "unlocksAfterLessonId": "ky-lesson-script-survival"

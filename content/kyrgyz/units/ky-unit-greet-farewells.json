@@ -1,0 +1,23 @@
+{
+  "id": "ky-unit-greet-farewells",
+  "goal": "Take your leave politely, whichever side of the goodbye you are on.",
+  "title": "Farewells",
+  "itemIds": [
+    "ky-item-salamatta-bolunuz",
+    "ky-item-salamatta-kalynyz",
+    "ky-item-jakshy-kal",
+    "ky-item-korushkoncho",
+    "ky-item-kelip-turunuz",
+    "ky-item-telefon-chalyp-turunuz",
+    "ky-item-tununguz-beikut-bolsun"
+  ],
+  "noteIds": ["ky-note-greetings-set-expressions"],
+  "taskIds": [
+    "ky-task-farewells-recognize",
+    "ky-task-matching-9-2",
+    "ky-task-matching-10-1",
+    "ky-task-farewells-recall"
+  ],
+  "lessonId": "ky-lesson-greetings",
+  "unlocksAfterUnitId": "ky-unit-greet-commands"
+}

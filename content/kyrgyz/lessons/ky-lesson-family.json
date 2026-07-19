@@ -5,6 +5,7 @@
   "topicId": "kyrgyz",
   "unitIds": [
     "ky-unit-family-members",
+    "ky-unit-family-extended",
     "ky-unit-family-occupations",
     "ky-unit-family-sentences"
   ],

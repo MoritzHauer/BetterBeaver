@@ -25,5 +25,5 @@
     "ky-task-occupations-recall"
   ],
   "lessonId": "ky-lesson-family",
-  "unlocksAfterUnitId": "ky-unit-family-members"
+  "unlocksAfterUnitId": "ky-unit-family-extended"
 }

@@ -1,0 +1,14 @@
+{
+  "id": "ky-task-farewells-recall",
+  "type": "recall",
+  "itemIds": [
+    "ky-item-salamatta-bolunuz",
+    "ky-item-salamatta-kalynyz",
+    "ky-item-jakshy-kal",
+    "ky-item-korushkoncho",
+    "ky-item-kelip-turunuz",
+    "ky-item-telefon-chalyp-turunuz",
+    "ky-item-tununguz-beikut-bolsun"
+  ],
+  "instructions": "Say the Kyrgyz out loud from the English meaning, then reveal and grade yourself."
+}
