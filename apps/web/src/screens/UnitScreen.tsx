@@ -9,6 +9,7 @@ import { EntryPopup } from "../components/EntryPopup";
 import { getLexiconAssetUrl } from "../content/bundled";
 import { getNoteMarkdown } from "../content/source";
 import { SpeakerButton } from "../tts";
+import { FeedbackWidget } from "../components/FeedbackWidget";
 
 type LexemeItem = Extract<Item, { kind: "lexeme" }>;
 type ConceptItem = Extract<Item, { kind: "concept" }>;
@@ -90,9 +91,11 @@ function SubPager({
 function ExampleCard({
   item,
   lookup,
+  topicDocId,
 }: {
   item: ExampleItem;
   lookup: TapLookup;
+  topicDocId: string;
 }) {
   const [showTranslation, setShowTranslation] = useState(false);
 
@@ -116,6 +119,11 @@ function ExampleCard({
             Show translation
           </button>
         )}
+        <FeedbackWidget
+          docId={topicDocId}
+          contentKind="item"
+          contentId={item.id}
+        />
       </li>
     );
   }
@@ -126,6 +134,11 @@ function ExampleCard({
         <TappableText text={item.payload.b.script} lookup={lookup} />
       </strong>
       <p>{item.payload.contrast}</p>
+      <FeedbackWidget
+        docId={topicDocId}
+        contentKind="item"
+        contentId={item.id}
+      />
     </li>
   );
 }
@@ -138,11 +151,15 @@ function NoteCard({
   lookup,
   pinned,
   onPin,
+  topicDocId,
+  noteId,
 }: {
   markdown: string;
   lookup: TapLookup;
   pinned: boolean;
   onPin: () => void;
+  topicDocId: string;
+  noteId: string;
 }) {
   return (
     <section className="note">
@@ -152,6 +169,11 @@ function NoteCard({
       <button className="plain" disabled={pinned} onClick={onPin}>
         {pinned ? "📌 Pinned for review" : "📌 Pin for review"}
       </button>
+      <FeedbackWidget
+        docId={topicDocId}
+        contentKind="note"
+        contentId={noteId}
+      />
     </section>
   );
 }
@@ -367,6 +389,11 @@ export function UnitScreen({
         <>
           <h1>{unit.title}</h1>
           <p>{unit.goal}</p>
+          <FeedbackWidget
+            docId={`topic:${content.topic.id}`}
+            contentKind="unit"
+            contentId={unit.id}
+          />
         </>
       ) : null}
 
@@ -398,6 +425,8 @@ export function UnitScreen({
                   new Set([...pinnedNoteIds, currentNote.noteId]),
                 );
               }}
+              topicDocId={`topic:${content.topic.id}`}
+              noteId={currentNote.noteId}
             />
           ) : null}
         </>
@@ -414,6 +443,7 @@ export function UnitScreen({
                 <th>Script</th>
                 <th>Gloss</th>
                 <th>Audio</th>
+                <th>Feedback</th>
               </tr>
             </thead>
             <tbody>
@@ -444,6 +474,13 @@ export function UnitScreen({
                       }
                     />
                   </td>
+                  <td>
+                    <FeedbackWidget
+                      docId={`domain:${domainId}`}
+                      contentKind="item"
+                      contentId={item.id}
+                    />
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -472,6 +509,7 @@ export function UnitScreen({
               <tr>
                 <th>Term</th>
                 <th>Definition</th>
+                <th>Feedback</th>
               </tr>
             </thead>
             <tbody>
@@ -479,6 +517,13 @@ export function UnitScreen({
                 <tr key={item.id}>
                   <td>{item.payload.term}</td>
                   <td>{item.payload.definition}</td>
+                  <td>
+                    <FeedbackWidget
+                      docId={`domain:${domainId}`}
+                      contentKind="item"
+                      contentId={item.id}
+                    />
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -504,7 +549,12 @@ export function UnitScreen({
           ) : null}
           <ul className="card-list">
             {exampleCards.map((item) => (
-              <ExampleCard key={item.id} item={item} lookup={lookup} />
+              <ExampleCard
+                key={item.id}
+                item={item}
+                lookup={lookup}
+                topicDocId={`topic:${content.topic.id}`}
+              />
             ))}
           </ul>
         </>

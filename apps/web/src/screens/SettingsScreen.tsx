@@ -11,6 +11,7 @@ import { clearCachedDocuments } from "../content/cache";
 import { eraseAllData, exportBackup, importBackup } from "../progress/backup";
 import { SOUND_KEY } from "../sounds";
 import { getThemePref, setThemePref, type ThemePref } from "../theme";
+import { getDisplayName, setDisplayName } from "../identity";
 
 const THEME_OPTIONS: { pref: ThemePref; label: string }[] = [
   { pref: "system", label: "System" },
@@ -28,6 +29,7 @@ export function SettingsScreen({
   onImportClass: (docId: string) => void;
 }) {
   const [themePref, setThemePrefState] = useState<ThemePref>(getThemePref);
+  const [displayName, setDisplayNameState] = useState(getDisplayName);
   const [soundOn, setSoundOn] = useState(
     () => localStorage.getItem(SOUND_KEY) !== "off",
   );
@@ -165,6 +167,25 @@ export function SettingsScreen({
           Chirps on right/wrong answers (word pronunciation always plays).
         </p>
       </section>
+
+      {getSupabase() !== null ? (
+        <section className="card">
+          <h2>Feedback name</h2>
+          <p className="status">
+            Shown next to your votes, reports, and chat messages — no account
+            needed.
+          </p>
+          <input
+            type="text"
+            value={displayName}
+            onChange={(event) => setDisplayNameState(event.target.value)}
+            onBlur={() => {
+              setDisplayName(displayName);
+              setDisplayNameState(getDisplayName());
+            }}
+          />
+        </section>
+      ) : null}
 
       {getSupabase() !== null ? (
         <section className="card">

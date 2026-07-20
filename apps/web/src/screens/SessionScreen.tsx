@@ -26,6 +26,7 @@ import { getAssetUrl } from "../content/bundled";
 import { getNoteMarkdown } from "../content/source";
 import { SpeakerButton } from "../tts";
 import { playCorrect, playFanfare, playWrong } from "../sounds";
+import { FeedbackWidget } from "../components/FeedbackWidget";
 
 /** Tally of results across a session; only the fields for the task type(s)
  * actually encountered end up non-zero. Every auto-graded kind (recognize,
@@ -1083,6 +1084,13 @@ export function SessionScreen({
           >
             {pinnedTaskIds?.has(currentTaskId) ? "📌 Pinned" : "📌 Pin"}
           </button>
+        ) : null}
+        {currentTaskId !== undefined ? (
+          <FeedbackWidget
+            docId={`topic:${topicId}`}
+            contentKind="task"
+            contentId={currentTaskId}
+          />
         ) : null}
       </header>
       <h1>{title}</h1>

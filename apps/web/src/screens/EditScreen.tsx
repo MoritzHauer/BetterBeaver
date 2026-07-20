@@ -24,6 +24,7 @@ import {
   type AuthorDoc,
 } from "../backend/supabase";
 import { validateForPublish } from "../backend/publishCheck";
+import { FeedbackPanel } from "../components/FeedbackPanel";
 
 /**
  * Form-based document editor (plan 0012 §7, the "common 80%"): topic
@@ -571,6 +572,7 @@ export function EditScreen({
           )}
         </p>
       )}
+      {view.v === "root" && <FeedbackPanel docId={docId} />}
       {body}
       <div className="editor-publish card">
         {publishState.s === "errors" && (

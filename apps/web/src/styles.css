@@ -1018,3 +1018,51 @@ button.danger {
   gap: 0.75rem;
   padding: 0.2rem 0;
 }
+
+/* Content feedback (plan 0014): votes/report on any content level, plus
+ * the per-topic public chat. */
+textarea {
+  font: inherit;
+  color: inherit;
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--input-border);
+  border-radius: 0.75rem;
+  background: var(--card-bg);
+}
+
+.feedback-widget {
+  display: inline-flex;
+  gap: 0.25rem;
+}
+
+.feedback-vote {
+  min-height: 32px;
+  min-width: 32px;
+  padding: 0.2rem 0.4rem;
+  font-size: 1rem;
+  opacity: 0.6;
+}
+
+.feedback-vote.active {
+  opacity: 1;
+}
+
+.chat-messages {
+  gap: 0.5rem;
+}
+
+.chat-message {
+  padding: 0.5rem 0.75rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.chat-compose {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-end;
+  margin-top: 0.75rem;
+}

@@ -1,6 +1,7 @@
 import type { Content } from "@betterbeaver/schema";
 import { isUnitComplete, isUnitUnlocked } from "@betterbeaver/engine";
 import { LockableProgress } from "../components/ProgressBar";
+import { FeedbackWidget } from "../components/FeedbackWidget";
 import type { PracticeTarget } from "./TopicScreen";
 import { lessonPracticeTargets } from "./TopicScreen";
 
@@ -59,6 +60,11 @@ export function LessonScreen({
       </header>
       <h1>{lesson.title}</h1>
       <p>{lesson.goal}</p>
+      <FeedbackWidget
+        docId={`topic:${content.topic.id}`}
+        contentKind="lesson"
+        contentId={lesson.id}
+      />
       <ul className="card-list">
         <li className="card">
           <button

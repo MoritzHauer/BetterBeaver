@@ -9,6 +9,8 @@ import {
   isUnitUnlocked,
 } from "@betterbeaver/engine";
 import { LockableProgress } from "../components/ProgressBar";
+import { FeedbackWidget } from "../components/FeedbackWidget";
+import { ChatThread } from "../components/ChatThread";
 
 /** One practice-able task and where it lives, for the shuffle buttons (plan 0008). */
 export interface PracticeTarget {
@@ -125,6 +127,11 @@ export function TopicScreen({
       </header>
       <h1>{content.topic.title}</h1>
       <p>{content.topic.description}</p>
+      <FeedbackWidget
+        docId={`topic:${content.topic.id}`}
+        contentKind="topic"
+        contentId={content.topic.id}
+      />
       <ul className="card-list">
         <li className={`card review${dueCount !== 0 ? " primary" : ""}`}>
           <button onClick={onReview} disabled={dueCount === 0}>
@@ -214,6 +221,7 @@ export function TopicScreen({
           );
         })}
       </ul>
+      <ChatThread docId={`topic:${content.topic.id}`} />
     </main>
   );
 }
