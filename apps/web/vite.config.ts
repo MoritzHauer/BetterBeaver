@@ -54,6 +54,7 @@ export default defineConfig({
         // Workbox also skips files over 2 MiB by default; raise
         // maximumFileSizeToCacheInBytes when content audio grows past that.
         globPatterns: ["**/*.{js,css,html,png,svg,wav,woff2,webmanifest}"],
+        maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
       },
     }),
   ],
