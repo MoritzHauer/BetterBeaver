@@ -526,12 +526,18 @@ export function EditScreen({
   return (
     <main className={readOnly ? "editor read-only" : "editor"}>
       <header className="screen-header">
-        <button
-          className="plain"
-          onClick={() => (view.v === "root" ? onBack() : setView(upView(view)))}
-        >
+        <button className="plain" onClick={onBack} title="Back to learning">
           ←
         </button>
+        {view.v !== "root" && (
+          <button
+            className="plain"
+            onClick={() => setView(upView(view))}
+            title="Up one level"
+          >
+            ↑
+          </button>
+        )}
         <h1>{docId}</h1>
       </header>
       <p className="status">
