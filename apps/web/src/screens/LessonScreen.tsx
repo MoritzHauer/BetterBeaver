@@ -15,6 +15,7 @@ export function LessonScreen({
   attemptedTaskIds,
   onSelectUnit,
   onPracticeTask,
+  onEdit,
   onBack,
 }: {
   content: Content;
@@ -22,6 +23,8 @@ export function LessonScreen({
   attemptedTaskIds: ReadonlySet<string>;
   onSelectUnit: (unitId: string) => void;
   onPracticeTask: (target: PracticeTarget) => void;
+  /** Authors only (plan 0012): opens this lesson in the editor. */
+  onEdit?: () => void;
   onBack: () => void;
 }) {
   const lesson = content.lessons.find((l) => l.id === lessonId);
@@ -44,7 +47,16 @@ export function LessonScreen({
 
   return (
     <main>
-      <button onClick={onBack}>&larr; {content.topic.title}</button>
+      <header className="screen-header">
+        <button className="plain" onClick={onBack}>
+          &larr; {content.topic.title}
+        </button>
+        {onEdit !== undefined && (
+          <button className="plain" onClick={onEdit}>
+            ✎ Edit
+          </button>
+        )}
+      </header>
       <h1>{lesson.title}</h1>
       <p>{lesson.goal}</p>
       <ul className="card-list">

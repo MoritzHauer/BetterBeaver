@@ -50,6 +50,7 @@ export function TopicScreen({
   onPracticeTask,
   onReview,
   onVocabulary,
+  onEdit,
   onBack,
 }: {
   content: Content;
@@ -62,6 +63,8 @@ export function TopicScreen({
   onPracticeTask: (target: PracticeTarget) => void;
   onReview: () => void;
   onVocabulary: () => void;
+  /** Authors only (plan 0012): opens this topic's document in the editor. */
+  onEdit?: () => void;
   onBack: () => void;
 }) {
   const lessonById = new Map(
@@ -109,6 +112,11 @@ export function TopicScreen({
         <button className="plain" onClick={onBack}>
           &larr; Topics
         </button>
+        {onEdit !== undefined && (
+          <button className="plain" onClick={onEdit}>
+            ✎ Edit
+          </button>
+        )}
         {streak !== null && streak.length > 0 ? (
           <span className="streak" title="Day streak">
             &#128293; {streak.length}

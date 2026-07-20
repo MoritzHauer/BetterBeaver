@@ -163,6 +163,7 @@ export function UnitScreen({
   lookup,
   onPractice,
   onGradeNote,
+  onEdit,
   onBack,
 }: {
   content: Content;
@@ -176,6 +177,9 @@ export function UnitScreen({
   /** Self-grades a note (plan 0008 step 7) — first grading schedules it,
    * entering it into the domain's review queue like any other unit. */
   onGradeNote: (noteId: string, grade: SelfGrade) => void;
+  /** Authors only (plan 0012): opens this unit in the editor — or the
+   * currently shown theory note, when the Theory page is open. */
+  onEdit?: (target?: { noteStem?: string }) => void;
   onBack: () => void;
 }) {
   // Which shipped lexicon entry's popup is open, if any (kind-partitioned
@@ -210,7 +214,9 @@ export function UnitScreen({
             return [];
           }
           const markdown = getNoteMarkdown(content.topic.id, note.stem);
-          return markdown === undefined ? [] : [{ noteId, markdown }];
+          return markdown === undefined
+            ? []
+            : [{ noteId, stem: note.stem, markdown }];
         });
 
   const items =
@@ -317,6 +323,21 @@ export function UnitScreen({
             />
           ))}
         </div>
+        {onEdit !== undefined && (
+          <button
+            className="plain"
+            aria-label="Edit content"
+            onClick={() =>
+              onEdit(
+                currentPage === "theory" && currentNote !== undefined
+                  ? { noteStem: currentNote.stem }
+                  : undefined,
+              )
+            }
+          >
+            ✎
+          </button>
+        )}
       </header>
 
       {currentPage === "overview" ? (

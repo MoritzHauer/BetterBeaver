@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Content, Item, Task, Unit } from "@betterbeaver/schema";
+import { documentId } from "@betterbeaver/schema";
 import type {
   ContentSource,
   DomainContent,
@@ -40,9 +41,9 @@ import {
 import { ErrorScreen } from "./screens/ErrorScreen";
 import { StartScreen } from "./screens/StartScreen";
 import { AuthorScreen } from "./screens/AuthorScreen";
-import { EditScreen } from "./screens/EditScreen";
+import { EditScreen, type EditTarget } from "./screens/EditScreen";
 import { PrivacyScreen } from "./screens/PrivacyScreen";
-import { getSupabase } from "./backend/supabase";
+import { currentUser, getSupabase } from "./backend/supabase";
 
 type Screen =
   | { screen: "topics" }
@@ -73,7 +74,9 @@ type Screen =
   // Authoring (plan 0012 step 2): sign-in + document list, the editor, and
   // the static privacy note. Learner flows never route here.
   | { screen: "author" }
-  | { screen: "edit"; docId: string }
+  // `target` deep-links into a level (lesson/unit/note); `back` returns to
+  // the learner screen the Edit button was tapped on (default: author list).
+  | { screen: "edit"; docId: string; target?: EditTarget; back?: Screen }
   | { screen: "privacy" };
 
 type ContentSourceResult = { source: ContentSource } | { errors: string[] };
@@ -358,6 +361,15 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   }
 
   const [screen, setScreen] = useState<Screen>({ screen: "topics" });
+  // Signed-in authors get ✎ Edit buttons on the topic/lesson/unit screens
+  // (plan 0012). Whether they actually maintain a given document is the
+  // backend's call — a non-maintainer just sees the editor's load error.
+  const [isAuthor, setIsAuthor] = useState(false);
+  useEffect(() => {
+    if (getSupabase() !== null) {
+      void currentUser().then((user) => setIsAuthor(user !== null));
+    }
+  }, []);
   // ponytail: welcome cover shows on every load (plan 0009); persist a
   // "seen" flag if the extra tap ever annoys.
   const [started, setStarted] = useState(false);
@@ -562,10 +574,12 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     );
   }
   if (screen.screen === "edit") {
+    const back = screen.back ?? { screen: "author" as const };
     return (
       <EditScreen
         docId={screen.docId}
-        onBack={() => setScreen({ screen: "author" })}
+        target={screen.target}
+        onBack={() => setScreen(back)}
       />
     );
   }
@@ -670,6 +684,16 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           onVocabulary={() =>
             setScreen({ screen: "vocab", domainId: content.topic.domainId })
           }
+          onEdit={
+            isAuthor
+              ? () =>
+                  setScreen({
+                    screen: "edit",
+                    docId: documentId("topic", screen.topicId),
+                    back: screen,
+                  })
+              : undefined
+          }
           onBack={() => setScreen({ screen: "topics" })}
         />
       );
@@ -695,6 +719,17 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
               topicId: screen.topicId,
               ...target,
             })
+          }
+          onEdit={
+            isAuthor
+              ? () =>
+                  setScreen({
+                    screen: "edit",
+                    docId: documentId("topic", screen.topicId),
+                    target: { lessonId: screen.lessonId },
+                    back: screen,
+                  })
+              : undefined
           }
           onBack={() => goToTopic(screen.topicId)}
         />
@@ -724,6 +759,21 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
               content.topic.domainId,
             );
           }}
+          onEdit={
+            isAuthor
+              ? (target) =>
+                  setScreen({
+                    screen: "edit",
+                    docId: documentId("topic", screen.topicId),
+                    target: {
+                      lessonId: screen.lessonId,
+                      unitId: screen.unitId,
+                      ...target,
+                    },
+                    back: screen,
+                  })
+              : undefined
+          }
           onBack={() =>
             setScreen({
               screen: "lesson",

@@ -41,9 +41,9 @@ Visible only when the account is in `admins` (probe: `select` own row from `admi
 
 In the editor of a published document, a **History** section: `versions` rows for the doc (version, published_at, published_by e-mail is NOT available — show the uuid-less "by a maintainer" or nothing; do not join `auth.users`). "Restore this version" loads that `versions.doc` as the working draft (confirm if a draft exists, same rule as proposal-accept), letting the maintainer review and publish through the normal validated path. No direct-publish shortcut — restore goes through draft + validate + publish like any edit.
 
-### 7. UI-audit remainder (W2–W7)
+### 7. UI-audit remainder (W2–W7) — DONE 2026-07-19
 
-Work through the Warnings section of `docs/ui-review-2026-07-19.md` (trail-dot tap targets, editor row-action sizing, card padding gaps, read-only fields visibly disabled, id overflow, placeholder contrast). The Critical and AA-failure findings (C1–C2, F1–F5, W1) were fixed 2026-07-19 — verify against the audit's numbers, don't re-fix.
+All findings of `docs/ui-review-2026-07-19.md` are fixed (C1–C2, F1–F5, W1 in the hardening pass; W2–W7 in a follow-up the same day: trail-dot tap halos, 44px row actions, `p.card`/`form.card` padding, `.editor.read-only` dimming, editor `overflow-wrap`, `::placeholder` color). Verify against the audit's numbers, don't re-fix.
 
 ## Out of scope
 
@@ -51,4 +51,4 @@ Undo/redo inside forms, mobile-optimized editor layout, concurrent co-editing be
 
 ## Verification
 
-Per item, in a real browser signed in as a maintainer (and as admin for item 5): create a topic end-to-end (create → author a minimal lesson/unit/item/task → preview → publish attempt fails while unlisted-domain refs are wrong → fix → publish → admin validates & lists → learner browser receives it after accept). History restore round-trips an old version through draft → publish. Autosave retry observed by toggling the network offline in devtools. `corepack pnpm check` green after every item.
+Per item, in a real browser signed in as a maintainer (and as admin for item 5): create a topic end-to-end (create → author a minimal lesson/unit/item/task → preview → publish attempt fails while unlisted-domain refs are wrong → fix → publish → admin validates & lists → learner browser receives it after accept). History restore round-trips an old version through draft → publish. Autosave is local-first since 2026-07-20 (localStorage + explicit root-view Sync) — verify offline edits survive a reload and sync once back online. `corepack pnpm check` green after every item.

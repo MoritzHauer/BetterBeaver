@@ -290,16 +290,47 @@ type View =
   | { v: "entry"; id: string }
   | { v: "family"; id: string };
 
+/** Deep-link target from the learner screens' Edit buttons: the editor
+ * opens directly at the matching level (class/lesson/unit/note). */
+export interface EditTarget {
+  lessonId?: string;
+  unitId?: string;
+  noteStem?: string;
+}
+
+function initialView(target: EditTarget | undefined): View {
+  if (target?.lessonId !== undefined && target.unitId !== undefined) {
+    const unitView: View = {
+      v: "unit",
+      lessonId: target.lessonId,
+      unitId: target.unitId,
+    };
+    return target.noteStem !== undefined
+      ? { v: "note", backTo: unitView, stem: target.noteStem }
+      : unitView;
+  }
+  if (target?.lessonId !== undefined) {
+    return { v: "lesson", lessonId: target.lessonId };
+  }
+  return { v: "root" };
+}
+
+/** Local-first draft storage (one key per document). The draft lives here
+ * until the author explicitly syncs it from the root (class) view. */
+const draftKey = (docId: string) => `bb.author.draft.${docId}`;
+
 export function EditScreen({
   docId,
+  target,
   onBack,
 }: {
   docId: string;
+  target?: EditTarget;
   onBack: () => void;
 }) {
   const [record, setRecord] = useState<AuthorDoc | null>(null);
   const [working, setWorking] = useState<AnyDoc | null>(null);
-  const [view, setView] = useState<View>({ v: "root" });
+  const [view, setView] = useState<View>(() => initialView(target));
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<"saved" | "saving" | "error">(
     "saved",
@@ -311,25 +342,31 @@ export function EditScreen({
     | { s: "errors"; errors: string[] }
     | { s: "done" }
   >({ s: "idle" });
+  const [syncState, setSyncState] = useState<
+    "synced" | "unsynced" | "syncing" | "error"
+  >("synced");
   const dirtyRef = useRef(false);
   const workingRef = useRef<AnyDoc | null>(null);
   workingRef.current = working;
 
-  // A pending debounced save must survive leaving the editor: flush it on
-  // unmount, and warn before the tab closes — navigation must never drop an
-  // edit (plan 0012 §7 autosave).
+  // Local-first (plan 0012 §7 amended): every edit lands in localStorage;
+  // the backend sees it only through the explicit Sync/Publish actions on
+  // the root (class) view. A pending debounced write must survive leaving
+  // the editor or closing the tab, so flush it on both.
   useEffect(() => {
-    const warn = (event: BeforeUnloadEvent) => {
-      if (dirtyRef.current) {
-        event.preventDefault();
+    const flush = () => {
+      if (dirtyRef.current && workingRef.current !== null) {
+        localStorage.setItem(
+          draftKey(docId),
+          JSON.stringify(workingRef.current),
+        );
+        dirtyRef.current = false;
       }
     };
-    window.addEventListener("beforeunload", warn);
+    window.addEventListener("beforeunload", flush);
     return () => {
-      window.removeEventListener("beforeunload", warn);
-      if (dirtyRef.current && workingRef.current !== null) {
-        void saveDraft(docId, workingRef.current);
-      }
+      window.removeEventListener("beforeunload", flush);
+      flush();
     };
   }, [docId]);
 
@@ -337,29 +374,57 @@ export function EditScreen({
     loadDocument(docId).then(
       (doc) => {
         setRecord(doc);
+        // A local draft always wins over the server copy: it is the
+        // author's newest work, possibly written offline.
+        const local = localStorage.getItem(draftKey(docId));
+        if (local !== null) {
+          try {
+            setWorking(JSON.parse(local) as AnyDoc);
+            setSyncState("unsynced");
+            return;
+          } catch {
+            localStorage.removeItem(draftKey(docId));
+          }
+        }
         setWorking((doc.draft ?? doc.published) as AnyDoc | null);
       },
       (e: unknown) => setLoadError(e instanceof Error ? e.message : String(e)),
     );
   }, [docId]);
 
-  // Draft autosave (plan 0012 §7), debounced.
+  // Draft autosave to localStorage, debounced.
   useEffect(() => {
     if (!dirtyRef.current || working === null) {
       return;
     }
     setSaveState("saving");
     const timer = setTimeout(() => {
-      saveDraft(docId, working).then(
-        () => {
-          dirtyRef.current = false;
-          setSaveState("saved");
-        },
-        () => setSaveState("error"),
-      );
-    }, 1200);
+      try {
+        localStorage.setItem(draftKey(docId), JSON.stringify(working));
+        dirtyRef.current = false;
+        setSaveState("saved");
+      } catch {
+        setSaveState("error");
+      }
+    }, 400);
     return () => clearTimeout(timer);
   }, [working, docId]);
+
+  async function handleSync() {
+    if (workingRef.current === null) {
+      return;
+    }
+    localStorage.setItem(draftKey(docId), JSON.stringify(workingRef.current));
+    dirtyRef.current = false;
+    setSyncState("syncing");
+    try {
+      await saveDraft(docId, workingRef.current);
+      localStorage.removeItem(draftKey(docId));
+      setSyncState("synced");
+    } catch {
+      setSyncState("error");
+    }
+  }
 
   if (loadError !== null) {
     return (
@@ -390,6 +455,7 @@ export function EditScreen({
     }
     dirtyRef.current = true;
     setPublishState({ s: "idle" });
+    setSyncState("unsynced");
     setWorking(next);
   };
 
@@ -415,6 +481,10 @@ export function EditScreen({
       setRecord(reloaded);
       setWorking((reloaded.draft ?? reloaded.published) as AnyDoc);
       dirtyRef.current = false;
+      // Publishing pushed the local work to the server — the local copy is
+      // no longer ahead of it.
+      localStorage.removeItem(draftKey(docId));
+      setSyncState("synced");
       setPublishState({ s: "done" });
     } catch (e) {
       setPublishState({
@@ -430,6 +500,8 @@ export function EditScreen({
     }
     await saveDraft(docId, null);
     dirtyRef.current = false;
+    localStorage.removeItem(draftKey(docId));
+    setSyncState("synced");
     setWorking(record.published as AnyDoc);
     setSaveState("saved");
   }
@@ -452,7 +524,7 @@ export function EditScreen({
     );
 
   return (
-    <main className="editor">
+    <main className={readOnly ? "editor read-only" : "editor"}>
       <header className="screen-header">
         <button
           className="plain"
@@ -468,11 +540,31 @@ export function EditScreen({
         {readOnly
           ? "read-only: this document needs a newer app"
           : saveState === "saving"
-            ? "saving draft…"
+            ? "saving…"
             : saveState === "error"
-              ? "draft save failed — check your connection"
-              : "draft saved"}
+              ? "local save failed — storage may be full"
+              : "saved on this device"}
       </p>
+      {view.v === "root" && !readOnly && (
+        <p className="status">
+          {syncState === "synced"
+            ? "in sync with the server"
+            : syncState === "syncing"
+              ? "syncing…"
+              : syncState === "error"
+                ? "sync failed — check your connection"
+                : "local changes not on the server yet"}{" "}
+          {syncState !== "synced" && (
+            <button
+              className="plain"
+              disabled={syncState === "syncing"}
+              onClick={() => void handleSync()}
+            >
+              Sync to server
+            </button>
+          )}
+        </p>
+      )}
       {body}
       <div className="editor-publish card">
         {publishState.s === "errors" && (

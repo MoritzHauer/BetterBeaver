@@ -202,6 +202,23 @@ button.plain {
   padding: 1rem;
 }
 
+/* Cards that ARE a p/form (AuthorScreen sign-in, empty states) pad
+ * themselves — p margins fall outside the border (ui-review W4). */
+p.card,
+form.card {
+  padding: 1rem;
+}
+
+form.card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+form.card p {
+  margin: 0;
+}
+
 .card.locked {
   color: var(--locked-fg);
 }
@@ -580,7 +597,9 @@ main.unit-screen {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.6rem;
+  /* 1rem gap + the ::after halo below = ~24px tap targets that don't
+   * overlap neighbours (ui-review W2). */
+  gap: 1rem;
   margin: 0.5rem 0 1.5rem;
 }
 
@@ -607,6 +626,13 @@ main.unit-screen {
   transition:
     width 150ms ease,
     background-color 150ms ease;
+}
+
+/* Invisible tap halo: the visual dot stays 8px, the hit area becomes 24px. */
+.trail .dot::after {
+  content: "";
+  position: absolute;
+  inset: -0.5rem;
 }
 
 .trail .dot.active {
@@ -826,6 +852,25 @@ input[type="email"],
   background: var(--card-bg);
 }
 
+/* Long doc/entity ids appear in headings and list rows (ui-review W6). */
+.editor {
+  overflow-wrap: anywhere;
+}
+
+/* Read-only mode (doc needs a newer app): edits are dropped in change(),
+ * so the fields must LOOK inactive too (ui-review W5). */
+.editor.read-only input,
+.editor.read-only textarea,
+.editor.read-only select {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+::placeholder {
+  color: var(--locked-fg); /* browser default is ~2.5:1 (ui-review W7) */
+  opacity: 1;
+}
+
 .field {
   display: block;
   margin: 0.75rem 0;
@@ -868,7 +913,7 @@ input[type="email"],
 }
 
 .editor-row-actions .plain {
-  min-height: 36px;
+  min-height: 44px; /* repo-wide tap-target norm (ui-review W3) */
   padding: 0.3rem 0.5rem;
 }
 
