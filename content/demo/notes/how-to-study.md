@@ -22,4 +22,4 @@ A few things to notice as you go:
 
 Eleven task types, four item kinds, one note. That's the whole content
 model — the rest of the app is just more of this, at scale, in whatever
-subject you point it at.
+subject you point it at. The last unit shows you how to add your own.

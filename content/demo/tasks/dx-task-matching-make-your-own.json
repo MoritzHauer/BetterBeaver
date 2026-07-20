@@ -1,0 +1,6 @@
+{
+  "id": "dx-task-matching-make-your-own",
+  "type": "matching",
+  "itemIds": ["dx-con-content-ladder", "dx-con-draft", "dx-con-item-task"],
+  "instructions": "Match each term to its fact."
+}

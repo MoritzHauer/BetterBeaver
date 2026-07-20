@@ -1,0 +1,6 @@
+{
+  "id": "dx-task-recall-make-your-own",
+  "type": "recall",
+  "itemIds": ["dx-con-content-ladder", "dx-con-draft", "dx-con-item-task"],
+  "instructions": "Recall the fact, then reveal the answer."
+}

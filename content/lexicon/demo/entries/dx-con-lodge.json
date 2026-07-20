@@ -3,9 +3,8 @@
   "kind": "concept",
   "payload": {
     "term": "Lodge",
-    "definition": "The beaver's dome-shaped home of branches and mud, built with an underwater entrance so land predators can't reach the chamber inside.",
-    "example": "BetterBeaver's content is built the same way, one shell inside another: a Topic is the whole lodge, a Lesson is one chamber, and a Unit is one day's worth of work inside that chamber.",
-    "imageRef": "dx-img-con-lodge"
+    "definition": "A dome of branches and mud with an underwater entrance, so land predators can't get in.",
+    "example": "BetterBeaver nests the same way: a Topic is the whole lodge, a Lesson is one chamber, a Unit is one day's work inside it."
   },
   "sourceRef": "dx-resource-intro"
 }

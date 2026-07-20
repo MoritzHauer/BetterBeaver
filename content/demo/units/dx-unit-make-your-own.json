@@ -1,0 +1,9 @@
+{
+  "id": "dx-unit-make-your-own",
+  "title": "Make it your own",
+  "goal": "How the content ladder works, so you can build a Topic of your own.",
+  "itemIds": ["dx-con-content-ladder", "dx-con-draft", "dx-con-item-task"],
+  "noteIds": ["dx-note-make-your-own"],
+  "taskIds": ["dx-task-recall-make-your-own", "dx-task-matching-make-your-own"],
+  "lessonId": "dx-lesson-intro"
+}

@@ -4,5 +4,5 @@
   "title": "Meet BetterBeaver",
   "domainId": "demo",
   "lessonIds": ["dx-lesson-intro"],
-  "description": "A playful, beaver-fact-powered tour of how the app itself works: spaced repetition, the Topic → Lesson → Unit ladder, and all eleven exercise types."
+  "description": "A playful, beaver-fact-powered tour of how the app itself works: spaced repetition, the Topic → Lesson → Unit ladder, all eleven exercise types, and how to build your own."
 }

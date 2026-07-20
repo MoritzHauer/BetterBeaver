@@ -1,6 +1,6 @@
 {
   "id": "dx-task-picture-basics",
   "type": "picture",
-  "itemIds": ["dx-con-dam", "dx-con-lodge"],
+  "itemIds": ["dx-con-dam", "dx-con-incisors"],
   "instructions": "Pick the term that matches the picture."
 }

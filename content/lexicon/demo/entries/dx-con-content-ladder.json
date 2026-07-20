@@ -1,0 +1,10 @@
+{
+  "id": "dx-con-content-ladder",
+  "kind": "concept",
+  "payload": {
+    "term": "Topic → Lesson → Unit",
+    "definition": "Every subject nests the same way: a Topic holds Lessons, a Lesson holds Units, a Unit holds the actual items, tasks, and notes.",
+    "example": "This tour is proof: one Topic, one Lesson, three Units — and you're standing in the last one."
+  },
+  "sourceRef": "dx-resource-intro"
+}

@@ -1,6 +1,17 @@
+<p align="center">
+  <img src="apps/web/public/art/mascot.png" alt="The BetterBeaver mascot, a beaver reading a book" width="220" />
+</p>
+
 # BetterBeaver
 
-This is a general learning platform upgrade your skills on a daily level.BetterBeaver helps you get better every day with focused learning, repeatable practice, and skill-building across any topic.
+Learning is a lot like building a dam: skip too many days and the water finds
+the gap. BetterBeaver is a spaced-repetition app that keeps patching that gap
+for you — a little bit, every day, on whatever you're learning. Start with
+Kyrgyz, or point it at any subject you like.
+
+No cramming, no guilt trips. Just small, well-timed reviews that stick.
+
+**Try it:** [moritzhauer.github.io/BetterBeaver](https://moritzhauer.github.io/BetterBeaver/)
 
 ## Documentation
 
