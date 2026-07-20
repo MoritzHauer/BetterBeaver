@@ -1,7 +1,12 @@
 /** WebAudio-synthesized feedback tones (plan 0003) — no asset files. Each
- * call is fire-and-forget and silently no-ops where audio is unavailable.
- * ponytail: no mute toggle yet — add one when the tones grate (plan 0003
- * open question). */
+ * call is fire-and-forget and silently no-ops where audio is unavailable, or
+ * when the learner has turned Sound effects off in Settings. */
+
+/** Sound effects are on unless explicitly set to "off" (Settings toggle). */
+export const SOUND_KEY = "bb.sound";
+function soundEffectsOn(): boolean {
+  return localStorage.getItem(SOUND_KEY) !== "off";
+}
 
 let ctx: AudioContext | null = null;
 
@@ -27,6 +32,9 @@ function tone(
 }
 
 function play(notes: () => void): void {
+  if (!soundEffectsOn()) {
+    return;
+  }
   try {
     notes();
   } catch {

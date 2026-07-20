@@ -22,6 +22,8 @@ export function TopicListScreen({
   onDomainVocabulary,
   onDomainReview,
   onAuthor,
+  onOpenStats,
+  onOpenSettings,
 }: {
   domains: DomainSummary[];
   topics: TopicSummary[];
@@ -34,10 +36,32 @@ export function TopicListScreen({
   onDomainReview: (domainId: string) => void;
   /** Author entry (plan 0012); absent when the backend isn't configured. */
   onAuthor?: () => void;
+  onOpenStats: () => void;
+  onOpenSettings: () => void;
 }) {
   return (
     <main>
-      <h1>BetterBeaver</h1>
+      <header className="home-bar">
+        <h1>BetterBeaver</h1>
+        <div className="home-bar-actions">
+          <button
+            type="button"
+            className="plain icon-button"
+            onClick={onOpenStats}
+            aria-label="Stats"
+          >
+            📊
+          </button>
+          <button
+            type="button"
+            className="plain icon-button"
+            onClick={onOpenSettings}
+            aria-label="Settings"
+          >
+            ⚙️
+          </button>
+        </div>
+      </header>
       {domains.map((domain) => (
         <section key={domain.id}>
           <header className="screen-header">

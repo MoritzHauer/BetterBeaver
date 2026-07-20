@@ -56,6 +56,8 @@ export interface ProgressStore {
   markTaskAttempted(taskId: string): Promise<void>;
   getStreak(domainId: string): Promise<Streak | null>;
   setStreak(domainId: string, streak: Streak): Promise<void>;
+  /** Bumps the lifetime graded-answer count by one (plan: Stats rep counter). */
+  incrementReps(): Promise<void>;
 }
 
 /** A learner-authored named word list (plan 0004): itemIds reference entries of one domain. */

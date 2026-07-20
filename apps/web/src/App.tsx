@@ -43,6 +43,8 @@ import { StartScreen } from "./screens/StartScreen";
 import { AuthorScreen } from "./screens/AuthorScreen";
 import { EditScreen, type EditTarget } from "./screens/EditScreen";
 import { PrivacyScreen } from "./screens/PrivacyScreen";
+import { SettingsScreen } from "./screens/SettingsScreen";
+import { StatsScreen } from "./screens/StatsScreen";
 import { currentUser, getSupabase } from "./backend/supabase";
 
 type Screen =
@@ -77,7 +79,11 @@ type Screen =
   // `target` deep-links into a level (lesson/unit/note); `back` returns to
   // the learner screen the Edit button was tapped on (default: author list).
   | { screen: "edit"; docId: string; target?: EditTarget; back?: Screen }
-  | { screen: "privacy" };
+  | { screen: "privacy" }
+  // Learner settings and stats (reached from the home top bar); both are
+  // back-button screens over on-device state.
+  | { screen: "settings" }
+  | { screen: "stats" };
 
 type ContentSourceResult = { source: ContentSource } | { errors: string[] };
 
@@ -587,6 +593,27 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     return <PrivacyScreen onBack={() => setScreen({ screen: "author" })} />;
   }
 
+  if (screen.screen === "settings") {
+    return (
+      <SettingsScreen
+        onBack={() => setScreen({ screen: "topics" })}
+        onSignIn={() => setScreen({ screen: "author" })}
+        onImportClass={(docId) =>
+          setScreen({ screen: "edit", docId, back: { screen: "settings" } })
+        }
+      />
+    );
+  }
+
+  if (screen.screen === "stats") {
+    return (
+      <StatsScreen
+        onBack={() => setScreen({ screen: "topics" })}
+        domains={domains}
+      />
+    );
+  }
+
   if (screen.screen === "topics") {
     const hasDownload =
       update !== null &&
@@ -636,6 +663,8 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
               ? () => setScreen({ screen: "author" })
               : undefined
           }
+          onOpenStats={() => setScreen({ screen: "stats" })}
+          onOpenSettings={() => setScreen({ screen: "settings" })}
         />
       </>
     );

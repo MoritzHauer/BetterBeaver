@@ -196,6 +196,7 @@ describe("ad-hoc grading enters scheduling (plan 0004 amendment)", () => {
       markTaskAttempted: async () => undefined,
       getStreak: async () => null,
       setStreak: async () => undefined,
+      incrementReps: async () => undefined,
     };
     const items = [lexeme(1, "good"), lexeme(2, "bad")];
     const [question] = buildAdhocSession("recall", items, zeroRng);

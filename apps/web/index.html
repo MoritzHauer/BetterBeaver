@@ -9,6 +9,23 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=3" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=2" />
     <title>BetterBeaver</title>
+    <!-- Apply the saved theme before first paint (no flash of the OS theme).
+         Mirrors apps/web/src/theme.ts: "light"/"dark" stored raw under
+         bb.theme; absent = follow the OS. -->
+    <script>
+      (function () {
+        try {
+          var pref = localStorage.getItem("bb.theme");
+          var dark =
+            pref === "dark" ||
+            (pref !== "light" &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.dataset.theme = dark ? "dark" : "light";
+        } catch (e) {
+          /* localStorage/matchMedia unavailable: CSS falls back to the OS. */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

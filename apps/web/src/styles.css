@@ -61,28 +61,35 @@
   --input-border: #8f8779;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #16130e;
-    --fg: #efe9df;
-    --card-bg: #221e17;
-    --card-border: #40392e;
-    --locked-fg: #948c7e;
-    --primary: #e08820;
-    --primary-pressed: #f39c3a;
-    --on-primary: #241503;
-    --accent: #f0a24a;
-    --correct-border: #4caf50;
-    --correct-bg: rgba(76, 175, 80, 0.15);
-    --correct-fill: #1e5c22;
-    --incorrect-border: #ef5350;
-    --incorrect-bg: rgba(239, 83, 80, 0.15);
-    --incorrect-fill: #8e1f1c;
-    --on-fill: #ffffff;
-    --error-text: #ef5350;
-    --done-text: #4caf50;
-    --input-border: #767061;
-  }
+/* Dark palette. `data-theme` is stamped on <html> before first paint by the
+ * inline boot script in index.html (resolving Settings' System/Light/Dark),
+ * so it is always present in any JS-capable browser — and this is a React app
+ * that renders nothing without JS. Explicit `light` keeps native controls
+ * light even under an OS dark preference. */
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #16130e;
+  --fg: #efe9df;
+  --card-bg: #221e17;
+  --card-border: #40392e;
+  --locked-fg: #948c7e;
+  --primary: #e08820;
+  --primary-pressed: #f39c3a;
+  --on-primary: #241503;
+  --accent: #f0a24a;
+  --correct-border: #4caf50;
+  --correct-bg: rgba(76, 175, 80, 0.15);
+  --correct-fill: #1e5c22;
+  --incorrect-border: #ef5350;
+  --incorrect-bg: rgba(239, 83, 80, 0.15);
+  --incorrect-fill: #8e1f1c;
+  --on-fill: #ffffff;
+  --error-text: #ef5350;
+  --done-text: #4caf50;
+  --input-border: #767061;
 }
 
 * {
@@ -965,4 +972,49 @@ button.danger {
 .author-entry {
   margin-top: 2rem;
   text-align: center;
+}
+
+/* Home top bar: title on the left, Stats/Settings icon buttons on the right. */
+.home-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.home-bar h1 {
+  margin: 0;
+}
+.home-bar-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 0.25rem;
+}
+.icon-button {
+  font-size: 1.4rem;
+  line-height: 1;
+  padding: 0.3rem 0.4rem;
+}
+
+/* Settings/Stats layout helpers (reuse the card idiom for grouped rows). */
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.setting-hint {
+  color: var(--locked-fg);
+  font-size: 0.85rem;
+  margin: 0.15rem 0 0;
+}
+.stat-figure {
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--accent);
+}
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.2rem 0;
 }

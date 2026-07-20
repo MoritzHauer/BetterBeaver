@@ -127,7 +127,8 @@ export async function dueDomainUnits(
  * Every recorded grade — practice-only included — also marks the local day
  * active for `domainId`'s streak (plan 0003; per-domain since plan 0006);
  * the streak is persisted only when it actually changed (same-day repeats
- * are no-ops).
+ * are no-ops). Every grade counts as one rep (Stats counter) — bumped
+ * unconditionally, since a same-day repeat is still a rep.
  */
 export async function recordGrade(
   store: ProgressStore,
@@ -136,6 +137,7 @@ export async function recordGrade(
   gradedAt: Date,
   domainId: string,
 ): Promise<SrsState | null> {
+  await store.incrementReps();
   const previous = await store.getItemState(itemId);
   const next = applyGrade(previous, quality, gradedAt);
   if (next !== null) {

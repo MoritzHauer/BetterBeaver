@@ -17,6 +17,11 @@ class InMemoryProgressStore implements ProgressStore {
   streak: Streak | null = null;
   setItemStateCalls = 0;
   setStreakCalls = 0;
+  reps = 0;
+
+  async incrementReps(): Promise<void> {
+    this.reps++;
+  }
 
   async getItemState(itemId: string): Promise<SrsState | null> {
     return this.states.get(itemId) ?? null;

@@ -8,6 +8,7 @@ import type { ProgressStore, Streak } from "@betterbeaver/engine";
 export const ITEM_STATE_PREFIX = "bb.item.";
 const ATTEMPTED_KEY = "bb.attempted";
 const STREAK_PREFIX = "bb.streak.";
+export const REPS_KEY = "bb.reps";
 
 /** Parses JSON from `localStorage`, treating a corrupt/missing value as absent. */
 export function readJson<T>(key: string): T | null {
@@ -58,6 +59,13 @@ export function createLocalStorageProgressStore(): ProgressStore {
       localStorage.setItem(
         `${STREAK_PREFIX}${domainId}`,
         JSON.stringify(streak),
+      );
+      return Promise.resolve();
+    },
+    incrementReps(): Promise<void> {
+      localStorage.setItem(
+        REPS_KEY,
+        String((readJson<number>(REPS_KEY) ?? 0) + 1),
       );
       return Promise.resolve();
     },

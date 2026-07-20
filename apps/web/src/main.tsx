@@ -4,6 +4,7 @@ import { App } from "./App";
 import { bundledDomainIds, bundledTopicDomainIds } from "./content/bundled";
 import { initContentSource } from "./content/source";
 import { runStorageMigrations } from "./progress/migrations";
+import "./theme"; // registers the live OS-follow listener for the "system" theme
 import "./styles.css";
 
 if (navigator.storage?.persist !== undefined) {

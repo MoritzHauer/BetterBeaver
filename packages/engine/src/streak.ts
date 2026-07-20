@@ -36,3 +36,48 @@ export function advanceStreak(prev: Streak | null, now: Date): Streak {
     length: prev.lastActiveDay === yesterday ? prev.length + 1 : 1,
   };
 }
+
+/** The local-calendar day before `day` (a YYYY-MM-DD string). */
+function previousDay(day: string): string {
+  const [year, month, date] = day.split("-").map(Number) as [
+    number,
+    number,
+    number,
+  ];
+  return localDay(new Date(year, month - 1, date - 1));
+}
+
+/**
+ * A single "daily streak" across all per-domain streaks (plan 0006 keeps
+ * streaks per domain): the number of consecutive calendar days — ending
+ * today, or yesterday if today isn't active yet — with activity in *any*
+ * domain. Each domain's `(lastActiveDay, length)` is a contiguous run, so
+ * the union of those runs is exactly computable from the current state; past
+ * broken runs aren't stored and don't matter for the current streak. `today`
+ * is passed in (like `advanceStreak`'s `now`) to stay pure/testable.
+ */
+export function combinedStreak(streaks: Streak[], today: string): number {
+  const activeDays = new Set<string>();
+  for (const streak of streaks) {
+    let day = streak.lastActiveDay;
+    for (let i = 0; i < streak.length; i++) {
+      activeDays.add(day);
+      day = previousDay(day);
+    }
+  }
+  // The streak is still "alive" (and shown) while the most recent active day
+  // is today or yesterday; a 2+ day gap is a broken streak (zero).
+  let anchor = today;
+  if (!activeDays.has(anchor)) {
+    anchor = previousDay(today);
+    if (!activeDays.has(anchor)) {
+      return 0;
+    }
+  }
+  let length = 0;
+  while (activeDays.has(anchor)) {
+    length++;
+    anchor = previousDay(anchor);
+  }
+  return length;
+}

@@ -49,3 +49,19 @@ export async function importBackup(file: File): Promise<void> {
     }
   }
 }
+
+/**
+ * The nuclear "Erase all my data" action (Settings › Danger): drops every
+ * `bb.*` key (progress, settings, author drafts) and the content cache. The
+ * caller must confirm and nudge an export first; this wipes unconditionally
+ * and touches nothing on the backend.
+ */
+export async function eraseAllData(): Promise<void> {
+  for (const key of Object.keys(localStorage)) {
+    if (key.startsWith("bb.")) {
+      localStorage.removeItem(key);
+    }
+  }
+  const { clearCachedDocuments } = await import("../content/cache");
+  await clearCachedDocuments();
+}
