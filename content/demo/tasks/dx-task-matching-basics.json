@@ -1,0 +1,12 @@
+{
+  "id": "dx-task-matching-basics",
+  "type": "matching",
+  "itemIds": [
+    "dx-con-dam",
+    "dx-con-lodge",
+    "dx-con-incisors",
+    "dx-con-kit",
+    "dx-con-scent-mound"
+  ],
+  "instructions": "Match each term to its fact."
+}

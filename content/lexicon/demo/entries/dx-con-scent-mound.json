@@ -1,0 +1,10 @@
+{
+  "id": "dx-con-scent-mound",
+  "kind": "concept",
+  "payload": {
+    "term": "Scent mound",
+    "definition": "A pile of mud and castoreum a beaver slaps down at the water's edge to mark its territory — a signpost that says \"this pond is taken.\"",
+    "example": "The Vocabulary screen's saved-words list works like your own scent mound: tap any word, mark it yours, and it's there to restudy whenever you want."
+  },
+  "sourceRef": "dx-resource-intro"
+}

@@ -1,7 +1,7 @@
 [
   {
-    "id": "dx-resource-placeholder",
-    "path": "internal://demo",
-    "title": "Demo placeholder source (no real citation; example content only)"
+    "id": "dx-resource-intro",
+    "path": "internal://betterbeaver-intro",
+    "title": "BetterBeaver introduction content — beaver facts are general natural-history knowledge; the app-feature analogies are original"
   }
 ]

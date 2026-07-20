@@ -1,8 +1,8 @@
 {
   "id": "demo",
   "code": "dx",
-  "title": "Exercise-type showcase",
+  "title": "Meet BetterBeaver",
   "domainId": "demo",
-  "lessonIds": ["dx-lesson-showcase"],
-  "description": "Throwaway English-language demo topic exercising every task type and validator edge case; example inputs, not pedagogy."
+  "lessonIds": ["dx-lesson-intro"],
+  "description": "A playful, beaver-fact-powered tour of how the app itself works: spaced repetition, the Topic → Lesson → Unit ladder, and all eleven exercise types."
 }

@@ -1,0 +1,11 @@
+{
+  "id": "dx-fam-castorology",
+  "name": "Castorology 101",
+  "entryIds": [
+    "dx-con-dam",
+    "dx-con-lodge",
+    "dx-con-incisors",
+    "dx-con-kit",
+    "dx-con-scent-mound"
+  ]
+}

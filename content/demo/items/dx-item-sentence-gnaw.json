@@ -1,0 +1,10 @@
+{
+  "id": "dx-item-sentence-gnaw",
+  "kind": "sentence",
+  "payload": {
+    "text": "{{c1::Beavers}} {{c2::gnaw}} trees to build dams.",
+    "translation": "Beavers gnaw trees to build dams.",
+    "audioRef": "dx-audio-sentence-gnaw"
+  },
+  "sourceRef": "dx-resource-intro"
+}

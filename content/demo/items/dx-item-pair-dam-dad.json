@@ -1,0 +1,10 @@
+{
+  "id": "dx-item-pair-dam-dad",
+  "kind": "pair",
+  "payload": {
+    "a": { "script": "dam", "audioRef": "dx-audio-pair-dam" },
+    "b": { "script": "dad", "audioRef": "dx-audio-pair-dad" },
+    "contrast": "final consonant: /m/ (dam — what a beaver builds) vs /d/ (dad — who taught this kit to build it)"
+  },
+  "sourceRef": "dx-resource-intro"
+}

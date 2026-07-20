@@ -1,0 +1,6 @@
+{
+  "id": "dx-task-listen-basics",
+  "type": "listen",
+  "itemIds": ["dx-con-dam"],
+  "instructions": "Listen and pick which term you heard."
+}

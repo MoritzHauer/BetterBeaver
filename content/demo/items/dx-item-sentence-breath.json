@@ -1,0 +1,9 @@
+{
+  "id": "dx-item-sentence-breath",
+  "kind": "sentence",
+  "payload": {
+    "text": "A beaver can hold its breath for fifteen minutes underwater.",
+    "translation": "A beaver can hold its breath for fifteen minutes underwater."
+  },
+  "sourceRef": "dx-resource-intro"
+}

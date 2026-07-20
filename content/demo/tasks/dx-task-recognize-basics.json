@@ -1,0 +1,12 @@
+{
+  "id": "dx-task-recognize-basics",
+  "type": "recognize",
+  "itemIds": [
+    "dx-con-dam",
+    "dx-con-lodge",
+    "dx-con-incisors",
+    "dx-con-kit",
+    "dx-con-scent-mound"
+  ],
+  "instructions": "Pick the fact that matches each term."
+}

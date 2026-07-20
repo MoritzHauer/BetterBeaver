@@ -1,0 +1,6 @@
+{
+  "id": "dx-task-build-gnaw",
+  "type": "build",
+  "itemIds": ["dx-item-sentence-gnaw"],
+  "instructions": "Tap the words to build the sentence."
+}

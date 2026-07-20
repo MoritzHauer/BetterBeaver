@@ -1,0 +1,22 @@
+{
+  "id": "dx-unit-beaver-basics",
+  "title": "Beaver basics",
+  "goal": "Five real beaver facts, each one doubling as an explanation of an app feature.",
+  "itemIds": [
+    "dx-con-dam",
+    "dx-con-lodge",
+    "dx-con-incisors",
+    "dx-con-kit",
+    "dx-con-scent-mound"
+  ],
+  "noteIds": ["dx-note-how-to-study"],
+  "taskIds": [
+    "dx-task-recognize-basics",
+    "dx-task-recall-basics",
+    "dx-task-matching-basics",
+    "dx-task-listen-basics",
+    "dx-task-shadowing-basics",
+    "dx-task-picture-basics"
+  ],
+  "lessonId": "dx-lesson-intro"
+}

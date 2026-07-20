@@ -1,6 +1,0 @@
-{
-  "id": "dx-task-cloze-sentences",
-  "type": "cloze",
-  "itemIds": ["dx-item-sentence-shared"],
-  "instructions": "Fill in each blank."
-}

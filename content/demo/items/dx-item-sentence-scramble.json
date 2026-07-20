@@ -1,9 +1,0 @@
-{
-  "id": "dx-item-sentence-scramble",
-  "kind": "sentence",
-  "payload": {
-    "text": "The cat sleeps quietly.",
-    "translation": "The cat sleeps quietly."
-  },
-  "sourceRef": "dx-resource-placeholder"
-}

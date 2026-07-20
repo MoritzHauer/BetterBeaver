@@ -1,6 +1,0 @@
-{
-  "id": "dx-task-picture-words",
-  "type": "picture",
-  "itemIds": ["dx-item-word-sun", "dx-item-word-house"],
-  "instructions": "Pick the meaning that matches the picture."
-}

@@ -1,7 +1,0 @@
-{
-  "id": "dx-lesson-showcase",
-  "goal": "Every task type and validator edge case in two placeholder units.",
-  "title": "Exercise-type showcase",
-  "topicId": "demo",
-  "unitIds": ["dx-unit-words", "dx-unit-sentences"]
-}

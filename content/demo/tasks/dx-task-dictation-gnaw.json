@@ -1,0 +1,6 @@
+{
+  "id": "dx-task-dictation-gnaw",
+  "type": "dictation",
+  "itemIds": ["dx-item-sentence-gnaw"],
+  "instructions": "Listen and type what you heard."
+}

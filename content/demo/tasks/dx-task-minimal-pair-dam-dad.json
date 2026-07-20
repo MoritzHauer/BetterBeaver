@@ -1,6 +1,6 @@
 {
-  "id": "dx-task-minimal-pair-sentences",
+  "id": "dx-task-minimal-pair-dam-dad",
   "type": "minimal-pair",
-  "itemIds": ["dx-item-pair-ship-sheep"],
+  "itemIds": ["dx-item-pair-dam-dad"],
   "instructions": "Listen and choose which word you heard."
 }

@@ -5,7 +5,7 @@ import { ProgressBar } from "../components/ProgressBar";
  * multiply beyond a handful. */
 const TOPIC_GLYPHS: Record<string, string> = {
   kyrgyz: "\u{1F3D4}️",
-  demo: "\u{1F9EA}",
+  demo: "\u{1F9AB}",
 };
 
 /**

@@ -1,0 +1,12 @@
+{
+  "id": "dx-task-recall-basics",
+  "type": "recall",
+  "itemIds": [
+    "dx-con-dam",
+    "dx-con-lodge",
+    "dx-con-incisors",
+    "dx-con-kit",
+    "dx-con-scent-mound"
+  ],
+  "instructions": "Recall the fact, then reveal the answer."
+}

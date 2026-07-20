@@ -1,6 +1,6 @@
 {
-  "id": "dx-task-scramble-sentences",
+  "id": "dx-task-scramble-breath",
   "type": "scramble",
-  "itemIds": ["dx-item-sentence-scramble"],
+  "itemIds": ["dx-item-sentence-breath"],
   "instructions": "Reorder the words into the correct sentence."
 }

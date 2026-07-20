@@ -1,0 +1,6 @@
+{
+  "id": "dx-task-cloze-gnaw",
+  "type": "cloze",
+  "itemIds": ["dx-item-sentence-gnaw"],
+  "instructions": "Fill in each blank."
+}

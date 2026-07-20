@@ -1,0 +1,10 @@
+{
+  "id": "dx-con-incisors",
+  "kind": "concept",
+  "payload": {
+    "term": "Incisors",
+    "definition": "A beaver's four front teeth never stop growing; iron in the enamel tints them orange, and only constant gnawing wears them back down to a working length.",
+    "example": "A skill works the same way here: it doesn't erase itself when you stop practicing, it just grows past useful — which is exactly what spaced repetition is timed to prevent."
+  },
+  "sourceRef": "dx-resource-intro"
+}
