@@ -491,25 +491,24 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     return result;
   }, [topicsContentMap, attemptedTaskIds]);
 
+  // Loads the active screen's topic content and its domain content together
+  // (plan 0013 goal 1): both resolve via one `Promise.all(...).then(...)`
+  // callback so `setContent`, `setDomainContent`, and `setDomainTopicsContent`
+  // land in the same React commit instead of two separate ones.
   useEffect(() => {
     if (!("source" in contentSourceResult)) {
       return;
     }
-    if (
+    const isTopicFamilyScreen =
       screen.screen === "topic" ||
       screen.screen === "lesson" ||
       screen.screen === "unit" ||
       screen.screen === "task" ||
-      screen.screen === "unit-session"
-    ) {
-      contentSourceResult.source.loadTopic(screen.topicId).then(setContent);
-    }
-  }, [contentSourceResult, screen]);
+      screen.screen === "unit-session";
+    const contentPromise = isTopicFamilyScreen
+      ? contentSourceResult.source.loadTopic(screen.topicId)
+      : undefined;
 
-  useEffect(() => {
-    if (!("source" in contentSourceResult)) {
-      return;
-    }
     // Domain-scoped screens carry their domainId directly; topic/unit/task
     // screens derive it from the already-loaded topic summaries (plan
     // 0006's tap-to-lookup, step 4: those screens need the domain's merged
@@ -519,44 +518,60 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
       screen.screen === "vocab" ||
       screen.screen === "adhoc"
         ? screen.domainId
-        : screen.screen === "topic" ||
-            screen.screen === "lesson" ||
-            screen.screen === "unit" ||
-            screen.screen === "task" ||
-            screen.screen === "unit-session"
+        : isTopicFamilyScreen
           ? topics.find((topic) => topic.id === screen.topicId)?.domainId
           : undefined;
-    if (domainId === undefined) {
+    const domainTopicIds =
+      domainId === undefined
+        ? []
+        : topics
+            .filter((topic) => topic.domainId === domainId)
+            .map((topic) => topic.id);
+    const domainPromise =
+      domainId === undefined
+        ? undefined
+        : Promise.all([
+            contentSourceResult.source.loadDomain(domainId),
+            Promise.all(
+              domainTopicIds.map((id) =>
+                contentSourceResult.source.loadTopic(id),
+              ),
+            ),
+            userEntryStore.getEntries(domainId),
+          ]);
+
+    if (contentPromise === undefined && domainPromise === undefined) {
       return;
     }
-    const domainTopicIds = topics
-      .filter((topic) => topic.domainId === domainId)
-      .map((topic) => topic.id);
     let cancelled = false;
-    Promise.all([
-      contentSourceResult.source.loadDomain(domainId),
-      Promise.all(
-        domainTopicIds.map((id) => contentSourceResult.source.loadTopic(id)),
-      ),
-      userEntryStore.getEntries(domainId),
-    ]).then(([loadedDomainContent, loadedTopicsContent, userEntries]) => {
-      if (cancelled) {
-        return;
-      }
-      // Merge the domain's user-created entries into the shipped pool (plan
-      // 0006): every downstream consumer (Vocabulary screen, ad-hoc session
-      // builder, list pruning, review queue, TTS fallback) only ever sees
-      // this merged `DomainContent`, so they all pick up user words for
-      // free. Links are re-derived over the merged set too, so a link
-      // authored from a user entry to a shipped one resolves correctly.
-      const entries = [...loadedDomainContent.entries, ...userEntries];
-      setDomainContent({
-        ...loadedDomainContent,
-        entries,
-        linksByEntryId: symmetricLinks(entries),
-      });
-      setDomainTopicsContent(loadedTopicsContent);
-    });
+    Promise.all([contentPromise, domainPromise]).then(
+      ([loadedContent, loadedDomain]) => {
+        if (cancelled) {
+          return;
+        }
+        if (loadedContent !== undefined) {
+          setContent(loadedContent);
+        }
+        if (loadedDomain !== undefined) {
+          const [loadedDomainContent, loadedTopicsContent, userEntries] =
+            loadedDomain;
+          // Merge the domain's user-created entries into the shipped pool
+          // (plan 0006): every downstream consumer (Vocabulary screen,
+          // ad-hoc session builder, list pruning, review queue, TTS
+          // fallback) only ever sees this merged `DomainContent`, so they
+          // all pick up user words for free. Links are re-derived over the
+          // merged set too, so a link authored from a user entry to a
+          // shipped one resolves correctly.
+          const entries = [...loadedDomainContent.entries, ...userEntries];
+          setDomainContent({
+            ...loadedDomainContent,
+            entries,
+            linksByEntryId: symmetricLinks(entries),
+          });
+          setDomainTopicsContent(loadedTopicsContent);
+        }
+      },
+    );
     return () => {
       cancelled = true;
     };
