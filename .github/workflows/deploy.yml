@@ -14,7 +14,27 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Quality gate: the same `pnpm check` run locally, now enforced on push.
+  # With Supabase vars set it also runs the published-catalog guardrail
+  # (packages/engine/src/publishedCatalog.test.ts) — a live-backend vs
+  # deployed-bundle divergence blocks the deploy instead of reaching learners.
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: corepack pnpm install --frozen-lockfile
+      - run: corepack pnpm check
+        env:
+          # Mapped from the public build vars; unset → the guardrail test skips.
+          SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+
   deploy:
+    needs: check
     runs-on: ubuntu-latest
     environment:
       name: github-pages
