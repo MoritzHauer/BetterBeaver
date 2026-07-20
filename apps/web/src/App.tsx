@@ -750,15 +750,22 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
               unitId: screen.unitId,
             })
           }
-          onGradeNote={(noteId, grade) => {
+          onPinNote={(noteId) => {
+            // Pinning = the note's first grade ("again" → due right away),
+            // which is what enters it into the review queue.
             void recordGrade(
               progressStore,
               noteUnitId(noteId),
-              recallQuality(grade),
+              recallQuality("again"),
               new Date(),
               content.topic.domainId,
             );
           }}
+          isNotePinned={(noteId) =>
+            progressStore
+              .getItemState(noteUnitId(noteId))
+              .then((state) => state !== null)
+          }
           onEdit={
             isAuthor
               ? (target) =>

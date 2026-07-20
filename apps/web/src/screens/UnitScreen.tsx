@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Content, Item } from "@betterbeaver/schema";
 import { stripClozeMarkup } from "@betterbeaver/schema";
-import type { SelfGrade } from "@betterbeaver/srs";
 import { countUnitQuestions } from "@betterbeaver/engine";
 import type { TapLookup } from "../components/TappableText";
 import { TappableText } from "../components/TappableText";
@@ -131,28 +130,28 @@ function ExampleCard({
   );
 }
 
-/** One Theory note plus its self-grade row (plan 0008 step 7): a note has no
- * separate "study it once" action, so grading is offered right here —
- * reviewing *is* how a note first gets SRS state, same self-grade vocabulary
- * (Again/Hard/Good) as `SessionScreen`'s `NoteReview`. */
+/** One Theory note plus its pin control: no grade buttons here — pinning
+ * schedules the note into the review queue (its first SRS state), where it
+ * then behaves as a flashcard via `SessionScreen`'s `NoteReview`. */
 function NoteCard({
   markdown,
   lookup,
-  onGrade,
+  pinned,
+  onPin,
 }: {
   markdown: string;
   lookup: TapLookup;
-  onGrade: (grade: SelfGrade) => void;
+  pinned: boolean;
+  onPin: () => void;
 }) {
   return (
     <section className="note">
       <NoteView markdown={markdown} lookup={lookup} />
-      <p>Review this note:</p>
-      <div className="grade-buttons">
-        <button onClick={() => onGrade("again")}>Again</button>
-        <button onClick={() => onGrade("hard")}>Hard</button>
-        <button onClick={() => onGrade("good")}>Good</button>
-      </div>
+      {/* ponytail: pin is one-way — unpinning means removing SRS state,
+          add when someone actually asks for it */}
+      <button className="plain" disabled={pinned} onClick={onPin}>
+        {pinned ? "📌 Pinned for review" : "📌 Pin for review"}
+      </button>
     </section>
   );
 }
@@ -162,7 +161,8 @@ export function UnitScreen({
   unitId,
   lookup,
   onPractice,
-  onGradeNote,
+  onPinNote,
+  isNotePinned,
   onEdit,
   onBack,
 }: {
@@ -174,9 +174,11 @@ export function UnitScreen({
   /** Unit-scoped now (plan 0010): launches one pooled, shuffled session
    * across the whole unit's task set, rather than picking a single task. */
   onPractice: () => void;
-  /** Self-grades a note (plan 0008 step 7) — first grading schedules it,
-   * entering it into the domain's review queue like any other unit. */
-  onGradeNote: (noteId: string, grade: SelfGrade) => void;
+  /** Pins a note for review — schedules it, entering it into the domain's
+   * review queue like any other unit (it reviews as a flashcard there). */
+  onPinNote: (noteId: string) => void;
+  /** Whether a note already has SRS state (= is pinned), read once per unit. */
+  isNotePinned: (noteId: string) => Promise<boolean>;
   /** Authors only (plan 0012): opens this unit in the editor — or the
    * currently shown theory note, when the Theory page is open. */
   onEdit?: (target?: { noteStem?: string }) => void;
@@ -218,6 +220,27 @@ export function UnitScreen({
             ? []
             : [{ noteId, stem: note.stem, markdown }];
         });
+
+  // Which of this unit's notes are already scheduled (= pinned), read once
+  // per unit; a tap adds optimistically since recordGrade can't unpin.
+  const [pinnedNoteIds, setPinnedNoteIds] = useState<ReadonlySet<string>>(
+    new Set(),
+  );
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all(
+      notes.map(
+        async ({ noteId }) => [noteId, await isNotePinned(noteId)] as const,
+      ),
+    ).then((pairs) => {
+      if (!cancelled) {
+        setPinnedNoteIds(new Set(pairs.filter(([, p]) => p).map(([id]) => id)));
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [unitId]);
 
   const items =
     unit === undefined
@@ -368,7 +391,13 @@ export function UnitScreen({
               key={currentNote.noteId}
               markdown={currentNote.markdown}
               lookup={lookup}
-              onGrade={(grade) => onGradeNote(currentNote.noteId, grade)}
+              pinned={pinnedNoteIds.has(currentNote.noteId)}
+              onPin={() => {
+                onPinNote(currentNote.noteId);
+                setPinnedNoteIds(
+                  new Set([...pinnedNoteIds, currentNote.noteId]),
+                );
+              }}
             />
           ) : null}
         </>
