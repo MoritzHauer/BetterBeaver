@@ -24,4 +24,4 @@
 — Айтыңызчы, бүгүн канча сабак болот? — Бүгүн үч сабак болот.
 *"Tell me, please, how many classes are there today?" — "There are three classes today."*
 
-The particle **-чы/-чу/-чи/-чү** does the work English does with "please": *ач* "open!" → *аччы* "open, please". The Kyrgyz infinitive doubles as the plain command form (*сүйлө* "speak", *оку* "read"), *-ба/-бе/-бо/-бө* (or *-па/-пе/-по/-пө* after voiceless sounds) negates it (*барба* "don't go"), and *-гыла/-гиле/-гула/-гүлө* makes it plural (*баргыла* "go, all of you").
+The particle **-чы/-чу/-чи/-чү** does the work English does with "please": *ач* "open!" → аччы "open, please". The Kyrgyz infinitive doubles as the plain command form (*сүйлө* "speak", *оку* "read"), -ба/-бе/-бо/-бө (or -па/-пе/-по/-пө after voiceless sounds) negates it (барба "don't go"), and -гыла/-гиле/-гула/-гүлө makes it plural (баргыла "go, all of you").

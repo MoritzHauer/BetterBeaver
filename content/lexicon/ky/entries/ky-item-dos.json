@@ -1,0 +1,10 @@
+{
+  "id": "ky-item-dos",
+  "kind": "lexeme",
+  "payload": {
+    "gloss": "Friend",
+    "script": "Дос",
+    "transliteration": "dos"
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

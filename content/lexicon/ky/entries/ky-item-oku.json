@@ -1,0 +1,11 @@
+{
+  "id": "ky-item-oku",
+  "kind": "lexeme",
+  "payload": {
+    "gloss": "To read / to study; Read!/Study! (command)",
+    "script": "Оку",
+    "usageNote": "The same stem that окуучу ('student, pupil') is built on.",
+    "transliteration": "oku"
+  },
+  "sourceRef": "ky-resource-manual-greetings"
+}

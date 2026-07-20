@@ -3,9 +3,11 @@
   "name": "Small talk",
   "entryIds": [
     "ky-item-ishter-kanday",
+    "ky-item-kanday",
     "ky-item-jakshy",
     "ky-item-jaman-emes",
     "ky-item-menin-atym",
-    "ky-item-senin-atyng-kim"
+    "ky-item-senin-atyng-kim",
+    "ky-item-sizdin-atynyz-kim"
   ]
 }
