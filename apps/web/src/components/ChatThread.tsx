@@ -50,7 +50,14 @@ export function ChatThread({ docId }: { docId: string }) {
       {messages === null ? (
         <p className="status">{error !== null ? error : "Loading…"}</p>
       ) : messages.length === 0 ? (
-        <p className="status">No messages yet.</p>
+        <p className="status empty-state">
+          <img
+            className="empty-state-icon"
+            src={`${import.meta.env.BASE_URL}art/icons/icon_beaver_chatting.png`}
+            alt=""
+          />
+          No messages yet.
+        </p>
       ) : (
         <ul className="card-list chat-messages">
           {messages.map((m) => (

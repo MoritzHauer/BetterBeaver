@@ -92,9 +92,17 @@ export function TopicListScreen({
                 return (
                   <li key={topic.id} className="card">
                     <button onClick={() => onSelectTopic(topic.id)}>
-                      <span className="topic-glyph" aria-hidden="true">
-                        {TOPIC_GLYPHS[topic.id] ?? "\u{1F4DA}"}
-                      </span>
+                      {TOPIC_GLYPHS[topic.id] !== undefined ? (
+                        <span className="topic-glyph" aria-hidden="true">
+                          {TOPIC_GLYPHS[topic.id]}
+                        </span>
+                      ) : (
+                        <img
+                          className="topic-glyph"
+                          src={`${import.meta.env.BASE_URL}art/icons/icon_book_front.png`}
+                          alt=""
+                        />
+                      )}
                       <strong>{topic.title}</strong>
                       <p>{topic.description}</p>
                       <ProgressBar

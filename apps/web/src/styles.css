@@ -482,6 +482,32 @@ input[type="text"] {
   margin-bottom: 0.25rem;
 }
 
+img.topic-glyph {
+  width: 1.5rem;
+  height: 1.5rem;
+  object-fit: contain;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.5rem;
+}
+
+.empty-state-icon {
+  width: 96px;
+  height: auto;
+}
+
+.summary-icon {
+  display: block;
+  width: 96px;
+  height: auto;
+  margin: 0 auto;
+}
+
 .stat-tiles {
   display: flex;
   flex-wrap: wrap;
@@ -1042,6 +1068,12 @@ textarea {
   padding: 0.2rem 0.4rem;
   font-size: 1rem;
   opacity: 0.6;
+}
+
+.feedback-vote img {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
 }
 
 .feedback-vote.active {

@@ -252,7 +252,14 @@ function ReviewSession({
   if (questions.length === 0) {
     return (
       <main>
-        <p>Nothing due right now.</p>
+        <p className="empty-state">
+          <img
+            className="empty-state-icon"
+            src={`${import.meta.env.BASE_URL}art/icons/icon_beaver_sleeping_floating.png`}
+            alt=""
+          />
+          Nothing due right now.
+        </p>
         <button onClick={onDone}>&larr; Back</button>
       </main>
     );

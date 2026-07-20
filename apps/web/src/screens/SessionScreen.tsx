@@ -850,9 +850,18 @@ function SummaryPanel({
     summary.recallCounts.good;
   const extendedToday =
     streak !== null && streak.lastActiveDay === localDay(new Date());
+  // Self-graded recall has no pass/fail — only auto-graded accuracy earns a
+  // thumbs-down beaver, and only below a middling score.
+  const passed =
+    summary.autoTotal === 0 || summary.autoCorrect / summary.autoTotal >= 0.7;
 
   return (
     <section>
+      <img
+        className="summary-icon"
+        src={`${import.meta.env.BASE_URL}art/icons/icon_thumbs_${passed ? "up" : "down"}_beaver.png`}
+        alt=""
+      />
       <h2>Session complete!</h2>
       <div className="stat-tiles">
         {summary.autoTotal > 0 ? (

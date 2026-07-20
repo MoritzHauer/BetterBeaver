@@ -63,7 +63,10 @@ export function FeedbackWidget({
             aria-pressed={vote === 1}
             onClick={() => void handleVote(1)}
           >
-            👍
+            <img
+              src={`${import.meta.env.BASE_URL}art/icons/icon_thumbs_up.png`}
+              alt=""
+            />
           </button>
           <button
             type="button"
@@ -74,7 +77,10 @@ export function FeedbackWidget({
             aria-pressed={vote === -1}
             onClick={() => void handleVote(-1)}
           >
-            👎
+            <img
+              src={`${import.meta.env.BASE_URL}art/icons/icon_thumbs_down.png`}
+              alt=""
+            />
           </button>
         </>
       )}
