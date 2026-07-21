@@ -648,7 +648,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
       <SettingsScreen
         onBack={onBack}
         onSignIn={() => setScreen({ screen: "author" })}
-        onImportClass={(docId) =>
+        onImportBook={(docId) =>
           setScreen({ screen: "edit", docId, back: { screen: "settings" } })
         }
       />

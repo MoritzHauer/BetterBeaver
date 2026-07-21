@@ -22,11 +22,11 @@ const THEME_OPTIONS: { pref: ThemePref; label: string }[] = [
 export function SettingsScreen({
   onBack,
   onSignIn,
-  onImportClass,
+  onImportBook,
 }: {
   onBack: () => void;
   onSignIn: () => void;
-  onImportClass: (docId: string) => void;
+  onImportBook: (docId: string) => void;
 }) {
   const [themePref, setThemePrefState] = useState<ThemePref>(getThemePref);
   const [displayName, setDisplayNameState] = useState(getDisplayName);
@@ -36,9 +36,9 @@ export function SettingsScreen({
   const [user, setUser] = useState<User | null | "loading">(
     getSupabase() === null ? null : "loading",
   );
-  const [classImportError, setClassImportError] = useState<string | null>(null);
+  const [bookImportError, setBookImportError] = useState<string | null>(null);
   const progressFileRef = useRef<HTMLInputElement>(null);
-  const classFileRef = useRef<HTMLInputElement>(null);
+  const bookFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (getSupabase() === null) {
@@ -69,27 +69,27 @@ export function SettingsScreen({
     location.reload();
   }
 
-  async function handleExportClasses(): Promise<void> {
+  async function handleExportBooks(): Promise<void> {
     const docs = await listMyDocuments();
     const full = await Promise.all(docs.map((d) => loadDocument(d.id)));
-    const classes = full.map((d) => ({
+    const books = full.map((d) => ({
       id: d.id,
       kind: d.kind,
       doc: d.published ?? d.draft,
     }));
-    const blob = new Blob([JSON.stringify(classes, null, 2)], {
+    const blob = new Blob([JSON.stringify(books, null, 2)], {
       type: "application/json",
     });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `betterbeaver-classes-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `betterbeaver-books-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
   }
 
-  async function handleImportClass(file: File): Promise<void> {
-    setClassImportError(null);
+  async function handleImportBook(file: File): Promise<void> {
+    setBookImportError(null);
     try {
       const parsed: unknown = JSON.parse(await file.text());
       const entries = Array.isArray(parsed) ? parsed : [parsed];
@@ -107,13 +107,13 @@ export function SettingsScreen({
           typeof e?.doc !== "object" ||
           e.doc === null
         ) {
-          throw new Error("not a BetterBeaver class export file");
+          throw new Error("not a BetterBeaver book export file");
         }
         localStorage.setItem(`bb.author.draft.${e.id}`, JSON.stringify(e.doc));
       }
-      onImportClass((entries[0] as { id: string }).id);
+      onImportBook((entries[0] as { id: string }).id);
     } catch (err) {
-      setClassImportError(err instanceof Error ? err.message : "Import failed");
+      setBookImportError(err instanceof Error ? err.message : "Import failed");
     }
   }
 
@@ -257,22 +257,22 @@ export function SettingsScreen({
 
       {getSupabase() !== null && user !== "loading" && user !== null ? (
         <section className="card">
-          <h2>Classes</h2>
+          <h2>Books</h2>
           <div className="grade-buttons">
             <button
               className="plain"
-              onClick={() => void handleExportClasses()}
+              onClick={() => void handleExportBooks()}
             >
-              Export my classes
+              Export my books
             </button>
             <button
               className="plain"
-              onClick={() => classFileRef.current?.click()}
+              onClick={() => bookFileRef.current?.click()}
             >
-              Import class…
+              Import book…
             </button>
             <input
-              ref={classFileRef}
+              ref={bookFileRef}
               type="file"
               accept="application/json"
               style={{ display: "none" }}
@@ -280,17 +280,17 @@ export function SettingsScreen({
                 const file = event.target.files?.[0];
                 event.target.value = "";
                 if (file !== undefined) {
-                  void handleImportClass(file);
+                  void handleImportBook(file);
                 }
               }}
             />
           </div>
           <p className="status">
-            Import loads a class into your draft; open it to review and publish.
-            You can only publish classes you maintain.
+            Import loads a book into your draft; open it to review and publish.
+            You can only publish books you maintain.
           </p>
-          {classImportError !== null ? (
-            <p className="error-text">{classImportError}</p>
+          {bookImportError !== null ? (
+            <p className="error-text">{bookImportError}</p>
           ) : null}
         </section>
       ) : null}

@@ -9,7 +9,7 @@ import {
 } from "../backend/supabase";
 
 interface CreatorStats {
-  classesMaintained: number;
+  booksMaintained: number;
   listed: number;
   versionsPublished: number;
   docs: AuthorDocSummary[];
@@ -47,7 +47,7 @@ export function StatsScreen({
           return;
         }
         setCreator({
-          classesMaintained: docs.length,
+          booksMaintained: docs.length,
           listed: docs.filter((d) => d.listed).length,
           versionsPublished: docs.reduce(
             (sum, d) => sum + d.published_version,
@@ -130,7 +130,7 @@ export function StatsScreen({
           <h2>Creator</h2>
           <p>Live — signed-in authors only</p>
           <ul>
-            <li>{creator.classesMaintained} classes maintained</li>
+            <li>{creator.booksMaintained} books maintained</li>
             <li>{creator.listed} listed</li>
             <li>
               <span aria-hidden="true">🚀</span> {creator.versionsPublished}{" "}
@@ -150,7 +150,7 @@ export function StatsScreen({
           {creator !== null && (
             <li>
               {creator.docs.some((d) => d.published_version >= 1) ? "✓" : "–"}{" "}
-              ✍ First class published
+              ✍ First book published
             </li>
           )}
         </ul>

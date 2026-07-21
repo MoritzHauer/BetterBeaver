@@ -292,7 +292,7 @@ type View =
   | { v: "family"; id: string };
 
 /** Deep-link target from the learner screens' Edit buttons: the editor
- * opens directly at the matching level (class/lesson/unit/note). */
+ * opens directly at the matching level (book/lesson/unit/note). */
 export interface EditTarget {
   lessonId?: string;
   unitId?: string;
@@ -317,7 +317,7 @@ function initialView(target: EditTarget | undefined): View {
 }
 
 /** Local-first draft storage (one key per document). The draft lives here
- * until the author explicitly syncs it from the root (class) view. */
+ * until the author explicitly syncs it from the root (book) view. */
 const draftKey = (docId: string) => `bb.author.draft.${docId}`;
 
 export function EditScreen({
@@ -352,7 +352,7 @@ export function EditScreen({
 
   // Local-first (plan 0012 §7 amended): every edit lands in localStorage;
   // the backend sees it only through the explicit Sync/Publish actions on
-  // the root (class) view. A pending debounced write must survive leaving
+  // the root (book) view. A pending debounced write must survive leaving
   // the editor or closing the tab, so flush it on both.
   useEffect(() => {
     const flush = () => {

@@ -1,4 +1,4 @@
-# Plan 0014: Content feedback (votes, reports, class chat)
+# Plan 0014: Content feedback (votes, reports, book chat)
 
 Decided via grilling in-session 2026-07-20; implemented directly (no doc-reviewer round — scope was small enough to grill straight to code).
 
