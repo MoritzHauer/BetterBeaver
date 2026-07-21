@@ -148,13 +148,7 @@ export function TopicScreen({
             </p>
           </button>
         </li>
-        <li className="card">
-          <button onClick={onVocabulary}>
-            <strong>Vocabulary</strong>
-            <p className="status">Browse words, make lists, study your way</p>
-          </button>
-        </li>
-        <li className="card">
+        <li className={`card${practicePool.length > 0 ? " primary" : ""}`}>
           <button
             disabled={practicePool.length === 0}
             onClick={() => {
@@ -167,6 +161,16 @@ export function TopicScreen({
           >
             <strong>Practice</strong>
             <p className="status">A random task from your opened lessons</p>
+          </button>
+        </li>
+        <li className="card">
+          <button onClick={onVocabulary}>
+            <img
+              className="topic-glyph"
+              src={`${import.meta.env.BASE_URL}art/icons/icon_book_front.png`}
+              alt=""
+            />
+            <strong>Vocabulary</strong>
           </button>
         </li>
         {content.topic.lessonIds.map((lessonId) => {

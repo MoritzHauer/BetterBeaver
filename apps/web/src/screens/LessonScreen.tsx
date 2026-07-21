@@ -66,7 +66,7 @@ export function LessonScreen({
         contentId={lesson.id}
       />
       <ul className="card-list">
-        <li className="card">
+        <li className={`card${practicePool.length > 0 ? " primary" : ""}`}>
           <button
             disabled={practicePool.length === 0}
             onClick={() => {

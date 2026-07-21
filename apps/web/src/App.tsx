@@ -662,7 +662,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   }
 
   if (screen.screen === "topics") {
-    backActionRef.current = null;
+    backActionRef.current = () => setStarted(false);
     const hasDownload =
       update !== null &&
       (update.changed.length > 0 || update.removedIds.length > 0);

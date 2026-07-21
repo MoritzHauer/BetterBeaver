@@ -215,7 +215,6 @@ export function UnitScreen({
   // Trail page index, plus each section's own sub-pager index (plan 0010
   // design section 4: no shared pagination abstraction — one useState each).
   const [page, setPage] = useState(0);
-  const [noteIndex, setNoteIndex] = useState(0);
   const [conceptPage, setConceptPage] = useState(0);
   const [examplePage, setExamplePage] = useState(0);
 
@@ -273,6 +272,9 @@ export function UnitScreen({
         });
   const lexemes = items.filter(
     (item): item is LexemeItem => item.kind === "lexeme",
+  );
+  const lexemesHaveAudio = lexemes.some(
+    (item) => item.payload.audioRef !== undefined,
   );
   const concepts = items.filter(
     (item): item is ConceptItem => item.kind === "concept",
@@ -345,8 +347,6 @@ export function UnitScreen({
   const exampleCards =
     exampleChunks[Math.min(examplePage, exampleChunks.length - 1)] ?? [];
 
-  const currentNote = notes[Math.min(noteIndex, notes.length - 1)];
-
   return (
     <main
       className="unit-screen"
@@ -374,8 +374,8 @@ export function UnitScreen({
             aria-label="Edit content"
             onClick={() =>
               onEdit(
-                currentPage === "theory" && currentNote !== undefined
-                  ? { noteStem: currentNote.stem }
+                currentPage === "theory" && notes.length === 1
+                  ? { noteStem: notes[0]?.stem }
                   : undefined,
               )
             }
@@ -402,33 +402,22 @@ export function UnitScreen({
           <p className="eyebrow">
             <span aria-hidden="true">📘</span> Theory
           </p>
-          {notes.length > 1 ? (
-            <SubPager
-              index={noteIndex}
-              count={notes.length}
-              label="Note"
-              onPrev={() => setNoteIndex((i) => Math.max(0, i - 1))}
-              onNext={() =>
-                setNoteIndex((i) => Math.min(notes.length - 1, i + 1))
-              }
-            />
-          ) : null}
-          {currentNote !== undefined ? (
+          {/* All of a unit's notes share one trail dot — stacked here
+              rather than paginated into subscreens. */}
+          {notes.map((note) => (
             <NoteCard
-              key={currentNote.noteId}
-              markdown={currentNote.markdown}
+              key={note.noteId}
+              markdown={note.markdown}
               lookup={lookup}
-              pinned={pinnedNoteIds.has(currentNote.noteId)}
+              pinned={pinnedNoteIds.has(note.noteId)}
               onPin={() => {
-                onPinNote(currentNote.noteId);
-                setPinnedNoteIds(
-                  new Set([...pinnedNoteIds, currentNote.noteId]),
-                );
+                onPinNote(note.noteId);
+                setPinnedNoteIds(new Set([...pinnedNoteIds, note.noteId]));
               }}
               topicDocId={`topic:${content.topic.id}`}
-              noteId={currentNote.noteId}
+              noteId={note.noteId}
             />
-          ) : null}
+          ))}
         </>
       ) : null}
 
@@ -442,8 +431,7 @@ export function UnitScreen({
               <tr>
                 <th>Script</th>
                 <th>Gloss</th>
-                <th>Audio</th>
-                <th>Feedback</th>
+                {lexemesHaveAudio ? <th>Audio</th> : null}
               </tr>
             </thead>
             <tbody>
@@ -459,28 +447,23 @@ export function UnitScreen({
                     </button>
                   </td>
                   <td>{item.payload.gloss}</td>
-                  <td>
-                    <SpeakerButton
-                      text={item.payload.script}
-                      lang={readAloudLang}
-                      assetUrl={
-                        item.payload.audioRef !== undefined
-                          ? getLexiconAssetUrl(
-                              domainId,
-                              "audio",
-                              item.payload.audioRef,
-                            )
-                          : undefined
-                      }
-                    />
-                  </td>
-                  <td>
-                    <FeedbackWidget
-                      docId={`domain:${domainId}`}
-                      contentKind="item"
-                      contentId={item.id}
-                    />
-                  </td>
+                  {lexemesHaveAudio ? (
+                    <td>
+                      <SpeakerButton
+                        text={item.payload.script}
+                        lang={readAloudLang}
+                        assetUrl={
+                          item.payload.audioRef !== undefined
+                            ? getLexiconAssetUrl(
+                                domainId,
+                                "audio",
+                                item.payload.audioRef,
+                              )
+                            : undefined
+                        }
+                      />
+                    </td>
+                  ) : null}
                 </tr>
               ))}
             </tbody>

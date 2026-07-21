@@ -209,6 +209,12 @@ button.plain {
   padding: 1rem;
 }
 
+/* section.card now pads itself (below) — its direct-child divs
+ * (.grade-buttons, .chat-compose) don't need a second inset on top. */
+section.card > div {
+  padding: 0;
+}
+
 /* Cards that ARE a p/form (AuthorScreen sign-in, empty states) pad
  * themselves — p margins fall outside the border (ui-review W4). */
 p.card,
@@ -228,6 +234,14 @@ form.card p {
 
 .card.locked {
   color: var(--locked-fg);
+}
+
+/* section.card (Settings/Stats groups, the topic chat box) isn't a list-row
+ * button or a p/form.card — pad it directly, and space consecutive ones
+ * apart (ui-review 2026-07-21). */
+section.card {
+  padding: 1rem;
+  margin-top: 1rem;
 }
 
 .status {
@@ -470,7 +484,7 @@ input[type="text"] {
   color: var(--done-text);
 }
 
-.card.review.primary {
+.card.primary {
   background: var(--primary);
   border-color: var(--primary);
   color: var(--on-primary);
@@ -622,6 +636,10 @@ button.speaker {
  * bottom padding `main.session` uses so the sticky bar never hides the last
  * item of a page (that class is SessionScreen-specific, so this is its own). */
 main.unit-screen {
+  /* Touch swipe handlers live on this element (UnitScreen.tsx) — short
+   * pages (e.g. a 2-line overview) must still cover the full viewport or
+   * the lower half of the screen falls outside the swipe target. */
+  min-height: 100dvh;
   padding-bottom: 9rem;
 }
 
