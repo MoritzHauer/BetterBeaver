@@ -3,7 +3,7 @@ import {
   type SupabaseClient,
   type User,
 } from "@supabase/supabase-js";
-import type { DomainDocument, TopicDocument } from "@betterbeaver/schema";
+import type { DomainDocument, BookDocument } from "@betterbeaver/schema";
 
 /**
  * The authoring client (plan 0012 step 2). Learners never touch this
@@ -64,8 +64,8 @@ export interface AuthorDocSummary {
 }
 
 export interface AuthorDoc extends AuthorDocSummary {
-  draft: TopicDocument | DomainDocument | null;
-  published: TopicDocument | DomainDocument | null;
+  draft: BookDocument | DomainDocument | null;
+  published: BookDocument | DomainDocument | null;
 }
 
 /** Documents the signed-in author maintains (RLS scopes the select). */
@@ -102,7 +102,7 @@ export async function loadDocument(id: string): Promise<AuthorDoc> {
 
 export async function saveDraft(
   id: string,
-  draft: TopicDocument | DomainDocument | null,
+  draft: BookDocument | DomainDocument | null,
 ): Promise<void> {
   const supabase = getSupabase();
   if (supabase === null) {
@@ -121,7 +121,7 @@ export async function saveDraft(
 export async function publishDocument(
   id: string,
   expectedVersion: number,
-  doc: TopicDocument | DomainDocument,
+  doc: BookDocument | DomainDocument,
   schemaVersion: number,
 ): Promise<void> {
   const supabase = getSupabase();

@@ -40,7 +40,7 @@ export async function saveWordToSavedList(
 
 /**
  * Creates a `VocabListStore` backed by `localStorage`: each domain's lists
- * (plan 0006: re-scoped from topic) are stored under
+ * (plan 0006: re-scoped from book) are stored under
  * `bb.vocablists.<domainId>` as a JSON array.
  */
 export function createLocalStorageVocabListStore(): VocabListStore {

@@ -12,8 +12,8 @@ import {
 import { join } from "node:path";
 import type {
   DomainDocument,
-  TopicDocument,
-  TopicDocumentNote,
+  BookDocument,
+  BookDocumentNote,
 } from "../packages/schema/src/documents.ts";
 
 export const CONTENT_DIR = new URL("../content", import.meta.url).pathname;
@@ -31,7 +31,7 @@ function readJsonFilesIn(dir: string): unknown[] {
     .map((name) => readJson(join(dir, name)));
 }
 
-function readNotes(dir: string): TopicDocumentNote[] {
+function readNotes(dir: string): BookDocumentNote[] {
   if (!existsSync(dir)) {
     return [];
   }
@@ -43,19 +43,19 @@ function readNotes(dir: string): TopicDocumentNote[] {
     }));
 }
 
-/** Loads every topic and domain document from the content/ tree. */
+/** Loads every book and domain document from the content/ tree. */
 export function loadContentDocuments(): {
-  topics: Map<string, TopicDocument>;
+  books: Map<string, BookDocument>;
   domains: Map<string, DomainDocument>;
 } {
-  const topics = new Map<string, TopicDocument>();
+  const books = new Map<string, BookDocument>();
   const domains = new Map<string, DomainDocument>();
   for (const entry of readdirSync(CONTENT_DIR, { withFileTypes: true })) {
     if (!entry.isDirectory() || entry.name === "lexicon") {
       continue;
     }
     const dir = join(CONTENT_DIR, entry.name);
-    topics.set(entry.name, {
+    books.set(entry.name, {
       topic: readJson(join(dir, "topic.json")),
       lessons: readJsonFilesIn(join(dir, "lessons")),
       units: readJsonFilesIn(join(dir, "units")),
@@ -74,7 +74,7 @@ export function loadContentDocuments(): {
       families: readJsonFilesIn(join(dir, "families")),
     });
   }
-  return { topics, domains };
+  return { books, domains };
 }
 
 function writeJson(path: string, value: unknown): void {
@@ -98,11 +98,11 @@ function writeEntityDir(dir: string, entities: unknown[]): void {
 }
 
 /**
- * Writes a topic document back to `content/<id>/`, replacing the JSON/md
+ * Writes a book document back to `content/<id>/`, replacing the JSON/md
  * files but leaving `assets/` untouched (assets are frozen in-repo — plan
  * 0012 §2).
  */
-export function writeTopicDocument(id: string, doc: TopicDocument): void {
+export function writeBookDocument(id: string, doc: BookDocument): void {
   const dir = join(CONTENT_DIR, id);
   mkdirSync(dir, { recursive: true });
   writeJson(join(dir, "topic.json"), doc.topic);
@@ -121,7 +121,7 @@ export function writeTopicDocument(id: string, doc: TopicDocument): void {
   }
 }
 
-/** Domain-document counterpart of `writeTopicDocument` (`content/lexicon/<id>/`). */
+/** Domain-document counterpart of `writeBookDocument` (`content/lexicon/<id>/`). */
 export function writeDomainDocument(id: string, doc: DomainDocument): void {
   const dir = join(CONTENT_DIR, "lexicon", id);
   mkdirSync(dir, { recursive: true });

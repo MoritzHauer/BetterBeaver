@@ -1,7 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
-import { bundledDomainIds, bundledTopicDomainIds } from "./content/bundled";
+import { bundledDomainIds, bundledBookDomainIds } from "./content/bundled";
 import { initContentSource } from "./content/source";
 import { runStorageMigrations } from "./progress/migrations";
 import "./theme"; // registers the live OS-follow listener for the "system" theme
@@ -12,7 +12,7 @@ if (navigator.storage?.persist !== undefined) {
 }
 
 // Must run before any screen reads the new per-domain keys (plan 0006).
-runStorageMigrations(bundledTopicDomainIds(), bundledDomainIds());
+runStorageMigrations(bundledBookDomainIds(), bundledDomainIds());
 
 const rootElement = document.getElementById("root");
 if (!rootElement) {

@@ -64,9 +64,9 @@ function canonical(value: unknown): string {
   return JSON.stringify(value);
 }
 
-const { topics, domains } = loadContentDocuments();
+const { books, domains } = loadContentDocuments();
 const local = [
-  ...[...topics].map(([id, doc]) => ({
+  ...[...books].map(([id, doc]) => ({
     id: documentId("topic", id),
     kind: "topic",
     doc,

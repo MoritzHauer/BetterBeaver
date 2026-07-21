@@ -87,8 +87,8 @@ function VerdictBar({
 }
 
 /** Native audio element; unlimited replays for free, no custom player. */
-function AudioPlayer({ topicId, stem }: { topicId: string; stem: string }) {
-  const url = getAssetUrl(topicId, "audio", stem);
+function AudioPlayer({ bookId, stem }: { bookId: string; stem: string }) {
+  const url = getAssetUrl(bookId, "audio", stem);
   if (url === undefined) {
     return <p className="status">Missing audio asset: {stem}</p>;
   }
@@ -96,15 +96,15 @@ function AudioPlayer({ topicId, stem }: { topicId: string; stem: string }) {
 }
 
 function ImageDisplay({
-  topicId,
+  bookId,
   stem,
   alt,
 }: {
-  topicId: string;
+  bookId: string;
   stem: string;
   alt: string;
 }) {
-  const url = getAssetUrl(topicId, "img", stem);
+  const url = getAssetUrl(bookId, "img", stem);
   if (url === undefined) {
     return <p className="status">Missing image asset: {stem}</p>;
   }
@@ -654,7 +654,7 @@ function MatchingBoard({
  * `checkMatchingPair`, `matchingOutcomes`). */
 function renderInteraction(
   question: Question,
-  topicId: string,
+  bookId: string,
   readAloudLang: string | undefined,
   lookup: TapLookup,
   applyAuto: (unitId: string, correct: boolean) => Promise<void>,
@@ -713,7 +713,7 @@ function renderInteraction(
     case "dictation":
       return (
         <>
-          <AudioPlayer topicId={topicId} stem={question.audioStem} />
+          <AudioPlayer bookId={bookId} stem={question.audioStem} />
           <TypedInput
             target={question.target}
             unitId={question.unitId}
@@ -756,7 +756,7 @@ function renderInteraction(
       return (
         <>
           {question.audio.kind === "stem" ? (
-            <AudioPlayer topicId={topicId} stem={question.audio.stem} />
+            <AudioPlayer bookId={bookId} stem={question.audio.stem} />
           ) : (
             <SpeakerButton text={question.audio.text} lang={readAloudLang} />
           )}
@@ -772,7 +772,7 @@ function renderInteraction(
     case "shadowing":
       return (
         <>
-          <AudioPlayer topicId={topicId} stem={question.audioStem} />
+          <AudioPlayer bookId={bookId} stem={question.audioStem} />
           <SelfGradeReveal
             lines={question.transcript}
             revealLabel="Show transcript"
@@ -785,7 +785,7 @@ function renderInteraction(
     case "minimal-pair":
       return (
         <>
-          <AudioPlayer topicId={topicId} stem={question.audioStem} />
+          <AudioPlayer bookId={bookId} stem={question.audioStem} />
           <ChoiceList
             choices={question.choices}
             correctIndex={question.correctIndex}
@@ -798,7 +798,7 @@ function renderInteraction(
     case "picture":
       return (
         <>
-          <ImageDisplay topicId={topicId} stem={question.imageStem} alt="" />
+          <ImageDisplay bookId={bookId} stem={question.imageStem} alt="" />
           <ChoiceList
             choices={question.choices}
             correctIndex={question.correctIndex}
@@ -811,7 +811,7 @@ function renderInteraction(
     case "note":
       return (
         <NoteReview
-          markdown={getNoteMarkdown(topicId, question.stem)}
+          markdown={getNoteMarkdown(bookId, question.stem)}
           fallbackStem={question.stem}
           lookup={lookup}
           unitId={question.unitId}
@@ -933,7 +933,7 @@ function SummaryPanel({
 export function SessionScreen({
   title,
   questions,
-  topicId,
+  bookId,
   readAloudLang,
   lookup,
   taskIds,
@@ -948,8 +948,8 @@ export function SessionScreen({
 }: {
   title: string;
   questions: Question[];
-  topicId: string;
-  /** The topic's `readAloudLang`, for TTS-backed listen questions (plan 0004). */
+  bookId: string;
+  /** The book's `readAloudLang`, for TTS-backed listen questions (plan 0004). */
   readAloudLang?: string | undefined;
   /** The domain's tap-to-lookup dependencies (plan 0006 step 4), threaded to
    * every post-answer reveal surface the pinned rules cover (recognize's
@@ -1096,7 +1096,7 @@ export function SessionScreen({
         ) : null}
         {currentTaskId !== undefined ? (
           <FeedbackWidget
-            docId={`topic:${topicId}`}
+            docId={`topic:${bookId}`}
             contentKind="task"
             contentId={currentTaskId}
           />
@@ -1114,7 +1114,7 @@ export function SessionScreen({
         <div key={index} className="question">
           {renderInteraction(
             question,
-            topicId,
+            bookId,
             readAloudLang,
             lookup,
             applyAuto,

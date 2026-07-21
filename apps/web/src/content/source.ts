@@ -1,7 +1,7 @@
 import {
   contentIdOf,
   type DomainDocument,
-  type TopicDocument,
+  type BookDocument,
 } from "@betterbeaver/schema";
 import {
   ContentValidationError,
@@ -15,7 +15,7 @@ import {
 import {
   bundledAssetStems,
   bundledDomainDocuments,
-  bundledTopicDocuments,
+  bundledBookDocuments,
 } from "./bundled";
 import {
   clearCachedDocuments,
@@ -56,31 +56,31 @@ async function fetchCatalog(select: string, filter = ""): Promise<unknown> {
 }
 
 function toDocumentMaps(docs: CachedDocument[]): {
-  topics: Map<string, TopicDocument>;
+  books: Map<string, BookDocument>;
   domains: Map<string, DomainDocument>;
 } {
-  const topics = new Map<string, TopicDocument>();
+  const books = new Map<string, BookDocument>();
   const domains = new Map<string, DomainDocument>();
   for (const record of docs) {
     // Cache/backend ids are kind-prefixed (`topic:demo` vs `domain:demo`);
     // the builder's maps key on bare content ids.
     if (record.kind === "topic") {
-      topics.set(contentIdOf(record.id), record.doc as TopicDocument);
+      books.set(contentIdOf(record.id), record.doc as BookDocument);
     } else {
       domains.set(contentIdOf(record.id), record.doc as DomainDocument);
     }
   }
-  return { topics, domains };
+  return { books, domains };
 }
 
 function buildFromDocuments(docs: CachedDocument[]): DocumentContentSource {
-  const { topics, domains } = toDocumentMaps(docs);
-  return createDocumentContentSource(topics, domains, bundledAssetStems());
+  const { books, domains } = toDocumentMaps(docs);
+  return createDocumentContentSource(books, domains, bundledAssetStems());
 }
 
 function buildFromSeed(): DocumentContentSource {
   return createDocumentContentSource(
-    bundledTopicDocuments(),
+    bundledBookDocuments(),
     bundledDomainDocuments(),
     bundledAssetStems(),
   );
@@ -93,10 +93,10 @@ let active: DocumentContentSource | undefined;
 
 /** Raw markdown for a note of the active content set (bundled seed or cached backend documents). */
 export function getNoteMarkdown(
-  topicId: string,
+  bookId: string,
   stem: string,
 ): string | undefined {
-  return active?.noteMarkdown(topicId, stem);
+  return active?.noteMarkdown(bookId, stem);
 }
 
 /**

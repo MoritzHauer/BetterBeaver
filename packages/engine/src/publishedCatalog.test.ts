@@ -7,7 +7,7 @@ import {
   CONTENT_SCHEMA_VERSION,
   contentIdOf,
   type DomainDocument,
-  type TopicDocument,
+  type BookDocument,
 } from "@betterbeaver/schema";
 import {
   createDocumentContentSource,
@@ -42,8 +42,8 @@ function readAssetStems(dir: string): string[] {
 /** Bundled asset stems from the git tree — the deployed app's asset truth. */
 function loadBundledAssetStems(): AssetStems {
   const assets: AssetStems = {
-    audioByTopic: new Map(),
-    imageByTopic: new Map(),
+    audioByBook: new Map(),
+    imageByBook: new Map(),
     audioByDomain: new Map(),
     imageByDomain: new Map(),
   };
@@ -52,11 +52,11 @@ function loadBundledAssetStems(): AssetStems {
       continue;
     }
     const dir = join(CONTENT_DIR, entry.name);
-    assets.audioByTopic.set(
+    assets.audioByBook.set(
       entry.name,
       readAssetStems(join(dir, "assets", "audio")),
     );
-    assets.imageByTopic.set(
+    assets.imageByBook.set(
       entry.name,
       readAssetStems(join(dir, "assets", "img")),
     );
@@ -103,19 +103,19 @@ async function fetchCatalog(): Promise<CatalogEntry[]> {
       "backend has newer-schema content than this bundle — bump + deploy the app before it can serve them",
     ).toEqual([]);
 
-    const topics = new Map<string, TopicDocument>();
+    const books = new Map<string, BookDocument>();
     const domains = new Map<string, DomainDocument>();
     for (const r of rows) {
       // Catalog ids are kind-prefixed; the builder keys on bare content ids.
       if (r.kind === "topic") {
-        topics.set(contentIdOf(r.id), r.published as TopicDocument);
+        books.set(contentIdOf(r.id), r.published as BookDocument);
       } else {
         domains.set(contentIdOf(r.id), r.published as DomainDocument);
       }
     }
 
     try {
-      createDocumentContentSource(topics, domains, loadBundledAssetStems());
+      createDocumentContentSource(books, domains, loadBundledAssetStems());
     } catch (e) {
       if (e instanceof ContentValidationError) {
         // Surface every problem — this is the actionable message.

@@ -5,19 +5,19 @@ import { App } from "./App";
 import { initContentSource } from "./content/source";
 
 /**
- * Guards against the App-wide re-render cascade on Topics -> Topic
- * navigation: that tap chains three state updates — App.tsx's topicEpoch
+ * Guards against the App-wide re-render cascade on Books -> Book
+ * navigation: that tap chains three state updates — App.tsx's bookEpoch
  * bump (sync, shows "Loading…"), the merged content+domain load effect
- * (plan 0013 goal 1: loadTopic and loadDomain/symmetricLinks now resolve
+ * (plan 0013 goal 1: loadBook and loadDomain/symmetricLinks now resolve
  * via one Promise.all and commit `content`/`domainContent`/
- * `domainTopicsContent` together in a single commit instead of two), and
- * TopicScreen's own post-mount effect (dueUnits + getStreak, unrelated to
+ * `domainBooksContent` together in a single commit instead of two), and
+ * BookScreen's own post-mount effect (dueUnits + getStreak, unrelated to
  * App.tsx's loads) — each committing the whole App tree.
  * The commit count here is a jsdom proxy for the real-browser count (also
  * 3) — don't tighten the ceiling below what a fresh measurement on this
  * exact path shows, or a real regression will pass silently. Note the
  * ceiling stayed at 3 rather than dropping to 2 after the App.tsx merge:
- * TopicScreen's own effect is the third commit and is out of scope for
+ * BookScreen's own effect is the third commit and is out of scope for
  * that merge (see plan 0013 goal 1's follow-up note).
  *
  * This does NOT guard the 60-220ms main-thread long task measured on the
@@ -30,7 +30,7 @@ import { initContentSource } from "./content/source";
  * count or engine compute. No regression test covers that yet.
  */
 describe("App navigation render cost", () => {
-  it("commits the App tree a bounded number of times for Topics -> Topic", async () => {
+  it("commits the App tree a bounded number of times for Books -> Book", async () => {
     const contentInit = await initContentSource();
     let commits = 0;
     const { container } = render(
@@ -47,9 +47,9 @@ describe("App navigation render cost", () => {
     await screen.findByText("Get Started");
     screen.getByText("Get Started").click();
 
-    // A real topic card, not a header icon button (Stats/Settings render
+    // A real book card, not a header icon button (Stats/Settings render
     // first in the DOM but don't exercise the content-loading cascade).
-    const topicButton = await waitFor(() => {
+    const bookButton = await waitFor(() => {
       const button = container.querySelector<HTMLButtonElement>(
         ".card-list .card button",
       );
@@ -58,12 +58,12 @@ describe("App navigation render cost", () => {
     });
 
     commits = 0;
-    topicButton.click();
+    bookButton.click();
 
-    // TopicScreen only renders once both loadTopic and loadDomain resolve
+    // BookScreen only renders once both loadBook and loadDomain resolve
     // (App.tsx gates on `content` and `domainContent`), so this back button
     // appearing marks the full cascade having committed.
-    await screen.findByRole("button", { name: /Topics/ });
+    await screen.findByRole("button", { name: /Books/ });
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     expect(commits).toBeLessThanOrEqual(3);

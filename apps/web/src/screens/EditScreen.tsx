@@ -3,7 +3,7 @@ import {
   CONTENT_SCHEMA_VERSION,
   TASK_TYPES,
   type DomainDocument,
-  type TopicDocument,
+  type BookDocument,
 } from "@betterbeaver/schema";
 import {
   moveId,
@@ -15,7 +15,7 @@ import {
   upsertDomainEntry,
   upsertEntity,
   upsertFamily,
-  type TopicCollection,
+  type BookCollection,
 } from "@betterbeaver/engine";
 import {
   loadDocument,
@@ -27,7 +27,7 @@ import { validateForPublish } from "../backend/publishCheck";
 import { FeedbackPanel } from "../components/FeedbackPanel";
 
 /**
- * Form-based document editor (plan 0012 §7, the "common 80%"): topic
+ * Form-based document editor (plan 0012 §7, the "common 80%"): book
  * structure (lessons/units/items/tasks/notes) and domain lexicons, editing
  * the raw draft document. Entities are loosely typed on purpose — a draft
  * mid-edit may be invalid; zod + validateContent gate at publish, and their
@@ -35,7 +35,7 @@ import { FeedbackPanel } from "../components/FeedbackPanel";
  */
 
 type Entity = { id: string } & Record<string, unknown>;
-type AnyDoc = TopicDocument | DomainDocument;
+type AnyDoc = BookDocument | DomainDocument;
 
 // ---------------------------------------------------------------- fields
 
@@ -509,8 +509,8 @@ export function EditScreen({
 
   const body =
     record.kind === "topic" ? (
-      <TopicEditor
-        doc={working as TopicDocument}
+      <BookEditor
+        doc={working as BookDocument}
         view={view}
         setView={setView}
         onChange={change}
@@ -633,25 +633,25 @@ function upView(view: View): View {
   }
 }
 
-// ------------------------------------------------------------ topic editor
+// ------------------------------------------------------------ book editor
 
 function byId(list: unknown[], id: string): Entity | undefined {
   return (list as Entity[]).find((e) => e.id === id);
 }
 
-function TopicEditor({
+function BookEditor({
   doc,
   view,
   setView,
   onChange,
 }: {
-  doc: TopicDocument;
+  doc: BookDocument;
   view: View;
   setView: (view: View) => void;
-  onChange: (doc: TopicDocument) => void;
+  onChange: (doc: BookDocument) => void;
 }) {
-  const topic = doc.topic as Entity;
-  const upsert = (collection: TopicCollection, entity: Entity) =>
+  const book = doc.topic as Entity;
+  const upsert = (collection: BookCollection, entity: Entity) =>
     onChange(upsertEntity(doc, collection, entity));
 
   if (view.v === "item" || view.v === "task") {
@@ -756,7 +756,7 @@ function TopicEditor({
     const itemIds = (unit.itemIds as string[] | undefined) ?? [];
     const taskIds = (unit.taskIds as string[] | undefined) ?? [];
     const noteIds = (unit.noteIds as string[] | undefined) ?? [];
-    const topicCode = typeof topic.code === "string" ? topic.code : "";
+    const bookCode = typeof book.code === "string" ? book.code : "";
     const setList = (field: string, ids: string[]) =>
       upsert("units", { ...unit, [field]: ids });
     return (
@@ -861,8 +861,8 @@ function TopicEditor({
         <h3>Notes</h3>
         <ul className="editor-list">
           {noteIds.map((noteId) => {
-            const stem = noteId.startsWith(`${topicCode}-note-`)
-              ? noteId.slice(`${topicCode}-note-`.length)
+            const stem = noteId.startsWith(`${bookCode}-note-`)
+              ? noteId.slice(`${bookCode}-note-`.length)
               : noteId;
             return (
               <li key={noteId}>
@@ -888,7 +888,7 @@ function TopicEditor({
                     u.id === unit.id
                       ? {
                           ...u,
-                          noteIds: [...noteIds, `${topicCode}-note-${stem}`],
+                          noteIds: [...noteIds, `${bookCode}-note-${stem}`],
                         }
                       : u,
                   ),
@@ -978,11 +978,11 @@ function TopicEditor({
     );
   }
 
-  const lessonIds = (topic.lessonIds as string[] | undefined) ?? [];
+  const lessonIds = (book.lessonIds as string[] | undefined) ?? [];
   return (
     <section>
       <EntityForm
-        entity={topic}
+        entity={book}
         specs={[f("Title", "title"), fm("Description", "description")]}
         onChange={(next) => onChange({ ...doc, topic: next })}
       />
@@ -997,13 +997,13 @@ function TopicEditor({
               onUp={() =>
                 onChange({
                   ...doc,
-                  topic: { ...topic, lessonIds: moveId(lessonIds, id, -1) },
+                  topic: { ...book, lessonIds: moveId(lessonIds, id, -1) },
                 })
               }
               onDown={() =>
                 onChange({
                   ...doc,
-                  topic: { ...topic, lessonIds: moveId(lessonIds, id, 1) },
+                  topic: { ...book, lessonIds: moveId(lessonIds, id, 1) },
                 })
               }
               onOpen={() => setView({ v: "lesson", lessonId: id })}
@@ -1019,12 +1019,12 @@ function TopicEditor({
             upsertEntity(
               {
                 ...doc,
-                topic: { ...topic, lessonIds: [...lessonIds, id] },
+                topic: { ...book, lessonIds: [...lessonIds, id] },
               },
               "lessons",
               {
                 id,
-                topicId: topic.id,
+                topicId: book.id,
                 title: "",
                 goal: "",
                 unitIds: [],
@@ -1060,7 +1060,7 @@ function NewItemForm({ onAdd }: { onAdd: (id: string, kind: string) => void }) {
         onChange={(e) => setId(e.target.value)}
       />
       <select value={kind} onChange={(e) => setKind(e.target.value)}>
-        {/* Topic-owned kinds only — lexemes live in the domain lexicon. */}
+        {/* Book-owned kinds only — lexemes live in the domain lexicon. */}
         <option value="sentence">sentence</option>
         <option value="concept">concept</option>
         <option value="pair">pair</option>

@@ -121,7 +121,7 @@ export function AuthorScreen({
           {docs !== null && docs.length === 0 && (
             <p className="card">
               No documents yet. Maintainership is assigned by the admin for now
-              — ask to be added, or wait for in-app topic creation (coming
+              — ask to be added, or wait for in-app book creation (coming
               later).
             </p>
           )}
@@ -132,7 +132,7 @@ export function AuthorScreen({
                   <button onClick={() => onOpenDocument(doc.id)}>
                     <strong>{doc.id}</strong>
                     <span className="status">
-                      {doc.kind === "topic" ? "Topic" : "Domain lexicon"} ·
+                      {doc.kind === "topic" ? "Book" : "Domain lexicon"} ·
                       version {doc.published_version}
                       {doc.listed ? "" : " · not listed yet"}
                     </span>

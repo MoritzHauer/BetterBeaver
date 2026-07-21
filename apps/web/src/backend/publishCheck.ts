@@ -2,7 +2,7 @@ import {
   CONTENT_SCHEMA_VERSION,
   contentIdOf,
   type DomainDocument,
-  type TopicDocument,
+  type BookDocument,
 } from "@betterbeaver/schema";
 import {
   ContentValidationError,
@@ -14,15 +14,15 @@ import { getSupabase } from "./supabase";
 /**
  * Publish-time validation (plan 0012 §3): the draft, assembled with the
  * published rest of the catalog, must form a valid content set. Symmetric
- * by construction — a topic draft is checked against its published domain,
- * a domain draft against every published topic of that domain — because the
+ * by construction — a book draft is checked against its published domain,
+ * a domain draft against every published book of that domain — because the
  * whole listed set is always assembled. Returns human-readable errors;
  * empty means publishable.
  */
 export async function validateForPublish(
   docId: string,
   kind: "topic" | "domain",
-  draft: TopicDocument | DomainDocument,
+  draft: BookDocument | DomainDocument,
 ): Promise<string[]> {
   const supabase = getSupabase();
   if (supabase === null) {
@@ -34,7 +34,7 @@ export async function validateForPublish(
   if (error) {
     return [`could not load the published catalog: ${error.message}`];
   }
-  const topics = new Map<string, TopicDocument>();
+  const books = new Map<string, BookDocument>();
   const domains = new Map<string, DomainDocument>();
   for (const row of data as {
     id: string;
@@ -49,18 +49,18 @@ export async function validateForPublish(
     }
     // Backend document ids are kind-prefixed; the builder keys on content ids.
     if (row.kind === "topic") {
-      topics.set(contentIdOf(row.id), row.published as TopicDocument);
+      books.set(contentIdOf(row.id), row.published as BookDocument);
     } else {
       domains.set(contentIdOf(row.id), row.published as DomainDocument);
     }
   }
   if (kind === "topic") {
-    topics.set(contentIdOf(docId), draft as TopicDocument);
+    books.set(contentIdOf(docId), draft as BookDocument);
   } else {
     domains.set(contentIdOf(docId), draft as DomainDocument);
   }
   try {
-    createDocumentContentSource(topics, domains, bundledAssetStems());
+    createDocumentContentSource(books, domains, bundledAssetStems());
     return [];
   } catch (validationError) {
     if (validationError instanceof ContentValidationError) {

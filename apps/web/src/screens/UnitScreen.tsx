@@ -91,11 +91,11 @@ function SubPager({
 function ExampleCard({
   item,
   lookup,
-  topicDocId,
+  bookDocId,
 }: {
   item: ExampleItem;
   lookup: TapLookup;
-  topicDocId: string;
+  bookDocId: string;
 }) {
   const [showTranslation, setShowTranslation] = useState(false);
 
@@ -120,7 +120,7 @@ function ExampleCard({
           </button>
         )}
         <FeedbackWidget
-          docId={topicDocId}
+          docId={bookDocId}
           contentKind="item"
           contentId={item.id}
         />
@@ -135,7 +135,7 @@ function ExampleCard({
       </strong>
       <p>{item.payload.contrast}</p>
       <FeedbackWidget
-        docId={topicDocId}
+        docId={bookDocId}
         contentKind="item"
         contentId={item.id}
       />
@@ -151,14 +151,14 @@ function NoteCard({
   lookup,
   pinned,
   onPin,
-  topicDocId,
+  bookDocId,
   noteId,
 }: {
   markdown: string;
   lookup: TapLookup;
   pinned: boolean;
   onPin: () => void;
-  topicDocId: string;
+  bookDocId: string;
   noteId: string;
 }) {
   return (
@@ -169,11 +169,7 @@ function NoteCard({
       <button className="plain" disabled={pinned} onClick={onPin}>
         {pinned ? "📌 Pinned for review" : "📌 Pin for review"}
       </button>
-      <FeedbackWidget
-        docId={topicDocId}
-        contentKind="note"
-        contentId={noteId}
-      />
+      <FeedbackWidget docId={bookDocId} contentKind="note" contentId={noteId} />
     </section>
   );
 }
@@ -414,7 +410,7 @@ export function UnitScreen({
                 onPinNote(note.noteId);
                 setPinnedNoteIds(new Set([...pinnedNoteIds, note.noteId]));
               }}
-              topicDocId={`topic:${content.topic.id}`}
+              bookDocId={`topic:${content.topic.id}`}
               noteId={note.noteId}
             />
           ))}
@@ -536,7 +532,7 @@ export function UnitScreen({
                 key={item.id}
                 item={item}
                 lookup={lookup}
-                topicDocId={`topic:${content.topic.id}`}
+                bookDocId={`topic:${content.topic.id}`}
               />
             ))}
           </ul>

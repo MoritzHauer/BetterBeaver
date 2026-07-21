@@ -37,8 +37,12 @@ export function SettingsScreen({
     getSupabase() === null ? null : "loading",
   );
   const [bookImportError, setBookImportError] = useState<string | null>(null);
+  const [domainImportError, setDomainImportError] = useState<string | null>(
+    null,
+  );
   const progressFileRef = useRef<HTMLInputElement>(null);
   const bookFileRef = useRef<HTMLInputElement>(null);
+  const domainFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (getSupabase() === null) {
@@ -69,53 +73,82 @@ export function SettingsScreen({
     location.reload();
   }
 
-  async function handleExportBooks(): Promise<void> {
+  /** Shared by the Books and Domains export sections — same document shape,
+   * filtered to one `kind` and named after it. JSON entry shape is
+   * unchanged either way (`{ id, kind, doc }`); only the filter and the
+   * filename are section-specific. */
+  async function exportDocsOfKind(
+    kind: "topic" | "domain",
+    filenamePrefix: string,
+  ): Promise<void> {
     const docs = await listMyDocuments();
-    const full = await Promise.all(docs.map((d) => loadDocument(d.id)));
-    const books = full.map((d) => ({
+    const full = await Promise.all(
+      docs.filter((d) => d.kind === kind).map((d) => loadDocument(d.id)),
+    );
+    const out = full.map((d) => ({
       id: d.id,
       kind: d.kind,
       doc: d.published ?? d.draft,
     }));
-    const blob = new Blob([JSON.stringify(books, null, 2)], {
+    const blob = new Blob([JSON.stringify(out, null, 2)], {
       type: "application/json",
     });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `betterbeaver-books-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `betterbeaver-${filenamePrefix}-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
   }
 
-  async function handleImportBook(file: File): Promise<void> {
-    setBookImportError(null);
+  const handleExportBooks = () => exportDocsOfKind("topic", "books");
+  const handleExportDomains = () => exportDocsOfKind("domain", "domains");
+
+  /** Shared by the Books and Domains import sections — same file shape,
+   * checked against one expected `kind`. */
+  async function importFileOfKind(
+    file: File,
+    kind: "topic" | "domain",
+    setError: (error: string | null) => void,
+  ): Promise<void> {
+    setError(null);
     try {
       const parsed: unknown = JSON.parse(await file.text());
-      const entries = Array.isArray(parsed) ? parsed : [parsed];
+      const all = Array.isArray(parsed) ? parsed : [parsed];
+      // Old exports mixed both kinds in one file — filter, don't reject.
+      const entries = (all as { kind?: unknown }[]).filter(
+        (e) => e?.kind === kind,
+      );
+      if (entries.length === 0) {
+        throw new Error(
+          `not a BetterBeaver ${kind === "topic" ? "book" : "domain"} export file`,
+        );
+      }
       for (const entry of entries as unknown[]) {
         // Light structural check only — full schema validation happens at
         // publish time in the editor, not here.
-        const e = entry as {
-          id?: unknown;
-          kind?: unknown;
-          doc?: unknown;
-        };
+        const e = entry as { id?: unknown; doc?: unknown };
         if (
           typeof e?.id !== "string" ||
-          (e.kind !== "topic" && e.kind !== "domain") ||
           typeof e?.doc !== "object" ||
           e.doc === null
         ) {
-          throw new Error("not a BetterBeaver book export file");
+          throw new Error(
+            `not a BetterBeaver ${kind === "topic" ? "book" : "domain"} export file`,
+          );
         }
         localStorage.setItem(`bb.author.draft.${e.id}`, JSON.stringify(e.doc));
       }
       onImportBook((entries[0] as { id: string }).id);
     } catch (err) {
-      setBookImportError(err instanceof Error ? err.message : "Import failed");
+      setError(err instanceof Error ? err.message : "Import failed");
     }
   }
+
+  const handleImportBook = (file: File) =>
+    importFileOfKind(file, "topic", setBookImportError);
+  const handleImportDomain = (file: File) =>
+    importFileOfKind(file, "domain", setDomainImportError);
 
   async function handleErase(): Promise<void> {
     if (
@@ -288,6 +321,46 @@ export function SettingsScreen({
           </p>
           {bookImportError !== null ? (
             <p className="error-text">{bookImportError}</p>
+          ) : null}
+        </section>
+      ) : null}
+
+      {getSupabase() !== null && user !== "loading" && user !== null ? (
+        <section className="card">
+          <h2>Domains</h2>
+          <div className="grade-buttons">
+            <button
+              className="plain"
+              onClick={() => void handleExportDomains()}
+            >
+              Export my domains
+            </button>
+            <button
+              className="plain"
+              onClick={() => domainFileRef.current?.click()}
+            >
+              Import domain…
+            </button>
+            <input
+              ref={domainFileRef}
+              type="file"
+              accept="application/json"
+              style={{ display: "none" }}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                if (file !== undefined) {
+                  void handleImportDomain(file);
+                }
+              }}
+            />
+          </div>
+          <p className="status">
+            Import loads a domain into your draft; open it to review and
+            publish. You can only publish domains you maintain.
+          </p>
+          {domainImportError !== null ? (
+            <p className="error-text">{domainImportError}</p>
           ) : null}
         </section>
       ) : null}

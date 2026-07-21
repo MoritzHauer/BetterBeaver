@@ -209,7 +209,7 @@ function ModePicker({
 
 /**
  * Vocabulary screen (plan 0004; re-scoped to the domain by plan 0006): every
- * lexeme of the domain grouped by unit across all of the domain's topics
+ * lexeme of the domain grouped by unit across all of the domain's books
  * (searchable, with synonyms and speaker buttons), learner word lists
  * (create/rename/delete with a checkbox item picker), a "My words" section
  * for learner-created entries (add/save/delete), and a study entry point
@@ -217,7 +217,7 @@ function ModePicker({
  * hosts the JSON backup export/import (plan 0006's durability floor).
  */
 export function VocabularyScreen({
-  topicsContent,
+  booksContent,
   domainContent,
   listStore,
   userEntryStore,
@@ -225,8 +225,8 @@ export function VocabularyScreen({
   onStudy,
   onBack,
 }: {
-  /** Every topic belonging to the domain (plan 0006's per-domain grouping). */
-  topicsContent: Content[];
+  /** Every book belonging to the domain (plan 0006's per-domain grouping). */
+  booksContent: Content[];
   /** The domain's merged entry pool (shipped + user, plan 0006). */
   domainContent: DomainContent;
   listStore: VocabListStore;
@@ -255,7 +255,7 @@ export function VocabularyScreen({
   );
 
   // The domain's full lexicon (plan 0006): every lexeme entry, whether or
-  // not any topic's unit references it — lists may hold any of them.
+  // not any book's unit references it — lists may hold any of them.
   const lexemeById = useMemo(
     () =>
       new Map(
@@ -276,8 +276,8 @@ export function VocabularyScreen({
   );
   const unitGroups = useMemo(
     () =>
-      topicsContent.flatMap((topicContent) =>
-        topicContent.units
+      booksContent.flatMap((bookContent) =>
+        bookContent.units
           .map((unit) => ({
             unit,
             lexemes: unit.itemIds.flatMap((id) => {
@@ -287,17 +287,17 @@ export function VocabularyScreen({
           }))
           .filter((group) => group.lexemes.length > 0),
       ),
-    [topicsContent, lexemeById],
+    [booksContent, lexemeById],
   );
-  // Dangling-id pruning pool (plan 0006, pinned): topic-owned items across
-  // every domain topic, union the domain's *merged* (shipped + user)
+  // Dangling-id pruning pool (plan 0006, pinned): book-owned items across
+  // every domain book, union the domain's *merged* (shipped + user)
   // lexicon entries — never shipped alone, or a saved user word would be
   // pruned away on every load. Broader than `lexemeById` (lexemes only, for
   // display) so a list never loses an itemId the domain still actually owns.
   const entryPoolIds = useMemo(() => {
     const ids = new Set<string>();
-    for (const topicContent of topicsContent) {
-      for (const item of topicContent.items) {
+    for (const bookContent of booksContent) {
+      for (const item of bookContent.items) {
         ids.add(item.id);
       }
     }
@@ -305,7 +305,7 @@ export function VocabularyScreen({
       ids.add(entry.id);
     }
     return ids;
-  }, [topicsContent, domainContent]);
+  }, [booksContent, domainContent]);
 
   const [lists, setLists] = useState<VocabList[]>([]);
   const [search, setSearch] = useState("");
@@ -465,7 +465,7 @@ export function VocabularyScreen({
     <main>
       <header className="screen-header">
         <button className="plain" onClick={onBack}>
-          &larr; Topics
+          &larr; Books
         </button>
       </header>
       <h1>Vocabulary &mdash; {domainContent.domain.title}</h1>

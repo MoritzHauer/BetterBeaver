@@ -2,13 +2,13 @@ import type { Content } from "@betterbeaver/schema";
 import { isUnitComplete, isUnitUnlocked } from "@betterbeaver/engine";
 import { LockableProgress } from "../components/ProgressBar";
 import { FeedbackWidget } from "../components/FeedbackWidget";
-import type { PracticeTarget } from "./TopicScreen";
-import { lessonPracticeTargets } from "./TopicScreen";
+import type { PracticeTarget } from "./BookScreen";
+import { lessonPracticeTargets } from "./BookScreen";
 
 /**
- * A lesson's units (plan 0008): the navigation level between TopicScreen's
+ * A lesson's units (plan 0008): the navigation level between BookScreen's
  * lessons and UnitScreen's content — structurally today's former
- * TopicScreen-rendering-units logic, one level down.
+ * BookScreen-rendering-units logic, one level down.
  */
 export function LessonScreen({
   content,

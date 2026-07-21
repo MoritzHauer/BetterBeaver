@@ -1,7 +1,7 @@
 import { getSupabase } from "./supabase";
 import { getDeviceId, getDisplayName } from "../identity";
 
-/** Content feedback (plan 0014): votes, reports, and a public per-topic
+/** Content feedback (plan 0014): votes, reports, and a public per-book
  * chat. Learners are account-free, so every write carries the device
  * id/display name from `identity.ts` instead of a Supabase Auth user.
  * All functions no-op (or return empty) when the backend isn't configured,
@@ -147,7 +147,7 @@ export async function setReportResolved(
 }
 
 // ------------------------------------------------------------------- chat
-// One public thread per topic (`docId` is the topic doc id) — every
+// One public thread per book (`docId` is the book doc id) — every
 // learner who opens it sees every message.
 
 export async function sendChatMessage(

@@ -13,7 +13,7 @@ describe("validateContentSet", () => {
     expect(
       validateContentSet(
         [
-          // A topic's validated pool includes its domain's entries — that
+          // A book's validated pool includes its domain's entries — that
           // overlap is expected and must not count as a duplicate.
           {
             id: "kyrgyz",
@@ -33,7 +33,7 @@ describe("validateContentSet", () => {
     ]);
   });
 
-  it("reports an item id shared by two topics", () => {
+  it("reports an item id shared by two books", () => {
     const errors = validateContentSet(
       [
         { id: "a", domainId: "ky", itemIds: ["shared-sent"] },
@@ -46,9 +46,9 @@ describe("validateContentSet", () => {
     ]);
   });
 
-  it("reports a topic-owned item colliding with another domain's entry", () => {
+  it("reports a book-owned item colliding with another domain's entry", () => {
     const errors = validateContentSet(
-      // The topic belongs to ky, so demo's entry ids are NOT filtered from
+      // The book belongs to ky, so demo's entry ids are NOT filtered from
       // its pool — a collision with them is a real global-SRS-key clash.
       [{ id: "kyrgyz", domainId: "ky", itemIds: ["demo-con-arch"] }],
       [kyrgyz, demo],

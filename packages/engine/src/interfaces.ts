@@ -3,7 +3,7 @@ import type { SrsState } from "@betterbeaver/srs";
 import type { Streak } from "./streak.js";
 import type { DomainContent } from "./domain.js";
 
-/** Thrown by `ContentSource.loadTopic` when the loaded content fails validation. */
+/** Thrown by `ContentSource.loadBook` when the loaded content fails validation. */
 export class ContentValidationError extends Error {
   readonly errors: string[];
   constructor(errors: string[]) {
@@ -13,12 +13,12 @@ export class ContentValidationError extends Error {
   }
 }
 
-/** Summary of a topic, as listed before its full content is loaded. */
-export interface TopicSummary {
+/** Summary of a book, as listed before its full content is loaded. */
+export interface BookSummary {
   id: string;
   title: string;
   description: string;
-  /** The domain this topic belongs to (plan 0006), for grouping the home screen. */
+  /** The domain this book belongs to (plan 0006), for grouping the home screen. */
   domainId: string;
 }
 
@@ -34,9 +34,9 @@ export interface DomainSummary {
  * SQLite-backed source is a swap, not a rewrite.
  */
 export interface ContentSource {
-  listTopics(): Promise<TopicSummary[]>;
+  listBooks(): Promise<BookSummary[]>;
   /** Rejects with `ContentValidationError` if the loaded content is invalid. */
-  loadTopic(id: string): Promise<Content>;
+  loadBook(id: string): Promise<Content>;
   listDomains(): Promise<DomainSummary[]>;
   /** Rejects with `ContentValidationError` if the loaded domain is invalid. */
   loadDomain(id: string): Promise<DomainContent>;
@@ -69,7 +69,7 @@ export interface VocabList {
 
 /**
  * Store of learner vocab lists, keyed by domain (plan 0006: re-scoped from
- * topic — a list never spans domains). The web layer prunes dangling
+ * book — a list never spans domains). The web layer prunes dangling
  * itemIds on load — content can change between releases.
  */
 export interface VocabListStore {

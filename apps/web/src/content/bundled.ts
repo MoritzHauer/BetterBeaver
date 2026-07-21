@@ -1,12 +1,12 @@
-import type { DomainDocument, TopicDocument } from "@betterbeaver/schema";
+import type { DomainDocument, BookDocument } from "@betterbeaver/schema";
 import type { AssetStems } from "@betterbeaver/engine";
 
-// Eager globs so every bundled topic is statically included and available
+// Eager globs so every bundled book is statically included and available
 // synchronously (no network fetch, no async import) — this is what makes
 // the app work offline after first load. Since plan 0012 this tree is the
 // frozen first-run seed (refreshed by scripts/export-content.ts, never
 // hand-edited); the live content lives in the backend.
-const topicFiles = import.meta.glob("../../../../content/*/topic.json", {
+const bookFiles = import.meta.glob("../../../../content/*/topic.json", {
   eager: true,
   import: "default",
 });
@@ -51,7 +51,7 @@ const imageFiles = import.meta.glob("../../../../content/*/assets/img/*", {
 });
 
 // Lexicon globs (plan 0006): `content/lexicon/<domainId>/...`, a sibling
-// layout to the topic dirs above, not itself a topic.
+// layout to the book dirs above, not itself a book.
 const domainFiles = import.meta.glob(
   "../../../../content/lexicon/*/domain.json",
   { eager: true, import: "default" },
@@ -73,8 +73,8 @@ const lexiconImageFiles = import.meta.glob(
   { eager: true, import: "default" },
 );
 
-/** Extracts the topic directory name (the path segment after `content/`). */
-function topicDirOf(path: string): string {
+/** Extracts the book directory name (the path segment after `content/`). */
+function bookDirOf(path: string): string {
   const match = /\/content\/([^/]+)\//.exec(path);
   if (match === null || match[1] === undefined) {
     throw new Error(`unexpected content glob path: ${path}`);
@@ -113,10 +113,10 @@ function groupByDir<V>(
   return byDir;
 }
 
-const groupByTopicDir = <V>(
+const groupByBookDir = <V>(
   files: Record<string, unknown>,
   valueOf: (path: string, value: unknown) => V,
-): Map<string, V[]> => groupByDir(files, topicDirOf, valueOf);
+): Map<string, V[]> => groupByDir(files, bookDirOf, valueOf);
 
 const groupByDomainDir = <V>(
   files: Record<string, unknown>,
@@ -143,15 +143,15 @@ function stemMapByDir(
   );
 }
 
-const topicsByDir = groupByTopicDir(topicFiles, identity);
-const lessonsByDir = groupByTopicDir(lessonFiles, identity);
-const unitsByDir = groupByTopicDir(unitFiles, identity);
-const itemsByDir = groupByTopicDir(itemFiles, identity);
-const tasksByDir = groupByTopicDir(taskFiles, identity);
-const resourcesByDir = groupByTopicDir(resourceFiles, identity);
-const notesByDir = stemMapByDir(noteFiles, topicDirOf);
-const audioUrlsByDir = stemMapByDir(audioFiles, topicDirOf);
-const imageUrlsByDir = stemMapByDir(imageFiles, topicDirOf);
+const booksByDir = groupByBookDir(bookFiles, identity);
+const lessonsByDir = groupByBookDir(lessonFiles, identity);
+const unitsByDir = groupByBookDir(unitFiles, identity);
+const itemsByDir = groupByBookDir(itemFiles, identity);
+const tasksByDir = groupByBookDir(taskFiles, identity);
+const resourcesByDir = groupByBookDir(resourceFiles, identity);
+const notesByDir = stemMapByDir(noteFiles, bookDirOf);
+const audioUrlsByDir = stemMapByDir(audioFiles, bookDirOf);
+const imageUrlsByDir = stemMapByDir(imageFiles, bookDirOf);
 
 const domainsByDir = groupByDomainDir(domainFiles, identity);
 const entriesByDir = groupByDomainDir(entryFiles, identity);
@@ -159,12 +159,12 @@ const familiesByDir = groupByDomainDir(familyFiles, identity);
 const lexiconAudioUrlsByDir = stemMapByDir(lexiconAudioFiles, domainDirOf);
 const lexiconImageUrlsByDir = stemMapByDir(lexiconImageFiles, domainDirOf);
 
-// A topic's domain (for the `getAssetUrl` fallback, plan 0006's pinned asset
+// A book's domain (for the `getAssetUrl` fallback, plan 0006's pinned asset
 // resolution): read straight off the raw topic.json, so it's available even
 // before the content source validates anything. If content is malformed,
 // validation fails startup before any screen calls `getAssetUrl`.
-const domainIdByTopicId = new Map<string, string>(
-  [...topicsByDir].map(([dir, values]) => [
+const domainIdByBookId = new Map<string, string>(
+  [...booksByDir].map(([dir, values]) => [
     dir,
     typeof (values[0] as { domainId?: unknown }).domainId === "string"
       ? (values[0] as { domainId: string }).domainId
@@ -178,14 +178,14 @@ const domainIdByTopicId = new Map<string, string>(
  * IndexedDB cache holds. Validation happens in
  * `createDocumentContentSource`, never here.
  */
-export function bundledTopicDocuments(): Map<string, TopicDocument> {
+export function bundledBookDocuments(): Map<string, BookDocument> {
   return new Map(
-    [...topicsByDir].map(([dir, topicFileValues]) => [
+    [...booksByDir].map(([dir, bookFileValues]) => [
       dir,
       {
-        // Each topic directory has exactly one topic.json; the glob still
+        // Each book directory has exactly one topic.json; the glob still
         // yields an array, so take its single entry.
-        topic: topicFileValues[0],
+        topic: bookFileValues[0],
         lessons: lessonsByDir.get(dir) ?? [],
         units: unitsByDir.get(dir) ?? [],
         items: itemsByDir.get(dir) ?? [],
@@ -219,32 +219,32 @@ export function bundledAssetStems(): AssetStems {
   const stems = (byDir: Map<string, Map<string, string>>) =>
     new Map([...byDir].map(([dir, urls]) => [dir, [...urls.keys()]]));
   return {
-    audioByTopic: stems(audioUrlsByDir),
-    imageByTopic: stems(imageUrlsByDir),
+    audioByBook: stems(audioUrlsByDir),
+    imageByBook: stems(imageUrlsByDir),
     audioByDomain: stems(lexiconAudioUrlsByDir),
     imageByDomain: stems(lexiconImageUrlsByDir),
   };
 }
 
 /**
- * Returns the URL for a bundled topic asset, given the topic's directory
- * name (equal to the topic id in bundled content), its kind, and the
+ * Returns the URL for a bundled book asset, given the book's directory
+ * name (equal to the book id in bundled content), its kind, and the
  * asset's file stem. Domain-aware (plan 0006's pinned asset resolution):
- * tries the topic's own asset dir first, then falls back to its domain's
+ * tries the book's own asset dir first, then falls back to its domain's
  * lexicon asset dir (where lexicon entries' assets now live).
  * `undefined` if no such asset was bundled either place.
  */
 export function getAssetUrl(
-  topicDir: string,
+  bookDir: string,
   kind: "audio" | "img",
   stem: string,
 ): string | undefined {
   const byDir = kind === "audio" ? audioUrlsByDir : imageUrlsByDir;
-  const direct = byDir.get(topicDir)?.get(stem);
+  const direct = byDir.get(bookDir)?.get(stem);
   if (direct !== undefined) {
     return direct;
   }
-  const domainId = domainIdByTopicId.get(topicDir);
+  const domainId = domainIdByBookId.get(bookDir);
   return domainId !== undefined
     ? getLexiconAssetUrl(domainId, kind, stem)
     : undefined;
@@ -253,7 +253,7 @@ export function getAssetUrl(
 /**
  * Returns the URL for a bundled lexicon asset, given the domain id, its
  * kind, and the asset's file stem (plan 0006). Used by domain-level screens
- * (Vocabulary, entry popup, domain review) that have no topic in hand.
+ * (Vocabulary, entry popup, domain review) that have no book in hand.
  */
 export function getLexiconAssetUrl(
   domainId: string,
@@ -266,17 +266,17 @@ export function getLexiconAssetUrl(
 }
 
 /**
- * Every bundled topic's id and its domain id, read straight off the raw
+ * Every bundled book's id and its domain id, read straight off the raw
  * topic.json so it's available before any validation. Feeds the startup
  * localStorage migrations (plan 0006), which must run before any screen
  * reads `bb.vocablists.<domainId>`.
  */
-export function bundledTopicDomainIds(): {
-  topicId: string;
+export function bundledBookDomainIds(): {
+  bookId: string;
   domainId: string;
 }[] {
-  return [...domainIdByTopicId].map(([topicId, domainId]) => ({
-    topicId,
+  return [...domainIdByBookId].map(([bookId, domainId]) => ({
+    bookId,
     domainId,
   }));
 }

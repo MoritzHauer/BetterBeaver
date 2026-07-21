@@ -87,26 +87,26 @@ export async function dueUnits(
 
 /**
  * The domain-scoped "what is due" pipeline (plan 0006): derives the domain's
- * scheduling units (`domainSchedulingUnits` — union over the domain's topics
+ * scheduling units (`domainSchedulingUnits` — union over the domain's books
  * plus unreferenced lexicon entries, deduplicated by unit id), then proceeds
  * exactly like `dueUnits`. `pinnedTaskIds` (plan 0008) is resolved against
- * every topic's tasks.
+ * every book's tasks.
  */
 export async function dueDomainUnits(
-  topicContents: Content[],
+  bookContents: Content[],
   entries: Item[],
   store: ProgressStore,
   now: Date,
   pinnedTaskIds?: ReadonlySet<string>,
 ): Promise<SchedulingUnit[]> {
-  const units = domainSchedulingUnits(topicContents, entries);
+  const units = domainSchedulingUnits(bookContents, entries);
   const states = await collectItemStates(
     units.map((unit) => unit.id),
     store,
   );
   const itemById = new Map<string, Item>();
   const tasks: Task[] = [];
-  for (const content of topicContents) {
+  for (const content of bookContents) {
     for (const item of content.items) {
       itemById.set(item.id, item);
     }

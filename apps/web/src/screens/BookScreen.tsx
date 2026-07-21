@@ -43,7 +43,7 @@ export function lessonPracticeTargets(
     );
 }
 
-export function TopicScreen({
+export function BookScreen({
   content,
   attemptedTaskIds,
   store,
@@ -65,7 +65,7 @@ export function TopicScreen({
   onPracticeTask: (target: PracticeTarget) => void;
   onReview: () => void;
   onVocabulary: () => void;
-  /** Authors only (plan 0012): opens this topic's document in the editor. */
+  /** Authors only (plan 0012): opens this book's document in the editor. */
   onEdit?: () => void;
   onBack: () => void;
 }) {
@@ -93,7 +93,7 @@ export function TopicScreen({
     };
   }, [content, store, epoch]);
 
-  // Topic-level Practice shuffles across the opened lessons' opened units
+  // Book-level Practice shuffles across the opened lessons' opened units
   // (plan 0008, pinned scope).
   const practicePool = content.lessons
     .filter((lesson) =>
@@ -112,7 +112,7 @@ export function TopicScreen({
     <main>
       <header className="screen-header">
         <button className="plain" onClick={onBack}>
-          &larr; Topics
+          &larr; Books
         </button>
         {onEdit !== undefined && (
           <button className="plain" onClick={onEdit}>

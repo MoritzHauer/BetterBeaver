@@ -1,7 +1,7 @@
 import type { z } from "zod";
 import {
   slugPattern,
-  topicSchema,
+  bookSchema,
   lessonSchema,
   unitSchema,
   itemSchema,
@@ -19,7 +19,7 @@ import {
   TASK_REQUIRED_ASSET,
   DOMAIN_ENTRY_KIND,
   DOMAIN_LINK_TYPES,
-  type Topic,
+  type Book,
   type Lesson,
   type Unit,
   type Item,
@@ -30,10 +30,10 @@ import {
 } from "./entities.js";
 
 export interface Content {
-  topic: Topic;
+  topic: Book;
   lessons: Lesson[];
   units: Unit[];
-  /** Topic-owned items plus the domain entries referenced by this topic's units (plan 0006, pinned). */
+  /** Book-owned items plus the domain entries referenced by this book's units (plan 0006, pinned). */
   items: Item[];
   tasks: Task[];
   resources: Resource[];
@@ -44,7 +44,7 @@ export interface ValidateContentInput {
   topic: unknown;
   lessons: unknown[];
   units: unknown[];
-  /** Topic-owned items only: sentences, pairs, and (for language topics) non-lexicon concepts. */
+  /** Book-owned items only: sentences, pairs, and (for language books) non-lexicon concepts. */
   items: unknown[];
   tasks: unknown[];
   resources: unknown[];
@@ -52,7 +52,7 @@ export interface ValidateContentInput {
   /** Two separate stem lists (never cross-checked) so an `imageRef` can never validate against an audio file. */
   audioStems: string[];
   imageStems: string[];
-  /** The topic's domain (plan 0006): domain.json, its entries and families, and its asset stems. */
+  /** The book's domain (plan 0006): domain.json, its entries and families, and its asset stems. */
   domain: unknown;
   entries: unknown[];
   families: unknown[];
@@ -172,9 +172,9 @@ export function validateContent(
 ): ValidateContentResult {
   const phase1Errors: string[] = [];
 
-  const topicResult = topicSchema.safeParse(input.topic);
-  if (!topicResult.success) {
-    phase1Errors.push(formatZodError("topic", topicResult.error));
+  const bookResult = bookSchema.safeParse(input.topic);
+  if (!bookResult.success) {
+    phase1Errors.push(formatZodError("book", bookResult.error));
   }
 
   const lessons = parseAll(
@@ -241,7 +241,7 @@ export function validateContent(
 
   if (
     phase1Errors.length > 0 ||
-    !topicResult.success ||
+    !bookResult.success ||
     !domainResult.success ||
     lessons === undefined ||
     units === undefined ||
@@ -254,10 +254,10 @@ export function validateContent(
     return { errors: phase1Errors };
   }
 
-  const topic = topicResult.data;
+  const book = bookResult.data;
   const domain = domainResult.data;
   const notes = input.noteStems.map((stem) => ({
-    id: `${topic.code}-note-${stem}`,
+    id: `${book.code}-note-${stem}`,
     stem,
   }));
 
@@ -269,7 +269,7 @@ export function validateContent(
 
   reportDuplicateIds(lessons, "lesson", uniquenessErrors);
   reportDuplicateIds(units, "unit", uniquenessErrors);
-  // Merged pool: a topic-owned item id colliding with a domain entry id
+  // Merged pool: a book-owned item id colliding with a domain entry id
   // would silently share its `bb.item.<id>` SRS state (plan 0006).
   reportDuplicateIds([...items, ...entries], "item", uniquenessErrors);
   reportDuplicateIds(tasks, "task", uniquenessErrors);
@@ -279,7 +279,7 @@ export function validateContent(
 
   reportDuplicateEntries(
     "topic.lessonIds",
-    topic.lessonIds,
+    book.lessonIds,
     "lessonIds",
     uniquenessErrors,
   );
@@ -309,15 +309,15 @@ export function validateContent(
   const lessonById = new Map(lessons.map((l) => [l.id, l]));
   const unitById = new Map(units.map((u) => [u.id, u]));
   // Merged pool (plan 0006, pinned): unit/task itemIds resolve against
-  // topic-owned items *and* the domain's lexicon entries.
+  // book-owned items *and* the domain's lexicon entries.
   const itemById = new Map([...items, ...entries].map((i) => [i.id, i]));
   const entryById = new Map(entries.map((e) => [e.id, e]));
   const taskById = new Map(tasks.map((t) => [t.id, t]));
   const resourceById = new Map(resources.map((r) => [r.id, r]));
   const noteById = new Map(notes.map((n) => [n.id, n]));
 
-  // --- class (c): non-Topic entity ids must start with "<code>-" ---
-  const prefix = `${topic.code}-`;
+  // --- class (c): non-Book entity ids must start with "<code>-" ---
+  const prefix = `${book.code}-`;
   for (const [noun, entities] of [
     ["lesson", lessons],
     ["unit", units],
@@ -331,14 +331,14 @@ export function validateContent(
       }
     }
   }
-  // Derived note ids are always `${topic.code}-note-${stem}`, so they
+  // Derived note ids are always `${book.code}-note-${stem}`, so they
   // trivially start with "<code>-" by construction; no check needed.
 
   // --- class (a): dangling references ---
-  // Extended one level by plan 0008: Topic -> Lesson -> Unit -> content,
+  // Extended one level by plan 0008: Book -> Lesson -> Unit -> content,
   // each level's child-id list must resolve and each child's parent-id must
   // match.
-  for (const id of topic.lessonIds) {
+  for (const id of book.lessonIds) {
     if (!lessonById.has(id)) {
       errors.push(`topic.lessonIds: dangling lesson reference "${id}"`);
     }
@@ -362,16 +362,16 @@ export function validateContent(
         `${lesson.id}: dangling unlocksAfterLessonId reference "${lesson.unlocksAfterLessonId}"`,
       );
     }
-    if (lesson.topicId !== topic.id) {
+    if (lesson.topicId !== book.id) {
       errors.push(
-        `${lesson.id}: topicId "${lesson.topicId}" does not match topic id "${topic.id}"`,
+        `${lesson.id}: topicId "${lesson.topicId}" does not match topic id "${book.id}"`,
       );
     }
   }
   // Every lesson must be referenced from topic.lessonIds (an orphaned lesson).
-  const topicLessonIdSet = new Set(topic.lessonIds);
+  const bookLessonIdSet = new Set(book.lessonIds);
   for (const lesson of lessons) {
-    if (!topicLessonIdSet.has(lesson.id)) {
+    if (!bookLessonIdSet.has(lesson.id)) {
       errors.push(`${lesson.id}: lesson is not referenced in topic.lessonIds`);
     }
   }
@@ -623,12 +623,12 @@ export function validateContent(
       errors.push(`${item.id}: invalid cloze markup in text`);
     }
     // class (x): `links` is a lexicon-entry-only field; no validator or UI
-    // exists for it on a topic-owned item.
+    // exists for it on a book-owned item.
     if (
       (item.kind === "lexeme" || item.kind === "concept") &&
       item.payload.links !== undefined
     ) {
-      errors.push(`${item.id}: "links" is not allowed on a topic-owned item`);
+      errors.push(`${item.id}: "links" is not allowed on a book-owned item`);
     }
   }
 
@@ -744,9 +744,9 @@ export function validateContent(
 
   // --- class (t): topic.domainId must reference the domain content was
   // validated against ---
-  if (topic.domainId !== domain.id) {
+  if (book.domainId !== domain.id) {
     errors.push(
-      `topic.domainId "${topic.domainId}" does not match domain id "${domain.id}"`,
+      `topic.domainId "${book.domainId}" does not match domain id "${domain.id}"`,
     );
   }
 
@@ -820,9 +820,9 @@ export function validateContent(
       }
     }
   }
-  if (topic.id.startsWith("user-")) {
+  if (book.id.startsWith("user-")) {
     errors.push(
-      `${topic.id}: topic id must not start with "user-" (reserved for learner-created entries)`,
+      `${book.id}: book id must not start with "user-" (reserved for learner-created entries)`,
     );
   }
   if (domain.id.startsWith("user-")) {
@@ -877,8 +877,8 @@ export function validateContent(
     return { errors };
   }
 
-  // Content.items (pinned, plan 0006): topic-owned items plus the domain
-  // entries this topic's units actually reference, so per-topic sessions,
+  // Content.items (pinned, plan 0006): book-owned items plus the domain
+  // entries this book's units actually reference, so per-book sessions,
   // review, and distractor sampling behave exactly as before the migration.
   const unitItemIdUnion = new Set(units.flatMap((u) => u.itemIds));
   const referencedEntries = entries.filter((entry) =>
@@ -887,7 +887,7 @@ export function validateContent(
 
   return {
     content: {
-      topic,
+      topic: book,
       lessons,
       units,
       items: [...items, ...referencedEntries],

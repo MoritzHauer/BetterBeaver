@@ -39,9 +39,9 @@ function readAssetStems(dir: string): string[] {
   return readdirSync(dir).map((name) => name.replace(/\.[^.]+$/, ""));
 }
 
-// "lexicon" holds domain data (content/lexicon/<domainId>/...), not a topic
-// (plan 0006) — every other content/ subdirectory is still a topic dir.
-const topicDirNames = existsSync(CONTENT_DIR)
+// "lexicon" holds domain data (content/lexicon/<domainId>/...), not a book
+// (plan 0006) — every other content/ subdirectory is still a book dir.
+const bookDirNames = existsSync(CONTENT_DIR)
   ? readdirSync(CONTENT_DIR, { withFileTypes: true })
       .filter((entry) => entry.isDirectory() && entry.name !== "lexicon")
       .map((entry) => entry.name)
@@ -50,18 +50,18 @@ const topicDirNames = existsSync(CONTENT_DIR)
 const LEXICON_DIR = join(CONTENT_DIR, "lexicon");
 
 describe("content on disk", () => {
-  it("finds at least one topic directory under content/", () => {
+  it("finds at least one book directory under content/", () => {
     // A wrong CONTENT_DIR resolution (or an emptied content/) must fail this
-    // test loudly rather than let the per-topic tests below vacuously pass
+    // test loudly rather than let the per-book tests below vacuously pass
     // by iterating zero times.
-    expect(topicDirNames.length).toBeGreaterThan(0);
+    expect(bookDirNames.length).toBeGreaterThan(0);
   });
 
-  for (const topicDirName of topicDirNames) {
-    it(`validates content/${topicDirName}`, () => {
-      const dir = join(CONTENT_DIR, topicDirName);
+  for (const bookDirName of bookDirNames) {
+    it(`validates content/${bookDirName}`, () => {
+      const dir = join(CONTENT_DIR, bookDirName);
 
-      const topic = readJson(join(dir, "topic.json"));
+      const book = readJson(join(dir, "topic.json"));
       const lessons = readJsonFilesIn(join(dir, "lessons"));
       const units = readJsonFilesIn(join(dir, "units"));
       const items = readJsonFilesIn(join(dir, "items"));
@@ -71,9 +71,9 @@ describe("content on disk", () => {
       const audioStems = readAssetStems(join(dir, "assets", "audio"));
       const imageStems = readAssetStems(join(dir, "assets", "img"));
 
-      const domainId = (topic as { domainId?: unknown }).domainId;
+      const domainId = (book as { domainId?: unknown }).domainId;
       if (typeof domainId !== "string") {
-        throw new Error(`content/${topicDirName}/topic.json: missing domainId`);
+        throw new Error(`content/${bookDirName}/topic.json: missing domainId`);
       }
       const domainDir = join(LEXICON_DIR, domainId);
       const domain = readJson(join(domainDir, "domain.json"));
@@ -87,7 +87,7 @@ describe("content on disk", () => {
       );
 
       const result = validateContent({
-        topic,
+        topic: book,
         lessons,
         units,
         items,
@@ -105,7 +105,7 @@ describe("content on disk", () => {
 
       if ("errors" in result) {
         throw new Error(
-          `content/${topicDirName} failed validation:\n${result.errors.join("\n")}`,
+          `content/${bookDirName} failed validation:\n${result.errors.join("\n")}`,
         );
       }
       expect(result.content).toBeDefined();

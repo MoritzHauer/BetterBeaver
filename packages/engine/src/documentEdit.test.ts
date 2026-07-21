@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { TopicDocument, DomainDocument } from "@betterbeaver/schema";
+import type { BookDocument, DomainDocument } from "@betterbeaver/schema";
 import {
   moveId,
   removeDomainEntry,
@@ -9,7 +9,7 @@ import {
   upsertEntity,
 } from "./documentEdit.js";
 
-function topicDoc(): TopicDocument {
+function bookDoc(): BookDocument {
   return {
     topic: { id: "t", code: "t", lessonIds: ["l1", "l2"] },
     lessons: [
@@ -34,9 +34,9 @@ function topicDoc(): TopicDocument {
   };
 }
 
-describe("topic document edit ops", () => {
+describe("book document edit ops", () => {
   it("upsert replaces by id and appends new entities", () => {
-    const doc = topicDoc();
+    const doc = bookDoc();
     const replaced = upsertEntity(doc, "lessons", { id: "l1", title: "x" });
     expect(replaced.lessons).toHaveLength(2);
     expect((replaced.lessons[0] as { title?: string }).title).toBe("x");
@@ -46,23 +46,23 @@ describe("topic document edit ops", () => {
   });
 
   it("removeEntity strips every reference to the id", () => {
-    const doc = removeEntity(topicDoc(), "items", "i1");
+    const doc = removeEntity(bookDoc(), "items", "i1");
     expect(doc.items.map((i) => (i as { id: string }).id)).toEqual(["i2"]);
     expect((doc.units[0] as { itemIds: string[] }).itemIds).toEqual(["i2"]);
     expect((doc.tasks[0] as { itemIds: string[] }).itemIds).toEqual(["i2"]);
   });
 
-  it("removing a lesson strips it from the topic's lessonIds", () => {
-    const doc = removeEntity(topicDoc(), "lessons", "l2");
+  it("removing a lesson strips it from the book's lessonIds", () => {
+    const doc = removeEntity(bookDoc(), "lessons", "l2");
     expect(doc.lessons).toHaveLength(1);
     expect((doc.topic as { lessonIds: string[] }).lessonIds).toEqual(["l1"]);
   });
 
   it("note ops use the derived note id for unit references", () => {
-    const doc = removeNote(topicDoc(), "intro");
+    const doc = removeNote(bookDoc(), "intro");
     expect(doc.notes).toEqual([]);
     expect((doc.units[0] as { noteIds: string[] }).noteIds).toEqual([]);
-    const withNote = setNote(topicDoc(), "intro", "changed");
+    const withNote = setNote(bookDoc(), "intro", "changed");
     expect(withNote.notes).toEqual([{ stem: "intro", markdown: "changed" }]);
   });
 });

@@ -9,9 +9,9 @@
 import {
   contentIdOf,
   type DomainDocument,
-  type TopicDocument,
+  type BookDocument,
 } from "../packages/schema/src/documents.ts";
-import { writeDomainDocument, writeTopicDocument } from "./content-fs.ts";
+import { writeDomainDocument, writeBookDocument } from "./content-fs.ts";
 
 const url = process.env.SUPABASE_URL;
 const key = process.env.SUPABASE_ANON_KEY;
@@ -35,7 +35,7 @@ const rows = (await response.json()) as {
 
 for (const row of rows) {
   if (row.kind === "topic") {
-    writeTopicDocument(contentIdOf(row.id), row.published as TopicDocument);
+    writeBookDocument(contentIdOf(row.id), row.published as BookDocument);
   } else {
     writeDomainDocument(contentIdOf(row.id), row.published as DomainDocument);
   }

@@ -8,7 +8,7 @@ import { getDisplayName } from "../identity";
 import { getSupabase } from "../backend/supabase";
 import { FeedbackWidget } from "./FeedbackWidget";
 
-/** Public per-topic chat (plan 0014): one thread per topic, visible to
+/** Public per-book chat (plan 0014): one thread per book, visible to
  * every learner who opens it — not a private line to maintainers. Each
  * message carries the same report action as any other content (targeting
  * `content_kind: "chat_message"`), which is the only moderation path for
@@ -45,7 +45,7 @@ export function ChatThread({ docId }: { docId: string }) {
     <section className="card chat-thread">
       <h2>Chat</h2>
       <p className="status">
-        Public to everyone studying this topic, posted as {getDisplayName()}.
+        Public to everyone studying this book, posted as {getDisplayName()}.
       </p>
       {messages === null ? (
         <p className="status">{error !== null ? error : "Loading…"}</p>

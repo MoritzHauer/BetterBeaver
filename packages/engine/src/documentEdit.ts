@@ -1,4 +1,4 @@
-import type { DomainDocument, TopicDocument } from "@betterbeaver/schema";
+import type { DomainDocument, BookDocument } from "@betterbeaver/schema";
 
 /**
  * Pure edit operations over raw content documents (plan 0012 §7). The
@@ -10,7 +10,7 @@ import type { DomainDocument, TopicDocument } from "@betterbeaver/schema";
 
 type Entity = { id: string } & Record<string, unknown>;
 
-export type TopicCollection = "lessons" | "units" | "items" | "tasks";
+export type BookCollection = "lessons" | "units" | "items" | "tasks";
 
 function asEntities(list: unknown[]): Entity[] {
   return list as Entity[];
@@ -38,12 +38,12 @@ function stripIdFrom(entity: Entity, field: string, id: string): Entity {
   return { ...entity, [field]: list.filter((x) => x !== id) };
 }
 
-/** Adds or replaces an entity (matched by id) in a topic document collection. */
+/** Adds or replaces an entity (matched by id) in a book document collection. */
 export function upsertEntity(
-  doc: TopicDocument,
-  collection: TopicCollection,
+  doc: BookDocument,
+  collection: BookCollection,
   entity: { id: string } & Record<string, unknown>,
-): TopicDocument {
+): BookDocument {
   return {
     ...doc,
     [collection]: upsertById(doc[collection], entity as Entity),
@@ -51,17 +51,17 @@ export function upsertEntity(
 }
 
 /**
- * Deletes an entity from a topic document and strips every reference to its
+ * Deletes an entity from a book document and strips every reference to its
  * id: `topic.lessonIds`, `lessons[].unitIds`, `units[].itemIds/taskIds`,
  * and `tasks[].itemIds`. (Notes are separate — see `removeNote`.) A task
  * left with zero items, or a unit with no tasks, surfaces as a validation
  * error at publish; the op itself never cascades deletes.
  */
 export function removeEntity(
-  doc: TopicDocument,
-  collection: TopicCollection,
+  doc: BookDocument,
+  collection: BookCollection,
   id: string,
-): TopicDocument {
+): BookDocument {
   return {
     ...doc,
     topic: stripIdFrom(doc.topic as Entity, "lessonIds", id),
@@ -95,10 +95,10 @@ export function moveId(list: string[], id: string, delta: -1 | 1): string[] {
 
 /** Adds or replaces a note by stem. */
 export function setNote(
-  doc: TopicDocument,
+  doc: BookDocument,
   stem: string,
   markdown: string,
-): TopicDocument {
+): BookDocument {
   const index = doc.notes.findIndex((note) => note.stem === stem);
   const notes =
     index === -1
@@ -111,7 +111,7 @@ export function setNote(
  * Deletes a note and strips its derived id (`<topic.code>-note-<stem>`,
  * the rule pinned in validate.ts) from every unit's `noteIds`.
  */
-export function removeNote(doc: TopicDocument, stem: string): TopicDocument {
+export function removeNote(doc: BookDocument, stem: string): BookDocument {
   const code = (doc.topic as Entity).code;
   const noteId = `${typeof code === "string" ? code : ""}-note-${stem}`;
   return {
@@ -133,8 +133,8 @@ export function upsertDomainEntry(
 
 /**
  * Deletes a lexicon entry and strips references to it: family `entryIds`
- * and other entries' `payload.links`. Topic references to the entry
- * (units'/tasks' itemIds in *other documents*) surface at that topic's or
+ * and other entries' `payload.links`. Book references to the entry
+ * (units'/tasks' itemIds in *other documents*) surface at that book's or
  * this domain's publish-time validation — cross-document refs are exactly
  * what the publish check exists for (plan 0012 §3).
  */

@@ -111,7 +111,7 @@ const content: Content = {
     id: "t-topic",
     code: "t",
     domainId: "t",
-    title: "Topic",
+    title: "Book",
     description: "",
     lessonIds: [unit.id],
   },
@@ -186,7 +186,7 @@ describe("schedulingUnits — notes (plan 0008 step 7)", () => {
       id: "t-topic",
       code: "t",
       domainId: "t",
-      title: "Topic",
+      title: "Book",
       description: "",
       lessonIds: [noteUnit.id],
     },
@@ -223,8 +223,8 @@ describe("schedulingUnits — notes (plan 0008 step 7)", () => {
 });
 
 describe("domainSchedulingUnits", () => {
-  // A second topic of the same domain, referencing the same `lexeme` entry
-  // (shared vocabulary) plus a unit-less lexicon entry the topic never uses.
+  // A second book of the same domain, referencing the same `lexeme` entry
+  // (shared vocabulary) plus a unit-less lexicon entry the book never uses.
   const otherLexeme: Item = {
     id: "t-item-other-lexeme",
     kind: "lexeme",
@@ -245,7 +245,7 @@ describe("domainSchedulingUnits", () => {
       id: "t-topic-2",
       code: "t",
       domainId: "t",
-      title: "Topic 2",
+      title: "Book 2",
       description: "",
       lessonIds: [otherUnit.id],
     },
@@ -276,7 +276,7 @@ describe("domainSchedulingUnits", () => {
   const idsByItem = (itemId: string) =>
     units.filter((u) => u.item?.id === itemId).map((u) => u.id);
 
-  it("unions scheduling units across every topic of the domain", () => {
+  it("unions scheduling units across every book of the domain", () => {
     expect(idsByItem(sharedSentence.id).sort()).toEqual(
       [
         `${sharedSentence.id}::c1`,
@@ -287,24 +287,24 @@ describe("domainSchedulingUnits", () => {
     expect(idsByItem(otherLexeme.id)).toEqual([otherLexeme.id]);
   });
 
-  it("an entry referenced by two topics is one unit, not two (deduplicated by scheduling-unit id)", () => {
+  it("an entry referenced by two books is one unit, not two (deduplicated by scheduling-unit id)", () => {
     expect(idsByItem(lexeme.id)).toEqual([lexeme.id]);
   });
 
-  it("adds one unit per lexicon entry referenced by no topic", () => {
+  it("adds one unit per lexicon entry referenced by no book", () => {
     expect(idsByItem(unreferencedEntry.id)).toEqual([unreferencedEntry.id]);
   });
 
-  it("does not add an unreferenced-entry unit for an entry already covered by a topic", () => {
-    // lexeme and otherLexeme are both referenced by a topic above, so the
+  it("does not add an unreferenced-entry unit for an entry already covered by a book", () => {
+    // lexeme and otherLexeme are both referenced by a book above, so the
     // unreferenced-entries pass must not duplicate them.
     expect(units.filter((u) => u.id === lexeme.id)).toHaveLength(1);
     expect(units.filter((u) => u.id === otherLexeme.id)).toHaveLength(1);
   });
 });
 
-describe("domainSchedulingUnits — notes across topics (plan 0008 step 7)", () => {
-  // Two topics whose units both reference the same note id (e.g. a shared
+describe("domainSchedulingUnits — notes across books (plan 0008 step 7)", () => {
+  // Two books whose units both reference the same note id (e.g. a shared
   // grammar point) — dedup by scheduling-unit id must collapse it to one.
   const sharedNote = { id: "t-note-shared", stem: "shared-note-stem" };
   const noteUnitA: Unit = {
@@ -321,7 +321,7 @@ describe("domainSchedulingUnits — notes across topics (plan 0008 step 7)", () 
       id: "t-topic-notes-a",
       code: "t",
       domainId: "t",
-      title: "Topic A",
+      title: "Book A",
       description: "",
       lessonIds: [noteUnitA.id],
     },
@@ -346,7 +346,7 @@ describe("domainSchedulingUnits — notes across topics (plan 0008 step 7)", () 
       id: "t-topic-notes-b",
       code: "t",
       domainId: "t",
-      title: "Topic B",
+      title: "Book B",
       description: "",
       lessonIds: [noteUnitB.id],
     },
@@ -358,7 +358,7 @@ describe("domainSchedulingUnits — notes across topics (plan 0008 step 7)", () 
     notes: [sharedNote],
   };
 
-  it("a note referenced by units of two topics is one scheduling unit, not two", () => {
+  it("a note referenced by units of two books is one scheduling unit, not two", () => {
     const units = domainSchedulingUnits([noteContentA, noteContentB], []);
     expect(
       units.filter((u) => u.id === noteUnitId(sharedNote.id)),

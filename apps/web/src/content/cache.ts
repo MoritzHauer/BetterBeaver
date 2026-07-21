@@ -1,4 +1,4 @@
-import type { DomainDocument, TopicDocument } from "@betterbeaver/schema";
+import type { DomainDocument, BookDocument } from "@betterbeaver/schema";
 
 /**
  * IndexedDB cache of content documents (plan 0012 §6). One record per
@@ -11,7 +11,7 @@ export interface CachedDocument {
   kind: "topic" | "domain";
   version: number;
   schemaVersion: number;
-  doc: TopicDocument | DomainDocument;
+  doc: BookDocument | DomainDocument;
 }
 
 const DB_NAME = "bb-content";

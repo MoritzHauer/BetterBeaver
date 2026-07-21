@@ -1,24 +1,24 @@
-import type { DomainSummary, TopicSummary } from "@betterbeaver/engine";
+import type { DomainSummary, BookSummary } from "@betterbeaver/engine";
 import { ProgressBar } from "../components/ProgressBar";
 
-/* ponytail: hardcoded glyph map — move onto the topic schema if topics
+/* ponytail: hardcoded glyph map — move onto the book schema if books
  * multiply beyond a handful. */
-const TOPIC_GLYPHS: Record<string, string> = {
+const BOOK_GLYPHS: Record<string, string> = {
   kyrgyz: "\u{1F3D4}️",
   demo: "\u{1F9AB}",
 };
 
 /**
- * Home screen (plan 0006): topics grouped by their domain, with domain-level
- * Vocabulary/Review entries alongside the per-domain topic list — lists,
+ * Home screen (plan 0006): books grouped by their domain, with domain-level
+ * Vocabulary/Review entries alongside the per-domain book list — lists,
  * the review queue, and the streak are all domain-scoped now, so these are
- * reachable without first drilling into one of the domain's topics.
+ * reachable without first drilling into one of the domain's books.
  */
-export function TopicListScreen({
+export function MyBooksScreen({
   domains,
-  topics,
-  topicProgress,
-  onSelectTopic,
+  books,
+  bookProgress,
+  onSelectBook,
   onDomainVocabulary,
   onDomainReview,
   onAuthor,
@@ -26,12 +26,12 @@ export function TopicListScreen({
   onOpenSettings,
 }: {
   domains: DomainSummary[];
-  topics: TopicSummary[];
-  /** Per-topic lesson-completion counts (plan 0010), computed in `App.tsx`
-   * from full topic content — not derivable from the lightweight
-   * `TopicSummary` alone. Absent entries (still loading) render a 0-filled bar. */
-  topicProgress: Map<string, { completed: number; total: number }>;
-  onSelectTopic: (topicId: string) => void;
+  books: BookSummary[];
+  /** Per-book lesson-completion counts (plan 0010), computed in `App.tsx`
+   * from full book content — not derivable from the lightweight
+   * `BookSummary` alone. Absent entries (still loading) render a 0-filled bar. */
+  bookProgress: Map<string, { completed: number; total: number }>;
+  onSelectBook: (bookId: string) => void;
   onDomainVocabulary: (domainId: string) => void;
   onDomainReview: (domainId: string) => void;
   /** Author entry (plan 0012); absent when the backend isn't configured. */
@@ -82,19 +82,19 @@ export function TopicListScreen({
             </div>
           </header>
           <ul className="card-list">
-            {topics
-              .filter((topic) => topic.domainId === domain.id)
-              .map((topic) => {
-                const progress = topicProgress.get(topic.id) ?? {
+            {books
+              .filter((book) => book.domainId === domain.id)
+              .map((book) => {
+                const progress = bookProgress.get(book.id) ?? {
                   completed: 0,
                   total: 0,
                 };
                 return (
-                  <li key={topic.id} className="card">
-                    <button onClick={() => onSelectTopic(topic.id)}>
-                      {TOPIC_GLYPHS[topic.id] !== undefined ? (
+                  <li key={book.id} className="card">
+                    <button onClick={() => onSelectBook(book.id)}>
+                      {BOOK_GLYPHS[book.id] !== undefined ? (
                         <span className="topic-glyph" aria-hidden="true">
-                          {TOPIC_GLYPHS[topic.id]}
+                          {BOOK_GLYPHS[book.id]}
                         </span>
                       ) : (
                         <img
@@ -103,8 +103,8 @@ export function TopicListScreen({
                           alt=""
                         />
                       )}
-                      <strong>{topic.title}</strong>
-                      <p>{topic.description}</p>
+                      <strong>{book.title}</strong>
+                      <p>{book.description}</p>
                       <ProgressBar
                         value={progress.completed}
                         max={progress.total}

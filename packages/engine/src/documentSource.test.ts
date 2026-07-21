@@ -3,7 +3,7 @@ import { describe, it, expect } from "vitest";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
-import type { DomainDocument, TopicDocument } from "@betterbeaver/schema";
+import type { DomainDocument, BookDocument } from "@betterbeaver/schema";
 import {
   createDocumentContentSource,
   planUpdate,
@@ -12,7 +12,7 @@ import {
 } from "./documentSource.js";
 
 // --- createDocumentContentSource over the real shipped content ------------
-// content.test.ts (schema) validates each topic in isolation; this is the
+// content.test.ts (schema) validates each book in isolation; this is the
 // cross-document companion: the whole shipped tree must assemble into one
 // valid content set through the same builder the app boots with.
 
@@ -39,25 +39,25 @@ function readAssetStems(dir: string): string[] {
 }
 
 function loadFromFs(): {
-  topics: Map<string, TopicDocument>;
+  books: Map<string, BookDocument>;
   domains: Map<string, DomainDocument>;
   assets: AssetStems;
 } {
-  const topics = new Map<string, TopicDocument>();
+  const books = new Map<string, BookDocument>();
   const domains = new Map<string, DomainDocument>();
   const assets: AssetStems = {
-    audioByTopic: new Map(),
-    imageByTopic: new Map(),
+    audioByBook: new Map(),
+    imageByBook: new Map(),
     audioByDomain: new Map(),
     imageByDomain: new Map(),
   };
-  const topicDirNames = readdirSync(CONTENT_DIR, { withFileTypes: true })
+  const bookDirNames = readdirSync(CONTENT_DIR, { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && entry.name !== "lexicon")
     .map((entry) => entry.name);
-  for (const name of topicDirNames) {
+  for (const name of bookDirNames) {
     const dir = join(CONTENT_DIR, name);
     const notesDir = join(dir, "notes");
-    topics.set(name, {
+    books.set(name, {
       topic: readJson(join(dir, "topic.json")),
       lessons: readJsonFilesIn(join(dir, "lessons")),
       units: readJsonFilesIn(join(dir, "units")),
@@ -71,8 +71,8 @@ function loadFromFs(): {
           markdown: readFileSync(join(notesDir, file), "utf-8"),
         })),
     });
-    assets.audioByTopic.set(name, readAssetStems(join(dir, "assets", "audio")));
-    assets.imageByTopic.set(name, readAssetStems(join(dir, "assets", "img")));
+    assets.audioByBook.set(name, readAssetStems(join(dir, "assets", "audio")));
+    assets.imageByBook.set(name, readAssetStems(join(dir, "assets", "img")));
   }
   const lexiconDir = join(CONTENT_DIR, "lexicon");
   for (const name of existsSync(lexiconDir) ? readdirSync(lexiconDir) : []) {
@@ -88,27 +88,27 @@ function loadFromFs(): {
     );
     assets.imageByDomain.set(name, readAssetStems(join(dir, "assets", "img")));
   }
-  return { topics, domains, assets };
+  return { books, domains, assets };
 }
 
 describe("createDocumentContentSource", () => {
   it("assembles the shipped content tree into a valid set", async () => {
-    const { topics, domains, assets } = loadFromFs();
-    expect(topics.size).toBeGreaterThan(0);
-    const built = createDocumentContentSource(topics, domains, assets);
-    expect((await built.source.listTopics()).length).toBe(topics.size);
+    const { books, domains, assets } = loadFromFs();
+    expect(books.size).toBeGreaterThan(0);
+    const built = createDocumentContentSource(books, domains, assets);
+    expect((await built.source.listBooks()).length).toBe(books.size);
     expect((await built.source.listDomains()).length).toBe(domains.size);
   });
 
   it("serves note markdown from the documents", () => {
-    const { topics, domains, assets } = loadFromFs();
-    const built = createDocumentContentSource(topics, domains, assets);
-    const [topicId, doc] = [...topics].find(
+    const { books, domains, assets } = loadFromFs();
+    const built = createDocumentContentSource(books, domains, assets);
+    const [bookId, doc] = [...books].find(
       ([, candidate]) => candidate.notes.length > 0,
     )!;
     const note = doc.notes[0]!;
-    expect(built.noteMarkdown(topicId, note.stem)).toBe(note.markdown);
-    expect(built.noteMarkdown(topicId, "no-such-stem")).toBeUndefined();
+    expect(built.noteMarkdown(bookId, note.stem)).toBe(note.markdown);
+    expect(built.noteMarkdown(bookId, "no-such-stem")).toBeUndefined();
   });
 });
 

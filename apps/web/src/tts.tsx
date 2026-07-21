@@ -28,7 +28,7 @@ function matchingVoice(lang: string): SpeechSynthesisVoice | undefined {
 }
 
 /**
- * Whether read-aloud is available: the topic's `readAloudLang` is set and a
+ * Whether read-aloud is available: the book's `readAloudLang` is set and a
  * matching local voice exists. Subscribes to `voiceschanged`, so a cold
  * Chrome load (first `getVoices()` returns `[]`) re-renders once voices
  * arrive.

@@ -1,6 +1,6 @@
 /**
  * Content documents (plan 0012): the transport/storage grouping for content
- * once it lives outside git. One `TopicDocument` per topic, one
+ * once it lives outside git. One `BookDocument` per book, one
  * `DomainDocument` per domain — together they carry exactly what
  * `validateContent` consumes, minus asset stems (assets stay bundled and
  * frozen until the asset pipeline lands; see plan 0012 §2).
@@ -21,8 +21,8 @@ export const CONTENT_SCHEMA_VERSION = 1;
 
 /**
  * Backend/cache document identity: `<kind>:<content-id>` (e.g.
- * `topic:kyrgyz`, `domain:ky`). Topics and domains are separate id
- * namespaces in the content model (a `demo` topic and a `demo` domain
+ * `topic:kyrgyz`, `domain:ky`). Books and domains are separate id
+ * namespaces in the content model (a `demo` book and a `demo` domain
  * legitimately coexist), but documents share one primary key — the prefix
  * keeps them from colliding.
  */
@@ -38,21 +38,21 @@ export function contentIdOf(docId: string): string {
   return docId.replace(/^(topic|domain):/, "");
 }
 
-export interface TopicDocumentNote {
+export interface BookDocumentNote {
   /** Note ids derive as `<topic.code>-note-<stem>` inside `validateContent`. */
   stem: string;
   markdown: string;
 }
 
-export interface TopicDocument {
+export interface BookDocument {
   topic: unknown;
   lessons: unknown[];
   units: unknown[];
-  /** Topic-owned items only (sentences, pairs, non-lexicon concepts). */
+  /** Book-owned items only (sentences, pairs, non-lexicon concepts). */
   items: unknown[];
   tasks: unknown[];
   resources: unknown[];
-  notes: TopicDocumentNote[];
+  notes: BookDocumentNote[];
 }
 
 export interface DomainDocument {
@@ -62,10 +62,10 @@ export interface DomainDocument {
 }
 
 /** The per-document identity a content set is checked over. */
-export interface ContentSetTopic {
+export interface ContentSetBook {
   id: string;
   domainId: string;
-  /** The topic's validated item pool — may include its domain's entries
+  /** The book's validated item pool — may include its domain's entries
    * (`validateContent` merges them in); those are filtered out here and
    * counted once via their domain instead. */
   itemIds: string[];
@@ -94,7 +94,7 @@ function reportDuplicates(ids: string[], noun: string, errors: string[]): void {
 /**
  * Cross-document checks over a whole content set (plan 0012, extracted from
  * the bundled source so the publish and update-accept paths enforce the
- * same rules): duplicate domain codes, and any item id (topic-owned or
+ * same rules): duplicate domain codes, and any item id (book-owned or
  * lexicon entry) appearing twice anywhere — every `bb.item.<id>` SRS key
  * must be globally unambiguous. Returns error messages; empty means valid.
  *
@@ -102,7 +102,7 @@ function reportDuplicates(ids: string[], noun: string, errors: string[]): void {
  * `validateContent` results, not raw input.
  */
 export function validateContentSet(
-  topics: ContentSetTopic[],
+  books: ContentSetBook[],
   domains: ContentSetDomain[],
 ): string[] {
   const errors: string[] = [];
@@ -115,12 +115,11 @@ export function validateContentSet(
     domains.map((d) => [d.id, new Set(d.entryIds)]),
   );
   const allItemIds = [
-    ...topics.flatMap((topic) => {
-      const entryIds =
-        entryIdsByDomain.get(topic.domainId) ?? new Set<string>();
-      // A topic's validated item pool includes its domain's referenced
+    ...books.flatMap((book) => {
+      const entryIds = entryIdsByDomain.get(book.domainId) ?? new Set<string>();
+      // A book's validated item pool includes its domain's referenced
       // entries; exclude them here so each entry counts once, via its domain.
-      return topic.itemIds.filter((id) => !entryIds.has(id));
+      return book.itemIds.filter((id) => !entryIds.has(id));
     }),
     ...domains.flatMap((d) => d.entryIds),
   ];

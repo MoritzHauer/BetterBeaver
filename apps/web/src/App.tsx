@@ -6,7 +6,7 @@ import type {
   DomainContent,
   DomainSummary,
   ProgressStore,
-  TopicSummary,
+  BookSummary,
 } from "@betterbeaver/engine";
 import type { AdhocMode } from "@betterbeaver/engine";
 import {
@@ -29,8 +29,8 @@ import { createLocalStorageProgressStore } from "./progress/local-storage";
 import { createLocalStorageVocabListStore } from "./progress/vocab-lists";
 import { createLocalStorageUserEntryStore } from "./progress/user-entries";
 import { getPinnedTaskIds, togglePinnedTask } from "./progress/pinned-tasks";
-import { TopicListScreen } from "./screens/TopicListScreen";
-import { TopicScreen } from "./screens/TopicScreen";
+import { MyBooksScreen } from "./screens/MyBooksScreen";
+import { BookScreen } from "./screens/BookScreen";
 import { LessonScreen } from "./screens/LessonScreen";
 import { UnitScreen } from "./screens/UnitScreen";
 import { SessionScreen } from "./screens/SessionScreen";
@@ -48,14 +48,14 @@ import { StatsScreen } from "./screens/StatsScreen";
 import { currentUser, getSupabase } from "./backend/supabase";
 
 type Screen =
-  | { screen: "topics" }
-  | { screen: "topic"; topicId: string }
-  // The lesson level sits between topic and unit (plan 0008).
-  | { screen: "lesson"; topicId: string; lessonId: string }
-  | { screen: "unit"; topicId: string; lessonId: string; unitId: string }
+  | { screen: "books" }
+  | { screen: "book"; bookId: string }
+  // The lesson level sits between book and unit (plan 0008).
+  | { screen: "lesson"; bookId: string; lessonId: string }
+  | { screen: "unit"; bookId: string; lessonId: string; unitId: string }
   | {
       screen: "task";
-      topicId: string;
+      bookId: string;
       lessonId: string;
       unitId: string;
       taskId: string;
@@ -64,12 +64,12 @@ type Screen =
   // entire unit's task set, launched by UnitScreen's sticky Practice bar.
   | {
       screen: "unit-session";
-      topicId: string;
+      bookId: string;
       lessonId: string;
       unitId: string;
     }
   // Review, Vocabulary, and ad-hoc study are domain-scoped (plan 0006): the
-  // review queue, lists, and streak all key on the domain now, not the topic.
+  // review queue, lists, and streak all key on the domain now, not the book.
   | { screen: "review"; domainId: string }
   | { screen: "vocab"; domainId: string }
   | { screen: "adhoc"; domainId: string; mode: AdhocMode; itemIds: string[] }
@@ -123,7 +123,7 @@ function TaskSession({
     <SessionScreen
       title={task.instructions ?? `${task.type} practice`}
       questions={questions}
-      topicId={content.topic.id}
+      bookId={content.topic.id}
       lookup={lookup}
       onGrade={handleGrade}
       onAllAnswered={() => void progressStore.markTaskAttempted(task.id)}
@@ -173,7 +173,7 @@ function UnitSession({
     <SessionScreen
       title={unit.title}
       questions={questions}
-      topicId={content.topic.id}
+      bookId={content.topic.id}
       lookup={lookup}
       taskIds={taskIds}
       pinnedTaskIds={pinnedTaskIds}
@@ -188,20 +188,20 @@ function UnitSession({
 }
 
 /** Wires the engine's per-domain due-item queue and review-session building
- * to `SessionScreen` (plan 0006: re-scoped from per-topic — the queue is the
- * union of every domain topic's scheduling units plus unreferenced lexicon
+ * to `SessionScreen` (plan 0006: re-scoped from per-book — the queue is the
+ * union of every domain book's scheduling units plus unreferenced lexicon
  * entries). Grading goes through the same `recordGrade` as tasks; no attempt
  * is recorded (review isn't task completion). */
 function ReviewSession({
   domainContent,
-  topicsContent,
+  booksContent,
   store,
   lookup,
   onDone,
 }: {
   domainContent: DomainContent;
-  /** Every topic belonging to the domain. */
-  topicsContent: Content[];
+  /** Every book belonging to the domain. */
+  booksContent: Content[];
   store: ProgressStore;
   /** Tap-to-lookup dependencies (plan 0006 step 4), for post-answer reveal surfaces. */
   lookup: TapLookup;
@@ -215,7 +215,7 @@ function ReviewSession({
   useEffect(() => {
     let cancelled = false;
     dueDomainUnits(
-      topicsContent,
+      booksContent,
       domainContent.entries,
       store,
       new Date(),
@@ -225,19 +225,19 @@ function ReviewSession({
         return;
       }
       // buildReviewSession's `content` parameter is unused by the engine
-      // (every field it needs lives on the units themselves); any topic
+      // (every field it needs lives on the units themselves); any book
       // of the domain satisfies the type.
-      const anyTopicContent = topicsContent[0];
-      if (anyTopicContent === undefined) {
+      const anyBookContent = booksContent[0];
+      if (anyBookContent === undefined) {
         setQuestions([]);
         return;
       }
-      setQuestions(buildReviewSession(due, anyTopicContent, Math.random));
+      setQuestions(buildReviewSession(due, anyBookContent, Math.random));
     });
     return () => {
       cancelled = true;
     };
-  }, [domainContent, topicsContent, store]);
+  }, [domainContent, booksContent, store]);
 
   function handleGrade(unitId: string, quality: Quality) {
     return recordGrade(store, unitId, quality, new Date(), domainId).then(
@@ -265,17 +265,17 @@ function ReviewSession({
     );
   }
 
-  // Representative topic for asset resolution (`SessionScreen`'s single
-  // `topicId` prop): every bundled domain ships exactly one topic today, so
-  // this always resolves correctly. A future multi-topic domain would need
-  // per-question topic resolution instead — out of scope for this step.
-  const topicId = topicsContent[0]?.topic.id ?? domainId;
+  // Representative book for asset resolution (`SessionScreen`'s single
+  // `bookId` prop): every bundled domain ships exactly one book today, so
+  // this always resolves correctly. A future multi-book domain would need
+  // per-question book resolution instead — out of scope for this step.
+  const bookId = booksContent[0]?.topic.id ?? domainId;
 
   return (
     <SessionScreen
       title="Review"
       questions={questions}
-      topicId={topicId}
+      bookId={bookId}
       lookup={lookup}
       onGrade={handleGrade}
       onFinished={onDone}
@@ -292,15 +292,15 @@ function ReviewSession({
  * unit completion). */
 function AdhocSession({
   domainContent,
-  topicId,
+  bookId,
   mode,
   itemIds,
   lookup,
   onDone,
 }: {
   domainContent: DomainContent;
-  /** Representative topic of the domain, for `SessionScreen`'s asset resolution. */
-  topicId: string;
+  /** Representative book of the domain, for `SessionScreen`'s asset resolution. */
+  bookId: string;
   mode: AdhocMode;
   itemIds: string[];
   /** Tap-to-lookup dependencies (plan 0006 step 4), for post-answer reveal surfaces. */
@@ -310,7 +310,7 @@ function AdhocSession({
   const domainId = domainContent.domain.id;
   const questions = useMemo(
     () => {
-      // The domain's full lexicon (plan 0006), not one topic's items — a
+      // The domain's full lexicon (plan 0006), not one book's items — a
       // studied list may hold any entry of the domain.
       const itemById = new Map(
         domainContent.entries.map((item) => [item.id, item]),
@@ -336,7 +336,7 @@ function AdhocSession({
     <SessionScreen
       title={ADHOC_MODE_LABELS[mode]}
       questions={questions}
-      topicId={topicId}
+      bookId={bookId}
       readAloudLang={domainContent.domain.readAloudLang}
       lookup={lookup}
       onGrade={handleGrade}
@@ -373,11 +373,11 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     }
   }
 
-  const [screen, setScreen] = useState<Screen>({ screen: "topics" });
+  const [screen, setScreen] = useState<Screen>({ screen: "books" });
   // Holds whatever handler the currently rendered screen would run on its
   // own back button (null at the root, where back should exit normally).
   const backActionRef = useRef<(() => void) | null>(null);
-  // Signed-in authors get ✎ Edit buttons on the topic/lesson/unit screens
+  // Signed-in authors get ✎ Edit buttons on the book/lesson/unit screens
   // (plan 0012). Whether they actually maintain a given document is the
   // backend's call — a non-maintainer just sees the editor's load error.
   const [isAuthor, setIsAuthor] = useState(false);
@@ -389,32 +389,32 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   // ponytail: welcome cover shows on every load (plan 0009); persist a
   // "seen" flag if the extra tap ever annoys.
   const [started, setStarted] = useState(false);
-  const [topics, setTopics] = useState<TopicSummary[]>([]);
+  const [books, setBooks] = useState<BookSummary[]>([]);
   const [domains, setDomains] = useState<DomainSummary[]>([]);
   const [content, setContent] = useState<Content | null>(null);
-  // The active domain's content and every one of its topics (plan 0006):
+  // The active domain's content and every one of its books (plan 0006):
   // loaded for the review/vocab/adhoc screens, which are domain-scoped and
-  // may have no single topic in hand (reachable directly from the home
+  // may have no single book in hand (reachable directly from the home
   // screen).
   const [domainContent, setDomainContent] = useState<DomainContent | null>(
     null,
   );
-  const [domainTopicsContent, setDomainTopicsContent] = useState<Content[]>([]);
-  // Every topic's full content, keyed by topic id (plan 0010): loaded
-  // unconditionally once `topics` is populated, so `TopicListScreen` can show
-  // per-topic lesson-completion progress without extending the lightweight
-  // `TopicSummary`. Bundled content is already fully in memory, so loading
-  // every topic up front costs nothing (`bundled.ts`'s `loadTopic` just wraps
+  const [domainBooksContent, setDomainBooksContent] = useState<Content[]>([]);
+  // Every book's full content, keyed by book id (plan 0010): loaded
+  // unconditionally once `books` is populated, so `MyBooksScreen` can show
+  // per-book lesson-completion progress without extending the lightweight
+  // `BookSummary`. Bundled content is already fully in memory, so loading
+  // every book up front costs nothing (`bundled.ts`'s `loadBook` just wraps
   // an in-memory `Map`).
-  const [topicsContentMap, setTopicsContentMap] = useState<
-    Map<string, Content>
-  >(new Map());
+  const [booksContentMap, setBooksContentMap] = useState<Map<string, Content>>(
+    new Map(),
+  );
   const [attemptedTaskIds, setAttemptedTaskIds] = useState<Set<string>>(
     new Set(),
   );
-  // Bumped on every navigation to the topic screen, so it recomputes its
+  // Bumped on every navigation to the book screen, so it recomputes its
   // due-review count (which task/review sessions elsewhere may have changed).
-  const [topicEpoch, setTopicEpoch] = useState(0);
+  const [bookEpoch, setBookEpoch] = useState(0);
   // Bumped whenever the Vocabulary screen adds/deletes a learner-created
   // word (plan 0006), so the domain-content effect below re-merges the
   // user entry store's current contents without requiring a navigation.
@@ -422,7 +422,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   // Bumped whenever a task's pinned state is toggled (plan 0008), so
   // UnitSession re-reads the pin store without requiring a navigation.
   const [pinEpoch, setPinEpoch] = useState(0);
-  // The current topic's domain's pinned task ids, re-read whenever pinEpoch
+  // The current book's domain's pinned task ids, re-read whenever pinEpoch
   // bumps (plan 0008); only ever consumed by UnitSession (plan 0010: pin
   // moved from UnitScreen's task list into the pooled practice session), but
   // computed here (not inside the screen-specific branch below) since it's a
@@ -441,9 +441,9 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
       .then((ids) => setAttemptedTaskIds(new Set(ids)));
   }
 
-  function goToTopic(topicId: string) {
-    setTopicEpoch((epoch) => epoch + 1);
-    setScreen({ screen: "topic", topicId });
+  function goToBook(bookId: string) {
+    setBookEpoch((epoch) => epoch + 1);
+    setScreen({ screen: "book", bookId });
   }
 
   // Mobile back button / edge-swipe fix: without any history.pushState calls
@@ -470,77 +470,77 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     if (!("source" in contentSourceResult)) {
       return;
     }
-    contentSourceResult.source.listTopics().then(setTopics);
+    contentSourceResult.source.listBooks().then(setBooks);
     contentSourceResult.source.listDomains().then(setDomains);
     reloadAttemptedTaskIds();
   }, [contentSourceResult]);
 
-  // Loads every topic's full content once `topics` is populated (plan 0010),
-  // for TopicListScreen's per-topic progress bars — unconditional, not gated
+  // Loads every book's full content once `books` is populated (plan 0010),
+  // for MyBooksScreen's per-book progress bars — unconditional, not gated
   // on the active screen.
   useEffect(() => {
-    if (!("source" in contentSourceResult) || topics.length === 0) {
+    if (!("source" in contentSourceResult) || books.length === 0) {
       return;
     }
     let cancelled = false;
     Promise.all(
-      topics.map((topic) => contentSourceResult.source.loadTopic(topic.id)),
+      books.map((book) => contentSourceResult.source.loadBook(book.id)),
     ).then((loaded) => {
       if (cancelled) {
         return;
       }
-      setTopicsContentMap(
+      setBooksContentMap(
         new Map(
-          loaded.map((topicContent) => [topicContent.topic.id, topicContent]),
+          loaded.map((bookContent) => [bookContent.topic.id, bookContent]),
         ),
       );
     });
     return () => {
       cancelled = true;
     };
-  }, [contentSourceResult, topics]);
+  }, [contentSourceResult, books]);
 
-  // Per-topic lesson-completion counts (plan 0010), derived from
-  // `topicsContentMap` + `attemptedTaskIds` via the same `isLessonComplete`
-  // TopicScreen already uses.
-  const topicProgress = useMemo(() => {
+  // Per-book lesson-completion counts (plan 0010), derived from
+  // `booksContentMap` + `attemptedTaskIds` via the same `isLessonComplete`
+  // BookScreen already uses.
+  const bookProgress = useMemo(() => {
     const result = new Map<string, { completed: number; total: number }>();
-    for (const [topicId, topicContent] of topicsContentMap) {
-      const completed = topicContent.topic.lessonIds.filter((lessonId) => {
-        const lesson = topicContent.lessons.find((l) => l.id === lessonId);
+    for (const [bookId, bookContent] of booksContentMap) {
+      const completed = bookContent.topic.lessonIds.filter((lessonId) => {
+        const lesson = bookContent.lessons.find((l) => l.id === lessonId);
         return (
           lesson !== undefined &&
-          isLessonComplete(lesson, topicContent.units, attemptedTaskIds)
+          isLessonComplete(lesson, bookContent.units, attemptedTaskIds)
         );
       }).length;
-      result.set(topicId, {
+      result.set(bookId, {
         completed,
-        total: topicContent.topic.lessonIds.length,
+        total: bookContent.topic.lessonIds.length,
       });
     }
     return result;
-  }, [topicsContentMap, attemptedTaskIds]);
+  }, [booksContentMap, attemptedTaskIds]);
 
-  // Loads the active screen's topic content and its domain content together
+  // Loads the active screen's book content and its domain content together
   // (plan 0013 goal 1): both resolve via one `Promise.all(...).then(...)`
-  // callback so `setContent`, `setDomainContent`, and `setDomainTopicsContent`
+  // callback so `setContent`, `setDomainContent`, and `setDomainBooksContent`
   // land in the same React commit instead of two separate ones.
   useEffect(() => {
     if (!("source" in contentSourceResult)) {
       return;
     }
-    const isTopicFamilyScreen =
-      screen.screen === "topic" ||
+    const isBookFamilyScreen =
+      screen.screen === "book" ||
       screen.screen === "lesson" ||
       screen.screen === "unit" ||
       screen.screen === "task" ||
       screen.screen === "unit-session";
-    const contentPromise = isTopicFamilyScreen
-      ? contentSourceResult.source.loadTopic(screen.topicId)
+    const contentPromise = isBookFamilyScreen
+      ? contentSourceResult.source.loadBook(screen.bookId)
       : undefined;
 
-    // Domain-scoped screens carry their domainId directly; topic/unit/task
-    // screens derive it from the already-loaded topic summaries (plan
+    // Domain-scoped screens carry their domainId directly; book/unit/task
+    // screens derive it from the already-loaded book summaries (plan
     // 0006's tap-to-lookup, step 4: those screens need the domain's merged
     // entry pool too, for notes and post-answer session reveals).
     const domainId =
@@ -548,23 +548,23 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
       screen.screen === "vocab" ||
       screen.screen === "adhoc"
         ? screen.domainId
-        : isTopicFamilyScreen
-          ? topics.find((topic) => topic.id === screen.topicId)?.domainId
+        : isBookFamilyScreen
+          ? books.find((book) => book.id === screen.bookId)?.domainId
           : undefined;
-    const domainTopicIds =
+    const domainBookIds =
       domainId === undefined
         ? []
-        : topics
-            .filter((topic) => topic.domainId === domainId)
-            .map((topic) => topic.id);
+        : books
+            .filter((book) => book.domainId === domainId)
+            .map((book) => book.id);
     const domainPromise =
       domainId === undefined
         ? undefined
         : Promise.all([
             contentSourceResult.source.loadDomain(domainId),
             Promise.all(
-              domainTopicIds.map((id) =>
-                contentSourceResult.source.loadTopic(id),
+              domainBookIds.map((id) =>
+                contentSourceResult.source.loadBook(id),
               ),
             ),
             userEntryStore.getEntries(domainId),
@@ -583,7 +583,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           setContent(loadedContent);
         }
         if (loadedDomain !== undefined) {
-          const [loadedDomainContent, loadedTopicsContent, userEntries] =
+          const [loadedDomainContent, loadedBooksContent, userEntries] =
             loadedDomain;
           // Merge the domain's user-created entries into the shipped pool
           // (plan 0006): every downstream consumer (Vocabulary screen,
@@ -598,14 +598,14 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
             entries,
             linksByEntryId: symmetricLinks(entries),
           });
-          setDomainTopicsContent(loadedTopicsContent);
+          setDomainBooksContent(loadedBooksContent);
         }
       },
     );
     return () => {
       cancelled = true;
     };
-  }, [contentSourceResult, screen, topics, domainEpoch]);
+  }, [contentSourceResult, screen, books, domainEpoch]);
 
   if ("errors" in contentSourceResult) {
     return <ErrorScreen errors={contentSourceResult.errors} />;
@@ -617,7 +617,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   }
 
   if (screen.screen === "author") {
-    const onBack = () => setScreen({ screen: "topics" });
+    const onBack = () => setScreen({ screen: "books" });
     backActionRef.current = onBack;
     return (
       <AuthorScreen
@@ -642,7 +642,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   }
 
   if (screen.screen === "settings") {
-    const onBack = () => setScreen({ screen: "topics" });
+    const onBack = () => setScreen({ screen: "books" });
     backActionRef.current = onBack;
     return (
       <SettingsScreen
@@ -656,12 +656,12 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   }
 
   if (screen.screen === "stats") {
-    const onBack = () => setScreen({ screen: "topics" });
+    const onBack = () => setScreen({ screen: "books" });
     backActionRef.current = onBack;
     return <StatsScreen onBack={onBack} domains={domains} />;
   }
 
-  if (screen.screen === "topics") {
+  if (screen.screen === "books") {
     backActionRef.current = () => setStarted(false);
     const hasDownload =
       update !== null &&
@@ -695,11 +695,11 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
             </button>
           </div>
         )}
-        <TopicListScreen
+        <MyBooksScreen
           domains={domains}
-          topics={topics}
-          topicProgress={topicProgress}
-          onSelectTopic={(topicId) => goToTopic(topicId)}
+          books={books}
+          bookProgress={bookProgress}
+          onSelectBook={(bookId) => goToBook(bookId)}
           onDomainVocabulary={(domainId) =>
             setScreen({ screen: "vocab", domainId })
           }
@@ -719,7 +719,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   }
 
   if (
-    screen.screen === "topic" ||
+    screen.screen === "book" ||
     screen.screen === "lesson" ||
     screen.screen === "unit" ||
     screen.screen === "task" ||
@@ -738,22 +738,22 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
       onWordsChanged: () => setDomainEpoch((epoch) => epoch + 1),
     };
 
-    if (screen.screen === "topic") {
-      const onBack = () => setScreen({ screen: "topics" });
+    if (screen.screen === "book") {
+      const onBack = () => setScreen({ screen: "books" });
       backActionRef.current = onBack;
       return (
-        <TopicScreen
+        <BookScreen
           content={content}
           attemptedTaskIds={attemptedTaskIds}
           store={progressStore}
-          epoch={topicEpoch}
+          epoch={bookEpoch}
           onSelectLesson={(lessonId) =>
-            setScreen({ screen: "lesson", topicId: screen.topicId, lessonId })
+            setScreen({ screen: "lesson", bookId: screen.bookId, lessonId })
           }
           onPracticeTask={(target) =>
             setScreen({
               screen: "task",
-              topicId: screen.topicId,
+              bookId: screen.bookId,
               ...target,
             })
           }
@@ -768,7 +768,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
               ? () =>
                   setScreen({
                     screen: "edit",
-                    docId: documentId("topic", screen.topicId),
+                    docId: documentId("topic", screen.bookId),
                     back: screen,
                   })
               : undefined
@@ -779,7 +779,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     }
 
     if (screen.screen === "lesson") {
-      const onBack = () => goToTopic(screen.topicId);
+      const onBack = () => goToBook(screen.bookId);
       backActionRef.current = onBack;
       return (
         <LessonScreen
@@ -789,7 +789,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           onSelectUnit={(unitId) =>
             setScreen({
               screen: "unit",
-              topicId: screen.topicId,
+              bookId: screen.bookId,
               lessonId: screen.lessonId,
               unitId,
             })
@@ -797,7 +797,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           onPracticeTask={(target) =>
             setScreen({
               screen: "task",
-              topicId: screen.topicId,
+              bookId: screen.bookId,
               ...target,
             })
           }
@@ -806,7 +806,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
               ? () =>
                   setScreen({
                     screen: "edit",
-                    docId: documentId("topic", screen.topicId),
+                    docId: documentId("topic", screen.bookId),
                     target: { lessonId: screen.lessonId },
                     back: screen,
                   })
@@ -821,7 +821,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
       const onBack = () =>
         setScreen({
           screen: "lesson",
-          topicId: screen.topicId,
+          bookId: screen.bookId,
           lessonId: screen.lessonId,
         });
       backActionRef.current = onBack;
@@ -833,7 +833,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           onPractice={() =>
             setScreen({
               screen: "unit-session",
-              topicId: screen.topicId,
+              bookId: screen.bookId,
               lessonId: screen.lessonId,
               unitId: screen.unitId,
             })
@@ -859,7 +859,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
               ? (target) =>
                   setScreen({
                     screen: "edit",
-                    docId: documentId("topic", screen.topicId),
+                    docId: documentId("topic", screen.bookId),
                     target: {
                       lessonId: screen.lessonId,
                       unitId: screen.unitId,
@@ -887,7 +887,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
         reloadAttemptedTaskIds();
         setScreen({
           screen: "unit",
-          topicId: screen.topicId,
+          bookId: screen.bookId,
           lessonId: screen.lessonId,
           unitId: screen.unitId,
         });
@@ -921,7 +921,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
       reloadAttemptedTaskIds();
       setScreen({
         screen: "unit",
-        topicId: screen.topicId,
+        bookId: screen.bookId,
         lessonId: screen.lessonId,
         unitId: screen.unitId,
       });
@@ -938,7 +938,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   }
 
   // screen.screen is "review" | "vocab" | "adhoc" — all domain-scoped.
-  if (domainContent === null || domainTopicsContent.length === 0) {
+  if (domainContent === null || domainBooksContent.length === 0) {
     return <p>Loading&hellip;</p>;
   }
   const lookup: TapLookup = {
@@ -949,11 +949,11 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   };
 
   if (screen.screen === "vocab") {
-    const onBack = () => setScreen({ screen: "topics" });
+    const onBack = () => setScreen({ screen: "books" });
     backActionRef.current = onBack;
     return (
       <VocabularyScreen
-        topicsContent={domainTopicsContent}
+        booksContent={domainBooksContent}
         domainContent={domainContent}
         listStore={vocabListStore}
         userEntryStore={userEntryStore}
@@ -972,14 +972,14 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   }
 
   if (screen.screen === "adhoc") {
-    const topicId = domainTopicsContent[0]?.topic.id ?? screen.domainId;
+    const bookId = domainBooksContent[0]?.topic.id ?? screen.domainId;
     const onDone = () =>
       setScreen({ screen: "vocab", domainId: screen.domainId });
     backActionRef.current = onDone;
     return (
       <AdhocSession
         domainContent={domainContent}
-        topicId={topicId}
+        bookId={bookId}
         mode={screen.mode}
         itemIds={screen.itemIds}
         lookup={lookup}
@@ -988,12 +988,12 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     );
   }
 
-  const onReviewDone = () => setScreen({ screen: "topics" });
+  const onReviewDone = () => setScreen({ screen: "books" });
   backActionRef.current = onReviewDone;
   return (
     <ReviewSession
       domainContent={domainContent}
-      topicsContent={domainTopicsContent}
+      booksContent={domainBooksContent}
       store={progressStore}
       lookup={lookup}
       onDone={onReviewDone}

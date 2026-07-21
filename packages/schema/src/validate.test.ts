@@ -65,7 +65,7 @@ type TaskLike = {
 };
 
 /**
- * Builds a fresh, fully valid fixture: topic "kyrgyz" (code "ky"), one unit
+ * Builds a fresh, fully valid fixture: book "kyrgyz" (code "ky"), one unit
  * with 4 concept items with distinct definitions, one recognize task over
  * all 4, one recall task over 2 of them, one note stem, one resource. Every
  * item's sourceRef points at the resource. Returns both the raw input for
@@ -173,17 +173,17 @@ function makeFixture() {
     unitIds: [unit.id],
   };
 
-  const topic = {
+  const book = {
     id: "kyrgyz",
     code: "ky",
     title: "Kyrgyz",
-    description: "Kyrgyz language topic",
+    description: "Kyrgyz language book",
     lessonIds: [lesson.id],
     domainId: domain.id,
   };
 
   const input = {
-    topic,
+    topic: book,
     lessons: [lesson],
     units: [unit],
     items,
@@ -201,7 +201,7 @@ function makeFixture() {
 
   return {
     input,
-    topic,
+    book,
     lesson,
     unit,
     itemA,
@@ -433,8 +433,8 @@ describe("validateContent", () => {
   });
 
   it("(k) reports a duplicate entry in topic.lessonIds", () => {
-    const { input, topic, lesson } = makeFixture();
-    topic.lessonIds.push(lesson.id);
+    const { input, book, lesson } = makeFixture();
+    book.lessonIds.push(lesson.id);
 
     const errors = expectErrors(validateContent(input));
 
@@ -486,8 +486,8 @@ describe("validateContent", () => {
   });
 
   it("(a) reports a dangling lesson reference in topic.lessonIds", () => {
-    const { input, topic } = makeFixture();
-    topic.lessonIds.push("ky-lesson-missing");
+    const { input, book } = makeFixture();
+    book.lessonIds.push("ky-lesson-missing");
 
     const errors = expectErrors(validateContent(input));
 
@@ -763,7 +763,7 @@ describe("validateContent", () => {
     expect(errors.some((e) => e.includes("ky-task-listen-1"))).toBe(true);
   });
 
-  it("(j) reports a duplicate id shared between a topic item and a domain entry", () => {
+  it("(j) reports a duplicate id shared between a book item and a domain entry", () => {
     const { input, entry1 } = makeFixture();
     input.items.push({
       id: entry1.id,
@@ -778,8 +778,8 @@ describe("validateContent", () => {
   });
 
   it("(t) reports a topic.domainId that doesn't match the given domain", () => {
-    const { input, topic } = makeFixture();
-    topic.domainId = "other-domain";
+    const { input, book } = makeFixture();
+    book.domainId = "other-domain";
 
     const errors = expectErrors(validateContent(input));
 
@@ -829,7 +829,7 @@ describe("validateContent", () => {
     ).toBe(true);
   });
 
-  it("(x) rejects links on a topic-owned item", () => {
+  it("(x) rejects links on a book-owned item", () => {
     const { input, itemA } = makeFixture();
     itemA.payload.links = [{ type: "related", entryId: "ky-entry-hello" }];
 

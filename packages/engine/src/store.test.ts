@@ -209,7 +209,7 @@ describe("dueUnits / dueDomainUnits pinning (plan 0008)", () => {
       id: "t-topic",
       code: "t",
       domainId: "t",
-      title: "Topic",
+      title: "Book",
       description: "",
       lessonIds: [unit.id],
     },

@@ -22,22 +22,22 @@ function mergeVocabLists(
 }
 
 /**
- * `bb.vocablists.<topicId>` -> `bb.vocablists.<topic's domainId>` (plan
+ * `bb.vocablists.<bookId>` -> `bb.vocablists.<book's domainId>` (plan
  * 0006, pinned rule): presence-based and self-erasing — a legacy key that
  * exists is transformed, written to the new key, and deleted; an absent one
- * is left alone. Identity no-op when `topicId === domainId` (the demo topic
+ * is left alone. Identity no-op when `bookId === domainId` (the demo book
  * and domain share the id "demo" — transform-then-delete would otherwise
  * destroy the key it just wrote). If the target key already has content,
  * the legacy lists are merged into it rather than overwriting.
  */
 function migrateVocabLists(
-  topicDomainIds: { topicId: string; domainId: string }[],
+  bookDomainIds: { bookId: string; domainId: string }[],
 ): void {
-  for (const { topicId, domainId } of topicDomainIds) {
-    if (topicId === domainId) {
+  for (const { bookId, domainId } of bookDomainIds) {
+    if (bookId === domainId) {
       continue;
     }
-    const legacyKey = `${VOCABLISTS_PREFIX}${topicId}`;
+    const legacyKey = `${VOCABLISTS_PREFIX}${bookId}`;
     const legacy = readJson<VocabList[]>(legacyKey);
     if (legacy === null) {
       continue;
@@ -75,9 +75,9 @@ function migrateStreak(bundledDomainIds: string[]): void {
  * no legacy key behind, so re-running is a no-op).
  */
 export function runStorageMigrations(
-  topicDomainIds: { topicId: string; domainId: string }[],
+  bookDomainIds: { bookId: string; domainId: string }[],
   bundledDomainIds: string[],
 ): void {
-  migrateVocabLists(topicDomainIds);
+  migrateVocabLists(bookDomainIds);
   migrateStreak(bundledDomainIds);
 }

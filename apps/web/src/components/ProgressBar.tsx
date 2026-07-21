@@ -1,6 +1,6 @@
 /** Graphical progress bar (plan 0010): the same `.progress-track`/
  * `.progress-fill` treatment `SessionScreen` already uses for in-session
- * progress, reused for per-row progress on Lesson/Topic/TopicList screens. */
+ * progress, reused for per-row progress on Lesson/Book/MyBooks screens. */
 export function ProgressBar({ value, max }: { value: number; max: number }) {
   const pct = max > 0 ? (value / max) * 100 : 0;
   return (
@@ -18,7 +18,7 @@ export function ProgressBar({ value, max }: { value: number; max: number }) {
 
 /** `ProgressBar` + compact caption when unlocked, "locked" text otherwise
  * (plan 0010): the row-progress shape shared by `LessonScreen`'s units and
- * `TopicScreen`'s lessons — both gate progress display behind the same
+ * `BookScreen`'s lessons — both gate progress display behind the same
  * unlock check. */
 export function LockableProgress({
   unlocked,

@@ -13,16 +13,16 @@ export const slugSchema = z
     "must be a valid slug (lowercase alphanumeric segments separated by hyphens)",
   );
 
-export const topicSchema = z.object({
+export const bookSchema = z.object({
   id: slugSchema,
   code: slugSchema,
   title: z.string(),
   description: z.string(),
   lessonIds: z.array(slugSchema),
-  /** The lexicon domain this topic draws vocabulary from (plan 0006); readAloudLang lives on the domain now. */
+  /** The lexicon domain this book draws vocabulary from (plan 0006); readAloudLang lives on the domain now. */
   domainId: slugSchema,
 });
-export type Topic = z.infer<typeof topicSchema>;
+export type Book = z.infer<typeof bookSchema>;
 
 /** A domain's kind gates which entry kind its lexicon holds (plan 0006): `language` -> lexeme, `general` -> concept. */
 export const DOMAIN_KINDS = ["language", "general"] as const;
@@ -69,9 +69,10 @@ export const linkSchema = z.object({
 });
 export type Link = z.infer<typeof linkSchema>;
 
-/** Plan 0008: the former Unit, renamed — the unlock-chain/progress level under a Topic; its content refs moved down to the new, daily-sized `Unit`. */
+/** Plan 0008: the former Unit, renamed — the unlock-chain/progress level under a Book; its content refs moved down to the new, daily-sized `Unit`. */
 export const lessonSchema = z.object({
   id: slugSchema,
+  // Wire-format field name (lesson.json content files); not renamed — see docs/specs/0015-rename-topic-to-book.md DO-NOT-TOUCH.
   topicId: slugSchema,
   title: z.string(),
   goal: z.string(),

@@ -47,9 +47,9 @@ if (existing.length > 0 && !process.argv.includes("--force")) {
   process.exit(1);
 }
 
-const { topics, domains } = loadContentDocuments();
+const { books, domains } = loadContentDocuments();
 const rows = [
-  ...[...topics].map(([id, doc]) => ({
+  ...[...books].map(([id, doc]) => ({
     id: documentId("topic", id),
     kind: "topic",
     doc,
@@ -86,5 +86,5 @@ await rest("versions?on_conflict=doc_id,version", {
 });
 
 console.log(
-  `seeded ${topics.size} topic(s) + ${domains.size} domain(s) at schema version ${CONTENT_SCHEMA_VERSION}, all listed`,
+  `seeded ${books.size} book(s) + ${domains.size} domain(s) at schema version ${CONTENT_SCHEMA_VERSION}, all listed`,
 );

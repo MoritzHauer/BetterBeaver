@@ -4,7 +4,7 @@ import {
   validateContentSet,
   type Content,
   type DomainDocument,
-  type TopicDocument,
+  type BookDocument,
 } from "@betterbeaver/schema";
 import { symmetricLinks } from "./domain.js";
 import type { DomainContent } from "./domain.js";
@@ -12,7 +12,7 @@ import {
   ContentValidationError,
   type ContentSource,
   type DomainSummary,
-  type TopicSummary,
+  type BookSummary,
 } from "./interfaces.js";
 
 /** One row of the backend's learner-facing `catalog` view (plan 0012 §4). */
@@ -58,13 +58,13 @@ export function planUpdate(
 }
 
 /**
- * Per-topic and per-domain asset stem inventories (plan 0012: assets stay
+ * Per-book and per-domain asset stem inventories (plan 0012: assets stay
  * bundled and frozen, so these always come from the bundled asset maps —
  * regardless of where the documents themselves came from).
  */
 export interface AssetStems {
-  audioByTopic: Map<string, string[]>;
-  imageByTopic: Map<string, string[]>;
+  audioByBook: Map<string, string[]>;
+  imageByBook: Map<string, string[]>;
   audioByDomain: Map<string, string[]>;
   imageByDomain: Map<string, string[]>;
 }
@@ -72,31 +72,31 @@ export interface AssetStems {
 export interface DocumentContentSource {
   source: ContentSource;
   /** Raw markdown for a note, from the document that owns it. */
-  noteMarkdown(topicId: string, stem: string): string | undefined;
+  noteMarkdown(bookId: string, stem: string): string | undefined;
 }
 
 /**
  * Builds a `ContentSource` from a set of content documents (plan 0012).
  * The single validation path shared by the bundled seed, the IndexedDB
- * cache, and the update-accept dry run: validates every topic against its
+ * cache, and the update-accept dry run: validates every book against its
  * domain (`validateContent`), then the whole set (`validateContentSet`).
  * Throws `ContentValidationError` listing every problem on any failure.
  *
- * Map keys must equal the contained topic/domain ids — they are the
+ * Map keys must equal the contained book/domain ids — they are the
  * document identities (directory names for bundled content, row ids for
  * backend content).
  */
 export function createDocumentContentSource(
-  topicDocs: Map<string, TopicDocument>,
+  bookDocs: Map<string, BookDocument>,
   domainDocs: Map<string, DomainDocument>,
   assets: AssetStems,
 ): DocumentContentSource {
-  const contentByTopicId = new Map<string, Content>();
+  const contentByBookId = new Map<string, Content>();
   const domainContentById = new Map<string, DomainContent>();
-  const noteMarkdownByTopicId = new Map<string, Map<string, string>>();
+  const noteMarkdownByBookId = new Map<string, Map<string, string>>();
   const allErrors: string[] = [];
 
-  for (const [key, doc] of topicDocs) {
+  for (const [key, doc] of bookDocs) {
     const domainId =
       typeof (doc.topic as { domainId?: unknown }).domainId === "string"
         ? (doc.topic as { domainId: string }).domainId
@@ -110,8 +110,8 @@ export function createDocumentContentSource(
       tasks: doc.tasks,
       resources: doc.resources,
       noteStems: doc.notes.map((note) => note.stem),
-      audioStems: assets.audioByTopic.get(key) ?? [],
-      imageStems: assets.imageByTopic.get(key) ?? [],
+      audioStems: assets.audioByBook.get(key) ?? [],
+      imageStems: assets.imageByBook.get(key) ?? [],
       domain: domainDoc?.domain,
       entries: domainDoc?.entries ?? [],
       families: domainDoc?.families ?? [],
@@ -124,12 +124,12 @@ export function createDocumentContentSource(
     }
     if (result.content.topic.id !== key) {
       allErrors.push(
-        `${key}: topic id "${result.content.topic.id}" must equal its document key`,
+        `${key}: book id "${result.content.topic.id}" must equal its document key`,
       );
       continue;
     }
-    contentByTopicId.set(result.content.topic.id, result.content);
-    noteMarkdownByTopicId.set(
+    contentByBookId.set(result.content.topic.id, result.content);
+    noteMarkdownByBookId.set(
       result.content.topic.id,
       new Map(doc.notes.map((note) => [note.stem, note.markdown])),
     );
@@ -158,7 +158,7 @@ export function createDocumentContentSource(
     );
     allErrors.push(
       ...validateContentSet(
-        [...contentByTopicId.values()].map((content) => ({
+        [...contentByBookId.values()].map((content) => ({
           id: content.topic.id,
           domainId: content.topic.domainId,
           itemIds: content.items.map((item) => item.id),
@@ -178,9 +178,9 @@ export function createDocumentContentSource(
 
   return {
     source: {
-      listTopics(): Promise<TopicSummary[]> {
+      listBooks(): Promise<BookSummary[]> {
         return Promise.resolve(
-          [...contentByTopicId.values()].map((content) => ({
+          [...contentByBookId.values()].map((content) => ({
             id: content.topic.id,
             title: content.topic.title,
             description: content.topic.description,
@@ -188,11 +188,11 @@ export function createDocumentContentSource(
           })),
         );
       },
-      loadTopic(id: string): Promise<Content> {
-        const content = contentByTopicId.get(id);
+      loadBook(id: string): Promise<Content> {
+        const content = contentByBookId.get(id);
         if (content === undefined) {
           return Promise.reject(
-            new ContentValidationError([`unknown topic: ${id}`]),
+            new ContentValidationError([`unknown book: ${id}`]),
           );
         }
         return Promise.resolve(content);
@@ -216,8 +216,8 @@ export function createDocumentContentSource(
         return Promise.resolve(domainContent);
       },
     },
-    noteMarkdown(topicId: string, stem: string): string | undefined {
-      return noteMarkdownByTopicId.get(topicId)?.get(stem);
+    noteMarkdown(bookId: string, stem: string): string | undefined {
+      return noteMarkdownByBookId.get(bookId)?.get(stem);
     },
   };
 }
