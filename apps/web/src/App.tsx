@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Content, Item, Task, Unit } from "@betterbeaver/schema";
 import { documentId } from "@betterbeaver/schema";
 import type {
@@ -374,6 +374,9 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   }
 
   const [screen, setScreen] = useState<Screen>({ screen: "topics" });
+  // Holds whatever handler the currently rendered screen would run on its
+  // own back button (null at the root, where back should exit normally).
+  const backActionRef = useRef<(() => void) | null>(null);
   // Signed-in authors get ✎ Edit buttons on the topic/lesson/unit screens
   // (plan 0012). Whether they actually maintain a given document is the
   // backend's call — a non-maintainer just sees the editor's load error.
@@ -442,6 +445,26 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     setTopicEpoch((epoch) => epoch + 1);
     setScreen({ screen: "topic", topicId });
   }
+
+  // Mobile back button / edge-swipe fix: without any history.pushState calls
+  // the browser has nothing to pop, so a hardware/gesture back exits the app
+  // entirely instead of moving up a level. `backActionRef` always holds the
+  // same handler as the currently rendered screen's visible back (or
+  // done/cancel) button; a single trap entry, refilled after every pop,
+  // routes hardware back through it. At the root screen the ref is null, so
+  // the pop is left alone and back behaves like a normal exit.
+  useEffect(() => {
+    window.history.pushState({ backTrap: true }, "");
+    function onPopState() {
+      const goBack = backActionRef.current;
+      if (goBack !== null) {
+        goBack();
+        window.history.pushState({ backTrap: true }, "");
+      }
+    }
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
 
   useEffect(() => {
     if (!("source" in contentSourceResult)) {
@@ -589,36 +612,41 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   }
 
   if (!started) {
+    backActionRef.current = null;
     return <StartScreen onStart={() => setStarted(true)} />;
   }
 
   if (screen.screen === "author") {
+    const onBack = () => setScreen({ screen: "topics" });
+    backActionRef.current = onBack;
     return (
       <AuthorScreen
         onOpenDocument={(docId) => setScreen({ screen: "edit", docId })}
         onPrivacy={() => setScreen({ screen: "privacy" })}
-        onBack={() => setScreen({ screen: "topics" })}
+        onBack={onBack}
       />
     );
   }
   if (screen.screen === "edit") {
     const back = screen.back ?? { screen: "author" as const };
+    const onBack = () => setScreen(back);
+    backActionRef.current = onBack;
     return (
-      <EditScreen
-        docId={screen.docId}
-        target={screen.target}
-        onBack={() => setScreen(back)}
-      />
+      <EditScreen docId={screen.docId} target={screen.target} onBack={onBack} />
     );
   }
   if (screen.screen === "privacy") {
-    return <PrivacyScreen onBack={() => setScreen({ screen: "author" })} />;
+    const onBack = () => setScreen({ screen: "author" });
+    backActionRef.current = onBack;
+    return <PrivacyScreen onBack={onBack} />;
   }
 
   if (screen.screen === "settings") {
+    const onBack = () => setScreen({ screen: "topics" });
+    backActionRef.current = onBack;
     return (
       <SettingsScreen
-        onBack={() => setScreen({ screen: "topics" })}
+        onBack={onBack}
         onSignIn={() => setScreen({ screen: "author" })}
         onImportClass={(docId) =>
           setScreen({ screen: "edit", docId, back: { screen: "settings" } })
@@ -628,15 +656,13 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   }
 
   if (screen.screen === "stats") {
-    return (
-      <StatsScreen
-        onBack={() => setScreen({ screen: "topics" })}
-        domains={domains}
-      />
-    );
+    const onBack = () => setScreen({ screen: "topics" });
+    backActionRef.current = onBack;
+    return <StatsScreen onBack={onBack} domains={domains} />;
   }
 
   if (screen.screen === "topics") {
+    backActionRef.current = null;
     const hasDownload =
       update !== null &&
       (update.changed.length > 0 || update.removedIds.length > 0);
@@ -713,6 +739,8 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     };
 
     if (screen.screen === "topic") {
+      const onBack = () => setScreen({ screen: "topics" });
+      backActionRef.current = onBack;
       return (
         <TopicScreen
           content={content}
@@ -745,12 +773,14 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
                   })
               : undefined
           }
-          onBack={() => setScreen({ screen: "topics" })}
+          onBack={onBack}
         />
       );
     }
 
     if (screen.screen === "lesson") {
+      const onBack = () => goToTopic(screen.topicId);
+      backActionRef.current = onBack;
       return (
         <LessonScreen
           content={content}
@@ -782,12 +812,19 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
                   })
               : undefined
           }
-          onBack={() => goToTopic(screen.topicId)}
+          onBack={onBack}
         />
       );
     }
 
     if (screen.screen === "unit") {
+      const onBack = () =>
+        setScreen({
+          screen: "lesson",
+          topicId: screen.topicId,
+          lessonId: screen.lessonId,
+        });
+      backActionRef.current = onBack;
       return (
         <UnitScreen
           content={content}
@@ -832,13 +869,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
                   })
               : undefined
           }
-          onBack={() =>
-            setScreen({
-              screen: "lesson",
-              topicId: screen.topicId,
-              lessonId: screen.lessonId,
-            })
-          }
+          onBack={onBack}
         />
       );
     }
@@ -852,6 +883,16 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           </main>
         );
       }
+      const onDone = () => {
+        reloadAttemptedTaskIds();
+        setScreen({
+          screen: "unit",
+          topicId: screen.topicId,
+          lessonId: screen.lessonId,
+          unitId: screen.unitId,
+        });
+      };
+      backActionRef.current = onDone;
       return (
         <UnitSession
           content={content}
@@ -862,15 +903,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
             togglePinnedTask(content.topic.domainId, taskId);
             setPinEpoch((epoch) => epoch + 1);
           }}
-          onDone={() => {
-            reloadAttemptedTaskIds();
-            setScreen({
-              screen: "unit",
-              topicId: screen.topicId,
-              lessonId: screen.lessonId,
-              unitId: screen.unitId,
-            });
-          }}
+          onDone={onDone}
         />
       );
     }
@@ -884,20 +917,22 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
         </main>
       );
     }
+    const onTaskDone = () => {
+      reloadAttemptedTaskIds();
+      setScreen({
+        screen: "unit",
+        topicId: screen.topicId,
+        lessonId: screen.lessonId,
+        unitId: screen.unitId,
+      });
+    };
+    backActionRef.current = onTaskDone;
     return (
       <TaskSession
         content={content}
         lookup={lookup}
         task={task}
-        onDone={() => {
-          reloadAttemptedTaskIds();
-          setScreen({
-            screen: "unit",
-            topicId: screen.topicId,
-            lessonId: screen.lessonId,
-            unitId: screen.unitId,
-          });
-        }}
+        onDone={onTaskDone}
       />
     );
   }
@@ -914,6 +949,8 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   };
 
   if (screen.screen === "vocab") {
+    const onBack = () => setScreen({ screen: "topics" });
+    backActionRef.current = onBack;
     return (
       <VocabularyScreen
         topicsContent={domainTopicsContent}
@@ -929,13 +966,16 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
             itemIds,
           })
         }
-        onBack={() => setScreen({ screen: "topics" })}
+        onBack={onBack}
       />
     );
   }
 
   if (screen.screen === "adhoc") {
     const topicId = domainTopicsContent[0]?.topic.id ?? screen.domainId;
+    const onDone = () =>
+      setScreen({ screen: "vocab", domainId: screen.domainId });
+    backActionRef.current = onDone;
     return (
       <AdhocSession
         domainContent={domainContent}
@@ -943,18 +983,20 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
         mode={screen.mode}
         itemIds={screen.itemIds}
         lookup={lookup}
-        onDone={() => setScreen({ screen: "vocab", domainId: screen.domainId })}
+        onDone={onDone}
       />
     );
   }
 
+  const onReviewDone = () => setScreen({ screen: "topics" });
+  backActionRef.current = onReviewDone;
   return (
     <ReviewSession
       domainContent={domainContent}
       topicsContent={domainTopicsContent}
       store={progressStore}
       lookup={lookup}
-      onDone={() => setScreen({ screen: "topics" })}
+      onDone={onReviewDone}
     />
   );
 }
