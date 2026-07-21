@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { validateContent, type ValidateContentResult } from "./validate.js";
+import { bookSchema, BOOK_ICONS } from "./entities.js";
 
 type LinkLike = { type: string; entryId: string };
 type ConceptItemLike = {
@@ -957,5 +958,34 @@ describe("validateContent", () => {
     expect(result.domain.id).toBe("ky");
     expect(result.entries.map((e) => e.id)).toContain(entry1.id);
     expect(result.families.map((f) => f.id)).toContain("ky-family-greetings");
+  });
+});
+
+describe("bookSchema icon (plan 0015 decision 6)", () => {
+  const baseBook = {
+    id: "kyrgyz",
+    code: "ky",
+    title: "Kyrgyz",
+    description: "Kyrgyz language book",
+    lessonIds: [] as string[],
+    domainId: "ky",
+  };
+
+  it("parses with a valid icon", () => {
+    const result = bookSchema.safeParse({ ...baseBook, icon: BOOK_ICONS[0] });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects an unknown emoji", () => {
+    const result = bookSchema.safeParse({ ...baseBook, icon: "🐙" });
+    expect(result.success).toBe(false);
+  });
+
+  it("parses with icon absent", () => {
+    const result = bookSchema.safeParse(baseBook);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.icon).toBeUndefined();
+    }
   });
 });

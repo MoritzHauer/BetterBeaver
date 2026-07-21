@@ -13,6 +13,34 @@ export const slugSchema = z
     "must be a valid slug (lowercase alphanumeric segments separated by hyphens)",
   );
 
+/** Owner-approved icon set for a Book (plan 0015 decision 6): languages + general subjects. */
+export const BOOK_ICONS = [
+  "📚",
+  "🦫",
+  "🌍",
+  "🗣️",
+  "💬",
+  "🔤",
+  "🧪",
+  "🧬",
+  "🔬",
+  "🧮",
+  "📐",
+  "💻",
+  "🎵",
+  "🎨",
+  "🏛️",
+  "🌱",
+  "🍄",
+  "⚖️",
+  "🚀",
+  "🌤️",
+  "🐾",
+  "❤️",
+  "🥘",
+  "🚌",
+] as const;
+
 export const bookSchema = z.object({
   id: slugSchema,
   code: slugSchema,
@@ -21,6 +49,8 @@ export const bookSchema = z.object({
   lessonIds: z.array(slugSchema),
   /** The lexicon domain this book draws vocabulary from (plan 0006); readAloudLang lives on the domain now. */
   domainId: slugSchema,
+  /** Library/My Books card icon (plan 0015 decision 6); absent means no icon, no default. */
+  icon: z.enum(BOOK_ICONS).optional(),
 });
 export type Book = z.infer<typeof bookSchema>;
 

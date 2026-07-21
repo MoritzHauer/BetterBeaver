@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  BOOK_ICONS,
   CONTENT_SCHEMA_VERSION,
   TASK_TYPES,
   type DomainDocument,
@@ -44,6 +45,8 @@ interface FieldSpec {
   path: string[];
   multiline?: boolean;
   hint?: string;
+  /** Renders a native `<select>` over these options plus "(none)" instead of a text input/textarea. */
+  options?: readonly string[];
 }
 
 const f = (label: string, ...path: string[]): FieldSpec => ({ label, path });
@@ -139,7 +142,16 @@ function Field({
   return (
     <label className="field">
       {spec.label}
-      {spec.multiline ? (
+      {spec.options !== undefined ? (
+        <select value={value} onChange={(e) => set(e.target.value)}>
+          <option value="">(none)</option>
+          {spec.options.map((opt) => (
+            <option key={opt} value={opt}>
+              {opt}
+            </option>
+          ))}
+        </select>
+      ) : spec.multiline ? (
         <textarea
           value={value}
           rows={3}
@@ -983,7 +995,11 @@ function BookEditor({
     <section>
       <EntityForm
         entity={book}
-        specs={[f("Title", "title"), fm("Description", "description")]}
+        specs={[
+          f("Title", "title"),
+          fm("Description", "description"),
+          { label: "Icon", path: ["icon"], options: BOOK_ICONS },
+        ]}
         onChange={(next) => onChange({ ...doc, topic: next })}
       />
       <h3>Lessons</h3>
