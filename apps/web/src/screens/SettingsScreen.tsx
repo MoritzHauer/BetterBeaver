@@ -259,10 +259,7 @@ export function SettingsScreen({
         <section className="card">
           <h2>Books</h2>
           <div className="grade-buttons">
-            <button
-              className="plain"
-              onClick={() => void handleExportBooks()}
-            >
+            <button className="plain" onClick={() => void handleExportBooks()}>
               Export my books
             </button>
             <button
