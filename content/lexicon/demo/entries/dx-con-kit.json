@@ -3,9 +3,14 @@
   "kind": "concept",
   "payload": {
     "term": "Kit",
-    "definition": "A baby beaver. It stays with its parents about two years, learning to gnaw, cache food, and patch the dam before striking out on its own.",
+    "links": [
+      {
+        "type": "related",
+        "entryId": "dx-con-incisors"
+      }
+    ],
     "example": "Lessons lock the same patient way: finish one to unlock the next — though an impatient kit can skip ahead after confirming.",
-    "links": [{ "type": "related", "entryId": "dx-con-incisors" }]
+    "definition": "A baby beaver. It stays with its parents about two years, learning to gnaw, cache food, and patch the dam before striking out on its own."
   },
   "sourceRef": "dx-resource-intro"
 }

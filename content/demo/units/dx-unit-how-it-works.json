@@ -1,7 +1,7 @@
 {
   "id": "dx-unit-how-it-works",
-  "title": "Sentences and sounds",
   "goal": "Two beaver-themed sentences and a minimal pair, exercising cloze, dictation, build, scramble, and minimal-pair.",
+  "title": "Sentences and sounds",
   "itemIds": [
     "dx-item-sentence-gnaw",
     "dx-item-sentence-breath",

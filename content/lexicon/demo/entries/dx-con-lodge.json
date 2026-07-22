@@ -3,8 +3,8 @@
   "kind": "concept",
   "payload": {
     "term": "Lodge",
-    "definition": "A dome of branches and mud with an underwater entrance, so land predators can't get in.",
-    "example": "BetterBeaver nests the same way: a Topic is the whole lodge, a Lesson is one chamber, a Unit is one day's work inside it."
+    "example": "BetterBeaver nests the same way: a Topic is the whole lodge, a Lesson is one chamber, a Unit is one day's work inside it.",
+    "definition": "A dome of branches and mud with an underwater entrance, so land predators can't get in."
   },
   "sourceRef": "dx-resource-intro"
 }

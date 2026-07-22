@@ -3,11 +3,16 @@
   "kind": "concept",
   "payload": {
     "term": "Dam",
-    "definition": "A wall of gnawed logs and mud a beaver piles across a stream — deep enough water to hide its lodge door from predators.",
+    "links": [
+      {
+        "type": "related",
+        "entryId": "dx-con-lodge"
+      }
+    ],
     "example": "Same idea here: skip reviews too long and the leak finds you. The SRS queue is your dam.",
     "audioRef": "dx-audio-con-dam",
     "imageRef": "dx-img-con-dam",
-    "links": [{ "type": "related", "entryId": "dx-con-lodge" }]
+    "definition": "A wall of gnawed logs and mud a beaver piles across a stream — deep enough water to hide its lodge door from predators."
   },
   "sourceRef": "dx-resource-intro"
 }

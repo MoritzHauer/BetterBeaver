@@ -1,7 +1,7 @@
 {
   "id": "dx-lesson-intro",
-  "title": "Meet BetterBeaver",
   "goal": "Learn how spaced repetition, the lesson ladder, and every exercise type work — through real beaver facts.",
+  "title": "Meet BetterBeaver",
   "topicId": "demo",
   "unitIds": [
     "dx-unit-beaver-basics",

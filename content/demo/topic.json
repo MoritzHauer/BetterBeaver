@@ -1,6 +1,7 @@
 {
   "id": "demo",
   "code": "dx",
+  "icon": "🦫",
   "title": "Meet BetterBeaver",
   "domainId": "demo",
   "lessonIds": ["dx-lesson-intro"],

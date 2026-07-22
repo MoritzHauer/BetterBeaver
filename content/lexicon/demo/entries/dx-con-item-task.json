@@ -3,8 +3,8 @@
   "kind": "concept",
   "payload": {
     "term": "Items & tasks",
-    "definition": "An item is one learnable thing — a word, a fact, a sentence. A task is one exercise that drills it, like recall or matching.",
-    "example": "Every beaver fact here is an item; every quiz on it is a task. A handful of each makes a Unit."
+    "example": "Every beaver fact here is an item; every quiz on it is a task. A handful of each makes a Unit.",
+    "definition": "An item is one learnable thing — a word, a fact, a sentence. A task is one exercise that drills it, like recall or matching."
   },
   "sourceRef": "dx-resource-intro"
 }

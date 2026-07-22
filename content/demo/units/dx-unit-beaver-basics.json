@@ -1,7 +1,7 @@
 {
   "id": "dx-unit-beaver-basics",
-  "title": "Beaver basics",
   "goal": "Five real beaver facts, each one doubling as an explanation of an app feature.",
+  "title": "Beaver basics",
   "itemIds": [
     "dx-con-dam",
     "dx-con-lodge",

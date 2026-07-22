@@ -3,8 +3,8 @@
   "kind": "concept",
   "payload": {
     "term": "Draft",
-    "definition": "Tap the ✎ pencil on any Topic, Lesson, or Unit while signed in as an author to start editing — changes autosave to your device as a draft.",
-    "example": "Nothing goes live until you hit Publish, so it's safe to poke around."
+    "example": "Nothing goes live until you hit Publish, so it's safe to poke around.",
+    "definition": "Tap the ✎ pencil on any Topic, Lesson, or Unit while signed in as an author to start editing — changes autosave to your device as a draft."
   },
   "sourceRef": "dx-resource-intro"
 }
