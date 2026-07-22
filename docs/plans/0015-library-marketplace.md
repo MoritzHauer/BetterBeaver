@@ -1,6 +1,6 @@
 # Plan 0015: Library (Books marketplace)
 
-Status: designed 2026-07-21 (14-decision grilling + doc-reviewer round + owner follow-ups on cache lifecycle, schema bump, rating display). Implementation to be delegated via specs.
+Status: designed 2026-07-21 (14-decision grilling + doc-reviewer round + owner follow-ups on cache lifecycle, schema bump, rating display); implemented 2026-07-22 via specs 0015-1…6, browser-verified. Two owner rulings landed during implementation: My Books cards carry per-card Vocabulary/Review buttons (replacing the old domain-header shortcuts the flat list dissolved), and the onboarding Book gets icon 🦫 in its published document (pending the live-backend pass below).
 
 ## What this is
 
