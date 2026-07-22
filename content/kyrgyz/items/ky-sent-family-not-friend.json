@@ -1,9 +1,0 @@
-{
-  "id": "ky-sent-family-not-friend",
-  "kind": "sentence",
-  "payload": {
-    "text": "Бул досум эмес, байкем.",
-    "translation": "Not my friend, my older brother."
-  },
-  "sourceRef": "ky-resource-manual-family"
-}

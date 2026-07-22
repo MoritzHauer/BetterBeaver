@@ -1,6 +1,0 @@
-{
-  "id": "ky-task-script-kyrgyz-letters",
-  "type": "recognize",
-  "itemIds": ["ky-item-letter-ng", "ky-item-letter-oe", "ky-item-letter-ue"],
-  "instructions": "Pick the correct sound for each of the letters Kyrgyz added to the Cyrillic alphabet."
-}

@@ -33,11 +33,20 @@ const rows = (await response.json()) as {
   published: unknown;
 }[];
 
+// Scoped to the onboarding Book only (plan 0015 decision 10): the bundled
+// seed is a frozen first-run mirror, not a full backend export — every
+// other Book is Library-fetched-on-add and must never resurrect here.
+const ONBOARDING_BOOK_ID = "demo";
+const ONBOARDING_DOMAIN_ID = "demo";
+
 for (const row of rows) {
+  const id = contentIdOf(row.id);
   if (row.kind === "topic") {
-    writeBookDocument(contentIdOf(row.id), row.published as BookDocument);
-  } else {
-    writeDomainDocument(contentIdOf(row.id), row.published as DomainDocument);
+    if (id === ONBOARDING_BOOK_ID) {
+      writeBookDocument(id, row.published as BookDocument);
+    }
+  } else if (id === ONBOARDING_DOMAIN_ID) {
+    writeDomainDocument(id, row.published as DomainDocument);
   }
 }
 

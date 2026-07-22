@@ -1,9 +1,0 @@
-{
-  "id": "ky-sent-family-how-many-people",
-  "kind": "sentence",
-  "payload": {
-    "text": "Сенин үй-бүлөң {{c1::канча}} кишиден турат?",
-    "translation": "How many people are in your family?"
-  },
-  "sourceRef": "ky-resource-manual-family"
-}

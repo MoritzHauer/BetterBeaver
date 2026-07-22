@@ -1,9 +1,0 @@
-{
-  "id": "ky-sent-greet-three-classes",
-  "kind": "sentence",
-  "payload": {
-    "text": "Бүгүн үч сабак болот.",
-    "translation": "There are three classes today."
-  },
-  "sourceRef": "ky-resource-manual-greetings"
-}

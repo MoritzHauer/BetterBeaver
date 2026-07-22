@@ -1,9 +1,0 @@
-{
-  "id": "ky-sent-greet-two-children",
-  "kind": "sentence",
-  "payload": {
-    "text": "Эки балам бар.",
-    "translation": "I have two children."
-  },
-  "sourceRef": "ky-resource-manual-greetings"
-}

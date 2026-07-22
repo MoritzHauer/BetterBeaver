@@ -1,7 +1,0 @@
-{
-  "id": "ky-lesson-script-survival",
-  "goal": "Sound out Kyrgyz words written in Cyrillic, with special attention to the letters most likely to mislead.",
-  "title": "Script and sound survival",
-  "topicId": "kyrgyz",
-  "unitIds": ["ky-unit-script-vowels", "ky-unit-script-consonants"]
-}

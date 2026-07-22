@@ -1,9 +1,0 @@
-{
-  "id": "ky-sent-greet-lives-in-bishkek",
-  "kind": "sentence",
-  "payload": {
-    "text": "Ал Бишкекте жашайт.",
-    "translation": "He lives in Bishkek."
-  },
-  "sourceRef": "ky-resource-manual-greetings"
-}

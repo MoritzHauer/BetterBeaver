@@ -1,6 +1,0 @@
-{
-  "id": "ky-task-matching-3-1",
-  "type": "matching",
-  "itemIds": ["ky-item-bul", "ky-item-kim", "ky-item-emne"],
-  "instructions": "Match each word or phrase to its meaning."
-}
