@@ -27,6 +27,7 @@ import { getNoteMarkdown } from "../content/source";
 import { SpeakerButton } from "../tts";
 import { playCorrect, playFanfare, playWrong } from "../sounds";
 import { FeedbackWidget } from "../components/FeedbackWidget";
+import { BookWatermark } from "../components/BookWatermark";
 
 /** Tally of results across a session; only the fields for the task type(s)
  * actually encountered end up non-zero. Every auto-graded kind (recognize,
@@ -1073,6 +1074,7 @@ export function SessionScreen({
 
   return (
     <main className="session">
+      <BookWatermark bookId={bookId} />
       <header className="session-header">
         <button className="plain exit" aria-label="Exit" onClick={onExit}>
           &#10005;

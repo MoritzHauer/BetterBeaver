@@ -11,6 +11,7 @@ import {
 import { LockableProgress } from "../components/ProgressBar";
 import { FeedbackWidget } from "../components/FeedbackWidget";
 import { ChatThread } from "../components/ChatThread";
+import { BookWatermark } from "../components/BookWatermark";
 
 /** One practice-able task and where it lives, for the shuffle buttons (plan 0008). */
 export interface PracticeTarget {
@@ -109,17 +110,8 @@ export function BookScreen({
     );
 
   return (
-    <main
-      className={content.topic.id === "kyrgyz" ? "book-bg-kyrgyz" : undefined}
-    >
-      {content.topic.id === "kyrgyz" && (
-        <img
-          className="book-bg-icon"
-          src={`${import.meta.env.BASE_URL}art/icons/kyrgyz.png`}
-          alt=""
-          aria-hidden="true"
-        />
-      )}
+    <main>
+      <BookWatermark bookId={content.topic.id} />
       <header className="screen-header">
         <button className="plain" onClick={onBack}>
           <img

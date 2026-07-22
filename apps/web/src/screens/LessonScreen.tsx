@@ -2,6 +2,7 @@ import type { Content } from "@betterbeaver/schema";
 import { isUnitComplete, isUnitUnlocked } from "@betterbeaver/engine";
 import { LockableProgress } from "../components/ProgressBar";
 import { FeedbackWidget } from "../components/FeedbackWidget";
+import { BookWatermark } from "../components/BookWatermark";
 import type { PracticeTarget } from "./BookScreen";
 import { lessonPracticeTargets } from "./BookScreen";
 
@@ -55,6 +56,7 @@ export function LessonScreen({
 
   return (
     <main>
+      <BookWatermark bookId={content.topic.id} />
       <header className="screen-header">
         <button className="plain" onClick={onBack}>
           <img

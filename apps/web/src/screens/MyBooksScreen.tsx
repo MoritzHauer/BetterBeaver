@@ -145,7 +145,7 @@ export function MyBooksScreen({
                   {progress.completed}/{progress.total}
                 </p>
               </button>
-              <div className="grade-buttons">
+              <div className="grade-buttons book-actions">
                 <button
                   className="plain"
                   onClick={() => onVocabulary(book.domainId)}

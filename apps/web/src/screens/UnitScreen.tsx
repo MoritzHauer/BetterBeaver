@@ -10,6 +10,7 @@ import { getLexiconAssetUrl } from "../content/bundled";
 import { getNoteMarkdown } from "../content/source";
 import { SpeakerButton } from "../tts";
 import { FeedbackWidget } from "../components/FeedbackWidget";
+import { BookWatermark } from "../components/BookWatermark";
 
 type LexemeItem = Extract<Item, { kind: "lexeme" }>;
 type ConceptItem = Extract<Item, { kind: "concept" }>;
@@ -361,6 +362,7 @@ export function UnitScreen({
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
+      <BookWatermark bookId={content.topic.id} />
       <header className="screen-header">
         <button className="plain exit" aria-label="Back" onClick={onBack}>
           <img
