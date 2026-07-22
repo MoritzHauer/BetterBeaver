@@ -4,10 +4,7 @@ import {
   type DomainDocument,
   type BookDocument,
 } from "@betterbeaver/schema";
-import {
-  ContentValidationError,
-  createDocumentContentSource,
-} from "@betterbeaver/engine";
+import { createDocumentContentSource } from "@betterbeaver/engine";
 import { bundledAssetStems } from "../content/bundled";
 import { getSupabase } from "./supabase";
 
@@ -59,13 +56,17 @@ export async function validateForPublish(
   } else {
     domains.set(contentIdOf(docId), draft as DomainDocument);
   }
-  try {
-    createDocumentContentSource(books, domains, bundledAssetStems());
-    return [];
-  } catch (validationError) {
-    if (validationError instanceof ContentValidationError) {
-      return validationError.errors;
-    }
-    throw validationError;
-  }
+  // createDocumentContentSource no longer throws (plan 0015 decision 11a):
+  // per-Book failures land in `broken` instead. Publish-time validation
+  // still wants an all-or-nothing verdict, so any broken Book — the draft
+  // itself or, on a cross-Book collision, an existing published Book —
+  // fails the publish.
+  const built = createDocumentContentSource(
+    books,
+    domains,
+    bundledAssetStems(),
+  );
+  return built.broken.flatMap((b) =>
+    b.errors.map((error) => `${b.bookId}: ${error}`),
+  );
 }

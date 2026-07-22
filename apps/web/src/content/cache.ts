@@ -79,3 +79,47 @@ export async function replaceCachedDocuments(
 export async function clearCachedDocuments(): Promise<void> {
   await replaceCachedDocuments([]);
 }
+
+/**
+ * Upserts `docs` without touching the rest of the cache (plan 0015: Add,
+ * first-run seed, and update-accept now write per-Book instead of
+ * replacing the whole cache).
+ */
+export async function putCachedDocuments(
+  docs: CachedDocument[],
+): Promise<void> {
+  const db = await openDb();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORE, "readwrite");
+      const store = tx.objectStore(STORE);
+      for (const doc of docs) {
+        store.put(doc);
+      }
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error ?? new Error("indexedDB"));
+      tx.onabort = () => reject(tx.error ?? new Error("indexedDB"));
+    });
+  } finally {
+    db.close();
+  }
+}
+
+/** Deletes cached documents by (kind-prefixed) id, e.g. `topic:kyrgyz` — the Remove/purge eviction path (plan 0015). */
+export async function deleteCachedDocuments(ids: string[]): Promise<void> {
+  const db = await openDb();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORE, "readwrite");
+      const store = tx.objectStore(STORE);
+      for (const id of ids) {
+        store.delete(id);
+      }
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error ?? new Error("indexedDB"));
+      tx.onabort = () => reject(tx.error ?? new Error("indexedDB"));
+    });
+  } finally {
+    db.close();
+  }
+}
