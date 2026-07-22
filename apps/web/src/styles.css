@@ -1116,3 +1116,30 @@ textarea {
   align-items: flex-end;
   margin-top: 0.75rem;
 }
+
+/* My Books card overflow menu (plan 0015): Archive/Remove, tucked behind a
+ * "⋯" so the card's main button stays the single study tap target. */
+.card-menu > summary {
+  cursor: pointer;
+  padding: 0.5rem 1rem;
+  list-style: none;
+}
+.card-menu > summary::-webkit-details-marker {
+  display: none;
+}
+.card-menu .grade-buttons {
+  padding: 0 1rem 0.75rem;
+  margin-top: 0;
+}
+
+/* Archive section (plan 0015): collapsed by default, styled like a section
+ * header when opened. */
+.archive-section > summary {
+  cursor: pointer;
+  font-weight: 800;
+  margin: 1.5rem 0 0.75rem;
+  list-style: none;
+}
+.archive-section > summary::-webkit-details-marker {
+  display: none;
+}

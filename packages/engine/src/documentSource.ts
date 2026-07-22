@@ -220,6 +220,7 @@ export function createDocumentContentSource(
             title: content.topic.title,
             description: content.topic.description,
             domainId: content.topic.domainId,
+            icon: content.topic.icon,
           })),
         );
       },

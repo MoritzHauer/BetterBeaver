@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Content, Item, Task, Unit } from "@betterbeaver/schema";
-import { documentId } from "@betterbeaver/schema";
+import type {
+  BookDocument,
+  Content,
+  Item,
+  Task,
+  Unit,
+} from "@betterbeaver/schema";
+import { contentIdOf, documentId } from "@betterbeaver/schema";
 import type {
   ContentSource,
   DomainContent,
@@ -25,11 +31,14 @@ import { recallQuality } from "@betterbeaver/srs";
 import type { TapLookup } from "./components/TappableText";
 import type { ContentInit, ContentUpdate } from "./content/source";
 import { resolvedLinksByEntryId } from "./content/links";
+import { readCachedDocuments } from "./content/cache";
+import { readArchived } from "./content/myBooks";
 import { createLocalStorageProgressStore } from "./progress/local-storage";
 import { createLocalStorageVocabListStore } from "./progress/vocab-lists";
 import { createLocalStorageUserEntryStore } from "./progress/user-entries";
 import { getPinnedTaskIds, togglePinnedTask } from "./progress/pinned-tasks";
 import { MyBooksScreen } from "./screens/MyBooksScreen";
+import { LibraryScreen } from "./screens/LibraryScreen";
 import { BookScreen } from "./screens/BookScreen";
 import { LessonScreen } from "./screens/LessonScreen";
 import { UnitScreen } from "./screens/UnitScreen";
@@ -73,6 +82,9 @@ type Screen =
   | { screen: "review"; domainId: string }
   | { screen: "vocab"; domainId: string }
   | { screen: "adhoc"; domainId: string; mode: AdhocMode; itemIds: string[] }
+  // Library (plan 0015): browse the full catalog and Add a Book. Entered
+  // from My Books; back returns there.
+  | { screen: "library" }
   // Authoring (plan 0012 step 2): sign-in + document list, the editor, and
   // the static privacy note. Learner flows never route here.
   | { screen: "author" }
@@ -409,6 +421,86 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   const [booksContentMap, setBooksContentMap] = useState<Map<string, Content>>(
     new Map(),
   );
+  // Raw (pre-validation) title/description/icon per cached Book, read
+  // straight off IndexedDB (plan 0015): covers the two things `books`
+  // (validated, added-only) can't — the Archive section's cards, and a
+  // broken card's title when the doc is present but failed validation.
+  // A book id absent here (e.g. cache lost) falls back to showing its id.
+  const [cachedBookSummaries, setCachedBookSummaries] = useState<
+    Map<string, { title: string; description: string; icon?: string }>
+  >(new Map());
+  useEffect(() => {
+    if (!("source" in contentSourceResult)) {
+      return;
+    }
+    let cancelled = false;
+    readCachedDocuments().then((cached) => {
+      if (cancelled) {
+        return;
+      }
+      const map = new Map<
+        string,
+        { title: string; description: string; icon?: string }
+      >();
+      for (const record of cached) {
+        if (record.kind !== "topic") {
+          continue;
+        }
+        const bookId = contentIdOf(record.id);
+        const topic = (record.doc as BookDocument).topic as {
+          title?: unknown;
+          description?: unknown;
+          icon?: unknown;
+        };
+        map.set(bookId, {
+          title: typeof topic.title === "string" ? topic.title : bookId,
+          description:
+            typeof topic.description === "string" ? topic.description : "",
+          icon: typeof topic.icon === "string" ? topic.icon : undefined,
+        });
+      }
+      setCachedBookSummaries(map);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [contentSourceResult]);
+  // Archived Books (plan 0015): excluded from the built source, so their
+  // display info comes from the raw cache map above, keyed by the archived
+  // id list — a book whose doc went missing from cache simply doesn't
+  // appear (same "harmless" degrade as the rest of this file's cache reads).
+  const archivedBooks = useMemo(
+    () =>
+      readArchived().flatMap((id) => {
+        const summary = cachedBookSummaries.get(id);
+        return summary !== undefined ? [{ id, ...summary }] : [];
+      }),
+    [cachedBookSummaries],
+  );
+  // Every Book id currently in My Books, added or archived — including
+  // broken added Books, which `books` (listBooks(), validated) excludes.
+  // Drives the Library screen's Add/Added state.
+  const memberBookIds = useMemo(
+    () =>
+      new Set([
+        ...books.map((book) => book.id),
+        ...contentInit.broken.map((b) => b.bookId),
+        ...archivedBooks.map((book) => book.id),
+      ]),
+    [books, archivedBooks],
+  );
+  // Broken cards' titles, resolved from the same raw cache map (falls back
+  // to the bare id when the doc is missing entirely — the common case, since
+  // that's exactly what makes a Book broken via the "missing cached content"
+  // path).
+  const brokenBooks = useMemo(
+    () =>
+      contentInit.broken.map((b) => ({
+        ...b,
+        title: cachedBookSummaries.get(b.bookId)?.title ?? b.bookId,
+      })),
+    [cachedBookSummaries],
+  );
   const [attemptedTaskIds, setAttemptedTaskIds] = useState<Set<string>>(
     new Set(),
   );
@@ -694,15 +786,18 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           </div>
         )}
         <MyBooksScreen
-          domains={domains}
           books={books}
           bookProgress={bookProgress}
+          broken={brokenBooks}
+          archivedBooks={archivedBooks}
           onSelectBook={(bookId) => goToBook(bookId)}
-          onDomainVocabulary={(domainId) =>
-            setScreen({ screen: "vocab", domainId })
-          }
-          onDomainReview={(domainId) =>
-            setScreen({ screen: "review", domainId })
+          onArchive={contentInit.archiveBook}
+          onRestore={contentInit.restoreBook}
+          onRemove={contentInit.removeBook}
+          onLibrary={
+            getSupabase() !== null
+              ? () => setScreen({ screen: "library" })
+              : undefined
           }
           onAuthor={
             getSupabase() !== null
@@ -713,6 +808,18 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           onOpenSettings={() => setScreen({ screen: "settings" })}
         />
       </>
+    );
+  }
+
+  if (screen.screen === "library") {
+    const onBack = () => setScreen({ screen: "books" });
+    backActionRef.current = onBack;
+    return (
+      <LibraryScreen
+        addBook={contentInit.addBook}
+        memberBookIds={memberBookIds}
+        onBack={onBack}
+      />
     );
   }
 

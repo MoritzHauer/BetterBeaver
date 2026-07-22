@@ -57,21 +57,33 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as
   string | undefined;
 
-function catalogEndpoint(select: string, filter = ""): string {
-  return `${SUPABASE_URL}/rest/v1/catalog?select=${select}${filter}`;
+/**
+ * Anon-key PostgREST fetch against any exposed view/table — shared by
+ * `fetchCatalog` below and by `content/library.ts`'s Library browse (plan
+ * 0015 decision 2), rather than each duplicating the endpoint/headers.
+ */
+export async function fetchRest(
+  table: string,
+  select: string,
+  filter = "",
+): Promise<unknown> {
+  const response = await fetch(
+    `${SUPABASE_URL}/rest/v1/${table}?select=${select}${filter}`,
+    {
+      headers: {
+        apikey: SUPABASE_ANON_KEY ?? "",
+        Authorization: `Bearer ${SUPABASE_ANON_KEY ?? ""}`,
+      },
+    },
+  );
+  if (!response.ok) {
+    throw new Error(`${table} request failed: ${response.status}`);
+  }
+  return response.json();
 }
 
 async function fetchCatalog(select: string, filter = ""): Promise<unknown> {
-  const response = await fetch(catalogEndpoint(select, filter), {
-    headers: {
-      apikey: SUPABASE_ANON_KEY ?? "",
-      Authorization: `Bearer ${SUPABASE_ANON_KEY ?? ""}`,
-    },
-  });
-  if (!response.ok) {
-    throw new Error(`catalog request failed: ${response.status}`);
-  }
-  return response.json();
+  return fetchRest("catalog", select, filter);
 }
 
 /** A book document's declared domain id, read raw (before validation) — the same pattern `bundled.ts`/`documentSource.ts` use. */

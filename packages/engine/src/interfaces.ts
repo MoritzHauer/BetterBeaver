@@ -20,6 +20,8 @@ export interface BookSummary {
   description: string;
   /** The domain this book belongs to (plan 0006), for grouping the home screen. */
   domainId: string;
+  /** Library/My Books card icon (plan 0015 decision 6); absent means no icon, no default. */
+  icon?: string;
 }
 
 /** Summary of a domain, as listed before its full content is loaded (plan 0006). */
