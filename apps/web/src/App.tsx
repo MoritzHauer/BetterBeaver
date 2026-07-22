@@ -791,6 +791,8 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           broken={brokenBooks}
           archivedBooks={archivedBooks}
           onSelectBook={(bookId) => goToBook(bookId)}
+          onVocabulary={(domainId) => setScreen({ screen: "vocab", domainId })}
+          onReview={(domainId) => setScreen({ screen: "review", domainId })}
           onArchive={contentInit.archiveBook}
           onRestore={contentInit.restoreBook}
           onRemove={contentInit.removeBook}

@@ -3,11 +3,13 @@ import { ProgressBar } from "../components/ProgressBar";
 
 /**
  * Home screen (plan 0015): My Books — added Books only, flat (no domain
- * grouping; Vocabulary/Review live on each Book's own screen). Broken added
- * Books (failed validation, or missing cached documents) get a card here
- * too, offering Remove instead of study. Archived Books collapse into a
- * section at the bottom with Restore/Remove. The Library is the only way
- * in — reachable via the prominent entry card, hidden when unconfigured.
+ * grouping — the old per-domain header's Vocabulary/Review buttons move onto
+ * each card instead, since there's no header row left to hang them off of).
+ * Broken added Books (failed validation, or missing cached documents) get a
+ * card here too, offering Remove instead of study/Vocabulary/Review.
+ * Archived Books collapse into a section at the bottom with Restore/Remove.
+ * The Library is the only way in — reachable via the prominent entry card,
+ * hidden when unconfigured.
  */
 export function MyBooksScreen({
   books,
@@ -15,6 +17,8 @@ export function MyBooksScreen({
   broken,
   archivedBooks,
   onSelectBook,
+  onVocabulary,
+  onReview,
   onArchive,
   onRestore,
   onRemove,
@@ -38,6 +42,10 @@ export function MyBooksScreen({
     icon?: string;
   }[];
   onSelectBook: (bookId: string) => void;
+  /** Domain-scoped (plan 0006); reached per-card now that the front list is
+   * flat (no more domain-header row to hang these off of). */
+  onVocabulary: (domainId: string) => void;
+  onReview: (domainId: string) => void;
   onArchive: (bookId: string) => void;
   onRestore: (bookId: string) => void;
   onRemove: (bookId: string) => Promise<void>;
@@ -113,6 +121,20 @@ export function MyBooksScreen({
                   {progress.completed}/{progress.total}
                 </p>
               </button>
+              <div className="grade-buttons">
+                <button
+                  className="plain"
+                  onClick={() => onVocabulary(book.domainId)}
+                >
+                  Vocabulary
+                </button>
+                <button
+                  className="plain"
+                  onClick={() => onReview(book.domainId)}
+                >
+                  Review
+                </button>
+              </div>
               <details className="card-menu">
                 <summary aria-label="More actions">⋯</summary>
                 <div className="grade-buttons">
