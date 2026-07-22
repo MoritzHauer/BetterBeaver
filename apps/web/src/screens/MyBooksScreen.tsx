@@ -145,18 +145,28 @@ export function MyBooksScreen({
                   {progress.completed}/{progress.total}
                 </p>
               </button>
-              <div className="grade-buttons book-actions">
+              <div className="book-actions">
                 <button
-                  className="plain"
+                  type="button"
+                  className="plain icon-button"
                   onClick={() => onVocabulary(book.domainId)}
+                  aria-label="Vocabulary"
                 >
-                  Vocabulary
+                  <img
+                    src={`${import.meta.env.BASE_URL}art/icons/book_front.png`}
+                    alt=""
+                  />
                 </button>
                 <button
-                  className="plain"
+                  type="button"
+                  className="plain icon-button"
                   onClick={() => onReview(book.domainId)}
+                  aria-label="Review"
                 >
-                  Review
+                  <img
+                    src={`${import.meta.env.BASE_URL}art/icons/repeat.png`}
+                    alt=""
+                  />
                 </button>
               </div>
               <details className="card-menu">

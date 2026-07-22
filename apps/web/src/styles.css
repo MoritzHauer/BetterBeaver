@@ -185,6 +185,7 @@ button.plain {
 }
 
 .card {
+  position: relative; /* anchors .book-actions (and any corner chrome) */
   border: 1px solid var(--card-border);
   border-radius: 0.75rem;
   background: var(--card-bg);
@@ -317,11 +318,19 @@ section.card {
   padding: 0.75rem;
 }
 
-/* Per-card Vocabulary/Review shortcuts on My Books: compact orange chips.
+/* Per-card Vocabulary/Review shortcuts on My Books: orange icon chips
+ * pinned top-right of the card, level with the book title.
  * ponytail: below 44px tap height by explicit owner request. */
+.book-actions {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  display: flex;
+  gap: 0.5rem;
+}
+
 .book-actions button {
   min-height: 0;
-  padding: 0.3rem 0.75rem;
   background: var(--primary);
   color: var(--on-primary);
 }
@@ -497,7 +506,10 @@ input[type="text"] {
 .book-bg-icon {
   position: fixed;
   right: -2rem;
-  bottom: -2rem;
+  /* Clears the fixed footer .action-bar (Practice/Answer) — same 9rem the
+   * screens reserve as padding-bottom — else the bar's opaque background
+   * hides the icon. */
+  bottom: 9rem;
   width: 50vw;
   max-width: 320px;
   height: auto;
