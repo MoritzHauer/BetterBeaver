@@ -53,7 +53,7 @@ export function ChatThread({ docId }: { docId: string }) {
         <p className="status empty-state">
           <img
             className="empty-state-icon"
-            src={`${import.meta.env.BASE_URL}art/icons/icon_beaver_chatting.png`}
+            src={`${import.meta.env.BASE_URL}art/icons/beaver_chatting.png`}
             alt=""
           />
           No messages yet.

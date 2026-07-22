@@ -109,19 +109,44 @@ export function BookScreen({
     );
 
   return (
-    <main>
+    <main
+      className={content.topic.id === "kyrgyz" ? "book-bg-kyrgyz" : undefined}
+    >
+      {content.topic.id === "kyrgyz" && (
+        <img
+          className="book-bg-icon"
+          src={`${import.meta.env.BASE_URL}art/icons/kyrgyz.png`}
+          alt=""
+          aria-hidden="true"
+        />
+      )}
       <header className="screen-header">
         <button className="plain" onClick={onBack}>
-          &larr; Books
+          <img
+            className="icon-glyph"
+            src={`${import.meta.env.BASE_URL}art/icons/arrow_W.png`}
+            alt=""
+          />{" "}
+          Books
         </button>
         {onEdit !== undefined && (
           <button className="plain" onClick={onEdit}>
-            ✎ Edit
+            <img
+              className="icon-glyph"
+              src={`${import.meta.env.BASE_URL}art/icons/edit.png`}
+              alt=""
+            />{" "}
+            Edit
           </button>
         )}
         {streak !== null && streak.length > 0 ? (
           <span className="streak" title="Day streak">
-            &#128293; {streak.length}
+            <img
+              className="icon-glyph"
+              src={`${import.meta.env.BASE_URL}art/icons/fire.png`}
+              alt=""
+            />{" "}
+            {streak.length}
           </span>
         ) : null}
       </header>
@@ -167,7 +192,7 @@ export function BookScreen({
           <button onClick={onVocabulary}>
             <img
               className="topic-glyph"
-              src={`${import.meta.env.BASE_URL}art/icons/icon_book_front.png`}
+              src={`${import.meta.env.BASE_URL}art/icons/book_front.png`}
               alt=""
             />
             <strong>Vocabulary</strong>

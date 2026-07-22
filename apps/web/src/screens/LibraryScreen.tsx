@@ -54,7 +54,12 @@ export function LibraryScreen({
     <main>
       <header className="screen-header">
         <button className="plain" onClick={onBack}>
-          &larr; My Books
+          <img
+            className="icon-glyph"
+            src={`${import.meta.env.BASE_URL}art/icons/arrow_W.png`}
+            alt=""
+          />{" "}
+          My Books
         </button>
         <h1>Library</h1>
       </header>
@@ -89,7 +94,18 @@ export function LibraryScreen({
                   <p>{book.description}</p>
                   {showRating && (
                     <p className="status">
-                      👍 {book.upvotes} · 👎 {book.downvotes}
+                      <img
+                        className="icon-glyph"
+                        src={`${import.meta.env.BASE_URL}art/icons/thumbs_up.png`}
+                        alt=""
+                      />{" "}
+                      {book.upvotes} ·{" "}
+                      <img
+                        className="icon-glyph"
+                        src={`${import.meta.env.BASE_URL}art/icons/thumbs_down.png`}
+                        alt=""
+                      />{" "}
+                      {book.downvotes}
                     </p>
                   )}
                   {addError !== undefined && (

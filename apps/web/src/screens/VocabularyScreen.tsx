@@ -465,7 +465,12 @@ export function VocabularyScreen({
     <main>
       <header className="screen-header">
         <button className="plain" onClick={onBack}>
-          &larr; Books
+          <img
+            className="icon-glyph"
+            src={`${import.meta.env.BASE_URL}art/icons/arrow_W.png`}
+            alt=""
+          />{" "}
+          Books
         </button>
       </header>
       <h1>Vocabulary &mdash; {domainContent.domain.title}</h1>

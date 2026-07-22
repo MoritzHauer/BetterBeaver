@@ -64,7 +64,7 @@ export function FeedbackWidget({
             onClick={() => void handleVote(1)}
           >
             <img
-              src={`${import.meta.env.BASE_URL}art/icons/icon_thumbs_up.png`}
+              src={`${import.meta.env.BASE_URL}art/icons/thumbs_up.png`}
               alt=""
             />
           </button>
@@ -78,7 +78,7 @@ export function FeedbackWidget({
             onClick={() => void handleVote(-1)}
           >
             <img
-              src={`${import.meta.env.BASE_URL}art/icons/icon_thumbs_down.png`}
+              src={`${import.meta.env.BASE_URL}art/icons/thumbs_down.png`}
               alt=""
             />
           </button>
@@ -90,7 +90,7 @@ export function FeedbackWidget({
         aria-label="Report"
         onClick={() => setReportOpen(true)}
       >
-        🚩
+        <img src={`${import.meta.env.BASE_URL}art/icons/flag.png`} alt="" />
       </button>
       {reportOpen && (
         <ReportPopup

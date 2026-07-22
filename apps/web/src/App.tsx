@@ -267,12 +267,19 @@ function ReviewSession({
         <p className="empty-state">
           <img
             className="empty-state-icon"
-            src={`${import.meta.env.BASE_URL}art/icons/icon_beaver_sleeping_floating.png`}
+            src={`${import.meta.env.BASE_URL}art/icons/beaver_sleeping_floating.png`}
             alt=""
           />
           Nothing due right now.
         </p>
-        <button onClick={onDone}>&larr; Back</button>
+        <button onClick={onDone}>
+          <img
+            className="icon-glyph"
+            src={`${import.meta.env.BASE_URL}art/icons/arrow_W.png`}
+            alt=""
+          />{" "}
+          Back
+        </button>
       </main>
     );
   }

@@ -859,7 +859,7 @@ function SummaryPanel({
     <section>
       <img
         className="summary-icon"
-        src={`${import.meta.env.BASE_URL}art/icons/icon_thumbs_${passed ? "up" : "down"}_beaver.png`}
+        src={`${import.meta.env.BASE_URL}art/icons/thumbs_${passed ? "up" : "down"}_beaver.png`}
         alt=""
       />
       <h2>Session complete!</h2>
@@ -893,7 +893,12 @@ function SummaryPanel({
         {streak !== null ? (
           <div className="stat-tile">
             <span className={`stat-value${extendedToday ? " flame-tick" : ""}`}>
-              &#128293; {streak.length}
+              <img
+                className="icon-glyph"
+                src={`${import.meta.env.BASE_URL}art/icons/fire.png`}
+                alt=""
+              />{" "}
+              {streak.length}
             </span>
             <span className="status">Day streak</span>
           </div>
@@ -1091,7 +1096,12 @@ export function SessionScreen({
             className="plain"
             onClick={() => onTogglePin?.(currentTaskId)}
           >
-            {pinnedTaskIds?.has(currentTaskId) ? "📌 Pinned" : "📌 Pin"}
+            <img
+              className="icon-glyph"
+              src={`${import.meta.env.BASE_URL}art/icons/pin.png`}
+              alt=""
+            />{" "}
+            {pinnedTaskIds?.has(currentTaskId) ? "Pinned" : "Pin"}
           </button>
         ) : null}
         {currentTaskId !== undefined ? (

@@ -32,7 +32,14 @@ export function LessonScreen({
   if (lesson === undefined) {
     return (
       <main>
-        <button onClick={onBack}>&larr; Back</button>
+        <button onClick={onBack}>
+          <img
+            className="icon-glyph"
+            src={`${import.meta.env.BASE_URL}art/icons/arrow_W.png`}
+            alt=""
+          />{" "}
+          Back
+        </button>
         <p>Unknown lesson: {lessonId}</p>
       </main>
     );
@@ -50,11 +57,21 @@ export function LessonScreen({
     <main>
       <header className="screen-header">
         <button className="plain" onClick={onBack}>
-          &larr; {content.topic.title}
+          <img
+            className="icon-glyph"
+            src={`${import.meta.env.BASE_URL}art/icons/arrow_W.png`}
+            alt=""
+          />{" "}
+          {content.topic.title}
         </button>
         {onEdit !== undefined && (
           <button className="plain" onClick={onEdit}>
-            ✎ Edit
+            <img
+              className="icon-glyph"
+              src={`${import.meta.env.BASE_URL}art/icons/edit.png`}
+              alt=""
+            />{" "}
+            Edit
           </button>
         )}
       </header>

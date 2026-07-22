@@ -190,6 +190,29 @@ button.plain {
   background: var(--card-bg);
 }
 
+/* One-off decorative watermark, tried on the Kyrgyz book only (ponytail:
+ * per-book id check, not a schema field - promote to a general Book field
+ * if more books want this). z-index:0 on the card gives it its own stacking
+ * context so the icon's z-index:-1 stays behind the card's own content
+ * instead of escaping to sibling cards. */
+.card-bg-kyrgyz {
+  position: relative;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.card-bg-icon {
+  position: absolute;
+  right: -0.5rem;
+  bottom: -0.5rem;
+  width: 45%;
+  max-width: 140px;
+  height: auto;
+  opacity: 0.16;
+  z-index: -1;
+  pointer-events: none;
+}
+
 /* Direct child only: a whole-card tap target for card LIST ROWS. Buttons
  * nested deeper in a card (e.g. a task card's Practice button) — and
  * classed action buttons inside card panels (publish, sign-in; ui-review
@@ -455,6 +478,25 @@ input[type="text"] {
   background: var(--card-bg);
 }
 
+/* Same one-off watermark idea as .card-bg-kyrgyz, but pinned to the
+ * viewport (not the page) so it stays put while the book's page scrolls. */
+.book-bg-kyrgyz {
+  position: relative;
+  z-index: 0;
+}
+
+.book-bg-icon {
+  position: fixed;
+  right: -2rem;
+  bottom: -2rem;
+  width: 50vw;
+  max-width: 320px;
+  height: auto;
+  opacity: 0.08;
+  z-index: -1;
+  pointer-events: none;
+}
+
 /* Topic / unit / summary chrome (plan 0003 step 4). */
 .screen-header {
   display: flex;
@@ -500,6 +542,16 @@ img.topic-glyph {
   width: 1.5rem;
   height: 1.5rem;
   object-fit: contain;
+}
+
+/* Inline replacement for emoji used as icons in text flow (back arrows,
+ * edit pencils, eyebrow/badge glyphs) - sized relative to the surrounding
+ * text so it drops into any context without per-usage tuning. */
+.icon-glyph {
+  width: 1.1em;
+  height: 1.1em;
+  object-fit: contain;
+  vertical-align: -0.2em;
 }
 
 .empty-state {
@@ -1036,6 +1088,12 @@ button.danger {
   font-size: 1.4rem;
   line-height: 1;
   padding: 0.3rem 0.4rem;
+}
+
+.icon-button img {
+  width: 1.4rem;
+  height: 1.4rem;
+  object-fit: contain;
 }
 
 /* Settings/Stats layout helpers (reuse the card idiom for grouped rows). */

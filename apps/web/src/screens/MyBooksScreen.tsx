@@ -80,7 +80,10 @@ export function MyBooksScreen({
             onClick={onOpenStats}
             aria-label="Stats"
           >
-            📊
+            <img
+              src={`${import.meta.env.BASE_URL}art/icons/chart.png`}
+              alt=""
+            />
           </button>
           <button
             type="button"
@@ -88,7 +91,10 @@ export function MyBooksScreen({
             onClick={onOpenSettings}
             aria-label="Settings"
           >
-            ⚙️
+            <img
+              src={`${import.meta.env.BASE_URL}art/icons/config.png`}
+              alt=""
+            />
           </button>
         </div>
       </header>
@@ -96,7 +102,14 @@ export function MyBooksScreen({
         {onLibrary !== undefined && (
           <li className="card primary">
             <button onClick={onLibrary}>
-              <strong>📚 Library</strong>
+              <strong>
+                <img
+                  className="icon-glyph"
+                  src={`${import.meta.env.BASE_URL}art/icons/book_front.png`}
+                  alt=""
+                />{" "}
+                Library
+              </strong>
               <p className="status">Browse and add Books</p>
             </button>
           </li>
@@ -107,7 +120,18 @@ export function MyBooksScreen({
             total: 0,
           };
           return (
-            <li key={book.id} className="card">
+            <li
+              key={book.id}
+              className={book.id === "kyrgyz" ? "card card-bg-kyrgyz" : "card"}
+            >
+              {book.id === "kyrgyz" && (
+                <img
+                  className="card-bg-icon"
+                  src={`${import.meta.env.BASE_URL}art/icons/kyrgyz.png`}
+                  alt=""
+                  aria-hidden="true"
+                />
+              )}
               <button onClick={() => onSelectBook(book.id)}>
                 {book.icon !== undefined && (
                   <span className="topic-glyph" aria-hidden="true">
@@ -222,7 +246,12 @@ export function MyBooksScreen({
       {onAuthor !== undefined && (
         <p className="author-entry">
           <button className="plain" onClick={onAuthor}>
-            ✏️ Edit content
+            <img
+              className="icon-glyph"
+              src={`${import.meta.env.BASE_URL}art/icons/edit.png`}
+              alt=""
+            />{" "}
+            Edit content
           </button>
         </p>
       )}

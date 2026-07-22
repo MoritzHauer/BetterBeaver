@@ -4,7 +4,11 @@ export function PrivacyScreen({ onBack }: { onBack: () => void }) {
     <main>
       <header className="screen-header">
         <button className="plain" onClick={onBack}>
-          ←
+          <img
+            className="icon-glyph"
+            src={`${import.meta.env.BASE_URL}art/icons/arrow_W.png`}
+            alt="Back"
+          />
         </button>
         <h1>Privacy</h1>
       </header>

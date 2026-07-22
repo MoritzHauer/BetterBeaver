@@ -55,7 +55,12 @@ export function AuthorScreen({
     <main>
       <header className="screen-header">
         <button className="plain" onClick={onBack}>
-          ← Home
+          <img
+            className="icon-glyph"
+            src={`${import.meta.env.BASE_URL}art/icons/arrow_W.png`}
+            alt=""
+          />{" "}
+          Home
         </button>
         <h1>Authoring</h1>
       </header>

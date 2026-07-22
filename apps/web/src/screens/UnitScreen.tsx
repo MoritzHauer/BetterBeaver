@@ -167,7 +167,12 @@ function NoteCard({
       {/* ponytail: pin is one-way — unpinning means removing SRS state,
           add when someone actually asks for it */}
       <button className="plain" disabled={pinned} onClick={onPin}>
-        {pinned ? "📌 Pinned for review" : "📌 Pin for review"}
+        <img
+          className="icon-glyph"
+          src={`${import.meta.env.BASE_URL}art/icons/pin.png`}
+          alt=""
+        />{" "}
+        {pinned ? "Pinned for review" : "Pin for review"}
       </button>
       <FeedbackWidget docId={bookDocId} contentKind="note" contentId={noteId} />
     </section>
@@ -329,7 +334,14 @@ export function UnitScreen({
   if (unit === undefined) {
     return (
       <main>
-        <button onClick={onBack}>&larr; Back</button>
+        <button onClick={onBack}>
+          <img
+            className="icon-glyph"
+            src={`${import.meta.env.BASE_URL}art/icons/arrow_W.png`}
+            alt=""
+          />{" "}
+          Back
+        </button>
         <p>Unknown unit: {unitId}</p>
       </main>
     );
@@ -351,7 +363,11 @@ export function UnitScreen({
     >
       <header className="screen-header">
         <button className="plain exit" aria-label="Back" onClick={onBack}>
-          &larr;
+          <img
+            className="icon-glyph"
+            src={`${import.meta.env.BASE_URL}art/icons/arrow_W.png`}
+            alt=""
+          />
         </button>
         <div className="trail">
           {pages.map((pageKind, index) => (
@@ -376,7 +392,11 @@ export function UnitScreen({
               )
             }
           >
-            ✎
+            <img
+              className="icon-glyph"
+              src={`${import.meta.env.BASE_URL}art/icons/edit.png`}
+              alt=""
+            />
           </button>
         )}
       </header>
@@ -396,7 +416,12 @@ export function UnitScreen({
       {currentPage === "theory" ? (
         <>
           <p className="eyebrow">
-            <span aria-hidden="true">📘</span> Theory
+            <img
+              className="icon-glyph"
+              src={`${import.meta.env.BASE_URL}art/icons/book_front.png`}
+              alt=""
+            />{" "}
+            Theory
           </p>
           {/* All of a unit's notes share one trail dot — stacked here
               rather than paginated into subscreens. */}
@@ -420,7 +445,12 @@ export function UnitScreen({
       {currentPage === "vocabulary" ? (
         <>
           <p className="eyebrow">
-            <span aria-hidden="true">🔤</span> Vocabulary
+            <img
+              className="icon-glyph"
+              src={`${import.meta.env.BASE_URL}art/icons/letters.png`}
+              alt=""
+            />{" "}
+            Vocabulary
           </p>
           <table className="vocab-table">
             <thead>
@@ -470,7 +500,12 @@ export function UnitScreen({
       {currentPage === "concepts" ? (
         <>
           <p className="eyebrow">
-            <span aria-hidden="true">💡</span> Concepts
+            <img
+              className="icon-glyph"
+              src={`${import.meta.env.BASE_URL}art/icons/lightbulb.png`}
+              alt=""
+            />{" "}
+            Concepts
           </p>
           {conceptChunks.length > 1 ? (
             <SubPager
@@ -513,7 +548,12 @@ export function UnitScreen({
       {currentPage === "examples" ? (
         <>
           <p className="eyebrow">
-            <span aria-hidden="true">✍️</span> Examples
+            <img
+              className="icon-glyph"
+              src={`${import.meta.env.BASE_URL}art/icons/beaver_pencil.png`}
+              alt=""
+            />{" "}
+            Examples
           </p>
           {exampleChunks.length > 1 ? (
             <SubPager

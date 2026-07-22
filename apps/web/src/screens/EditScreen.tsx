@@ -269,12 +269,20 @@ function RowActions({
     <span className="editor-row-actions">
       {onUp !== undefined && (
         <button className="plain" aria-label="Move up" onClick={onUp}>
-          ↑
+          <img
+            className="icon-glyph"
+            src={`${import.meta.env.BASE_URL}art/icons/arrow_N.png`}
+            alt=""
+          />
         </button>
       )}
       {onDown !== undefined && (
         <button className="plain" aria-label="Move down" onClick={onDown}>
-          ↓
+          <img
+            className="icon-glyph"
+            src={`${import.meta.env.BASE_URL}art/icons/arrow_S.png`}
+            alt=""
+          />
         </button>
       )}
       {onOpen !== undefined && (
@@ -540,7 +548,11 @@ export function EditScreen({
     <main className={readOnly ? "editor read-only" : "editor"}>
       <header className="screen-header">
         <button className="plain" onClick={onBack} title="Back to learning">
-          ←
+          <img
+            className="icon-glyph"
+            src={`${import.meta.env.BASE_URL}art/icons/arrow_W.png`}
+            alt="Back to learning"
+          />
         </button>
         {view.v !== "root" && (
           <button
@@ -548,7 +560,11 @@ export function EditScreen({
             onClick={() => setView(upView(view))}
             title="Up one level"
           >
-            ↑
+            <img
+              className="icon-glyph"
+              src={`${import.meta.env.BASE_URL}art/icons/arrow_N.png`}
+              alt="Up one level"
+            />
           </button>
         )}
         <h1>{docId}</h1>

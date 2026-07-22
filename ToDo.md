@@ -23,4 +23,4 @@ icons
 - Tail slap — beaver slapping its tail on water (alarm-call fun fact, unused today but a natural fit for a warning/error state)
 - Swimming beaver — webbed hind feet, nose above water (good for a "listening/underwater" task icon)
 - Beaver + blueprint — a beaver with a pencil/quill over plans (fits the new "Make it your own" authoring unit)
-- Sleeping in lodge (interior view) — you have icon_beaver_sleeping_floating, but a cozy in-lodge version would round out the den family
+- Sleeping in lodge (interior view) — you have beaver_sleeping_floating, but a cozy in-lodge version would round out the den family

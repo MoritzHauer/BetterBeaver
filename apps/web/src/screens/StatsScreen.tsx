@@ -66,7 +66,11 @@ export function StatsScreen({
       <main>
         <header className="screen-header">
           <button className="plain" onClick={onBack}>
-            ←
+            <img
+              className="icon-glyph"
+              src={`${import.meta.env.BASE_URL}art/icons/arrow_W.png`}
+              alt="Back"
+            />
           </button>
           <h1>Stats</h1>
         </header>
@@ -79,7 +83,11 @@ export function StatsScreen({
     <main>
       <header className="screen-header">
         <button className="plain" onClick={onBack}>
-          ←
+          <img
+            className="icon-glyph"
+            src={`${import.meta.env.BASE_URL}art/icons/arrow_W.png`}
+            alt="Back"
+          />
         </button>
         <h1>Stats</h1>
       </header>
@@ -90,7 +98,12 @@ export function StatsScreen({
           <p>No active streak</p>
         ) : (
           <p>
-            <span aria-hidden="true">🔥</span> {stats.streak}-day streak
+            <img
+              className="icon-glyph"
+              src={`${import.meta.env.BASE_URL}art/icons/fire.png`}
+              alt=""
+            />{" "}
+            {stats.streak}-day streak
           </p>
         )}
         {stats.domainStreaks.length > 1 && (
@@ -99,7 +112,12 @@ export function StatsScreen({
               <li key={ds.domainId}>
                 {domains.find((d) => d.id === ds.domainId)?.title ??
                   ds.domainId}{" "}
-                <span aria-hidden="true">🔥</span> {ds.length}
+                <img
+                  className="icon-glyph"
+                  src={`${import.meta.env.BASE_URL}art/icons/fire.png`}
+                  alt=""
+                />{" "}
+                {ds.length}
               </li>
             ))}
           </ul>
@@ -113,14 +131,28 @@ export function StatsScreen({
             <span aria-hidden="true">🎯</span> {stats.reps} answers given
           </li>
           <li>
-            <span aria-hidden="true">✅</span> {stats.tasks} tasks completed
+            <img
+              className="icon-glyph"
+              src={`${import.meta.env.BASE_URL}art/icons/checkmark.png`}
+              alt=""
+            />{" "}
+            {stats.tasks} tasks completed
           </li>
           <li>
-            <span aria-hidden="true">🔁</span> {stats.itemsInReview} items in
-            review
+            <img
+              className="icon-glyph"
+              src={`${import.meta.env.BASE_URL}art/icons/repeat.png`}
+              alt=""
+            />{" "}
+            {stats.itemsInReview} items in review
           </li>
           <li>
-            <span aria-hidden="true">📚</span> {stats.wordsSaved} words saved
+            <img
+              className="icon-glyph"
+              src={`${import.meta.env.BASE_URL}art/icons/book_front.png`}
+              alt=""
+            />{" "}
+            {stats.wordsSaved} words saved
           </li>
         </ul>
       </section>
@@ -133,8 +165,12 @@ export function StatsScreen({
             <li>{creator.booksMaintained} books maintained</li>
             <li>{creator.listed} listed</li>
             <li>
-              <span aria-hidden="true">🚀</span> {creator.versionsPublished}{" "}
-              versions published
+              <img
+                className="icon-glyph"
+                src={`${import.meta.env.BASE_URL}art/icons/rocket.png`}
+                alt=""
+              />{" "}
+              {creator.versionsPublished} versions published
             </li>
           </ul>
         </section>
@@ -143,14 +179,43 @@ export function StatsScreen({
       <section className="card">
         <h2>Badges</h2>
         <ul>
-          <li>{stats.streak >= 7 ? "✓" : "–"} 🔥 Week streak</li>
+          <li>
+            {stats.streak >= 7 ? "✓" : "–"}{" "}
+            <img
+              className="icon-glyph"
+              src={`${import.meta.env.BASE_URL}art/icons/fire.png`}
+              alt=""
+            />{" "}
+            Week streak
+          </li>
           <li>{stats.reps >= 100 ? "✓" : "–"} 🎯 Century</li>
-          <li>{stats.wordsSaved >= 10 ? "✓" : "–"} 📚 Wordsmith</li>
-          <li>{stats.tasks >= 10 ? "✓" : "–"} ✅ Getting started</li>
+          <li>
+            {stats.wordsSaved >= 10 ? "✓" : "–"}{" "}
+            <img
+              className="icon-glyph"
+              src={`${import.meta.env.BASE_URL}art/icons/book_front.png`}
+              alt=""
+            />{" "}
+            Wordsmith
+          </li>
+          <li>
+            {stats.tasks >= 10 ? "✓" : "–"}{" "}
+            <img
+              className="icon-glyph"
+              src={`${import.meta.env.BASE_URL}art/icons/checkmark.png`}
+              alt=""
+            />{" "}
+            Getting started
+          </li>
           {creator !== null && (
             <li>
               {creator.docs.some((d) => d.published_version >= 1) ? "✓" : "–"}{" "}
-              ✍ First book published
+              <img
+                className="icon-glyph"
+                src={`${import.meta.env.BASE_URL}art/icons/beaver_pencil.png`}
+                alt=""
+              />{" "}
+              First book published
             </li>
           )}
         </ul>

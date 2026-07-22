@@ -211,7 +211,18 @@ export function EntryPopup({
               disabled={saved}
               onClick={() => void handleSave()}
             >
-              {saved ? "Saved" : "★ Save"}
+              {saved ? (
+                "Saved"
+              ) : (
+                <>
+                  <img
+                    className="icon-glyph"
+                    src={`${import.meta.env.BASE_URL}art/icons/star.png`}
+                    alt=""
+                  />{" "}
+                  Save
+                </>
+              )}
             </button>
           </>
         )}
