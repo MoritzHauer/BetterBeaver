@@ -399,6 +399,15 @@ export function validateContent(
         `${unit.id}: dangling unlocksAfterUnitId reference "${unit.unlocksAfterUnitId}"`,
       );
     }
+    for (const id of unit.recallUnitIds ?? []) {
+      if (id === unit.id) {
+        errors.push(
+          `${unit.id}: recallUnitIds must not reference itself "${id}"`,
+        );
+      } else if (!unitById.has(id)) {
+        errors.push(`${unit.id}: dangling recallUnitIds reference "${id}"`);
+      }
+    }
   }
   for (const item of items) {
     if (!resourceById.has(item.sourceRef)) {

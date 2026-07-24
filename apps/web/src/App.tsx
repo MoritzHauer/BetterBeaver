@@ -17,6 +17,7 @@ import type {
 import type { AdhocMode } from "@betterbeaver/engine";
 import {
   buildAdhocSession,
+  buildRecallSession,
   buildReviewSession,
   buildTaskSession,
   buildUnitSession,
@@ -77,6 +78,15 @@ type Screen =
       bookId: string;
       lessonId: string;
       unitId: string;
+    }
+  // Cross-unit recall session (plan 0016): practice-only over a sample of
+  // the LINKED unit's tasks; onDone returns to the LINKING unit's Overview.
+  | {
+      screen: "recall-session";
+      bookId: string;
+      lessonId: string;
+      unitId: string; // the linking unit, for onDone back-nav
+      recallUnitId: string; // the linked unit whose tasks are sampled
     }
   // Review, Vocabulary, and ad-hoc study are domain-scoped (plan 0006): the
   // review queue, lists, and streak all key on the domain now, not the book.
@@ -193,6 +203,48 @@ function UnitSession({
       onTogglePin={onTogglePin}
       onGrade={handleGrade}
       onTaskAnswered={(taskId) => void progressStore.markTaskAttempted(taskId)}
+      onFinished={onDone}
+      onExit={onDone}
+      loadStreak={() => progressStore.getStreak(domainId)}
+    />
+  );
+}
+
+/** Wires the engine's practice-only cross-unit recall session (plan 0016) to
+ * `SessionScreen`: a random sample of up to 5 of the LINKED unit's tasks.
+ * Grading routes through the same `recordGrade` (due-gated, so a completed
+ * unit isn't rescheduled); no `markTaskAttempted` — the linking unit's
+ * completion must stay derived from its own taskIds, not this session. */
+function RecallSession({
+  content,
+  linkedUnit,
+  lookup,
+  onDone,
+}: {
+  content: Content;
+  linkedUnit: Unit;
+  lookup: TapLookup;
+  onDone: () => void;
+}) {
+  const domainId = content.topic.domainId;
+  const pairs = useMemo(
+    () => buildRecallSession(linkedUnit, content, Math.random),
+    // Keyed by linkedUnit.id only, same reshuffle-guard as UnitSession.
+    [linkedUnit.id],
+  );
+  const questions = useMemo(() => pairs.map((pair) => pair.question), [pairs]);
+
+  async function handleGrade(unitId: string, quality: Quality) {
+    await recordGrade(progressStore, unitId, quality, new Date(), domainId);
+  }
+
+  return (
+    <SessionScreen
+      title={`Remember: ${linkedUnit.title}`}
+      questions={questions}
+      bookId={content.topic.id}
+      lookup={lookup}
+      onGrade={handleGrade}
       onFinished={onDone}
       onExit={onDone}
       loadStreak={() => progressStore.getStreak(domainId)}
@@ -649,7 +701,8 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
       screen.screen === "lesson" ||
       screen.screen === "unit" ||
       screen.screen === "task" ||
-      screen.screen === "unit-session";
+      screen.screen === "unit-session" ||
+      screen.screen === "recall-session";
     const contentPromise = isBookFamilyScreen
       ? contentSourceResult.source.loadBook(screen.bookId)
       : undefined;
@@ -853,7 +906,8 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     screen.screen === "lesson" ||
     screen.screen === "unit" ||
     screen.screen === "task" ||
-    screen.screen === "unit-session"
+    screen.screen === "unit-session" ||
+    screen.screen === "recall-session"
   ) {
     // domainContent is gated here too (not just content): unit notes and
     // task-session post-answer reveals need the domain's merged entry pool
@@ -968,6 +1022,15 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
               unitId: screen.unitId,
             })
           }
+          onRecall={(recallUnitId) =>
+            setScreen({
+              screen: "recall-session",
+              bookId: screen.bookId,
+              lessonId: screen.lessonId,
+              unitId: screen.unitId,
+              recallUnitId,
+            })
+          }
           onPinNote={(noteId) => {
             // Pinning = the note's first grade ("again" → due right away),
             // which is what enters it into the review queue.
@@ -1033,6 +1096,35 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
             togglePinnedTask(content.topic.domainId, taskId);
             setPinEpoch((epoch) => epoch + 1);
           }}
+          onDone={onDone}
+        />
+      );
+    }
+
+    if (screen.screen === "recall-session") {
+      const linkedUnit = content.units.find(
+        (u) => u.id === screen.recallUnitId,
+      );
+      if (linkedUnit === undefined) {
+        return (
+          <main>
+            <p>Unknown unit: {screen.recallUnitId}</p>
+          </main>
+        );
+      }
+      const onDone = () =>
+        setScreen({
+          screen: "unit",
+          bookId: screen.bookId,
+          lessonId: screen.lessonId,
+          unitId: screen.unitId,
+        });
+      backActionRef.current = onDone;
+      return (
+        <RecallSession
+          content={content}
+          linkedUnit={linkedUnit}
+          lookup={lookup}
           onDone={onDone}
         />
       );

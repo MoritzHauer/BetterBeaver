@@ -149,6 +149,7 @@ function makeFixture() {
     taskIds: string[];
     noteIds: string[];
     unlocksAfterUnitId?: string;
+    recallUnitIds?: string[];
   } = {
     id: "ky-unit-1",
     lessonId: "ky-lesson-1",
@@ -449,6 +450,24 @@ describe("validateContent", () => {
     const errors = expectErrors(validateContent(input));
 
     expect(errors.some((e) => e.includes("ky-unit-1"))).toBe(true);
+  });
+
+  it("(l) reports a unit whose recallUnitIds contains its own id", () => {
+    const { input, unit } = makeFixture();
+    unit.recallUnitIds = [unit.id];
+
+    const errors = expectErrors(validateContent(input));
+
+    expect(errors.some((e) => e.includes("ky-unit-1"))).toBe(true);
+  });
+
+  it("(l) reports a unit whose recallUnitIds contains a dangling reference", () => {
+    const { input, unit } = makeFixture();
+    unit.recallUnitIds = ["ky-unit-missing"];
+
+    const errors = expectErrors(validateContent(input));
+
+    expect(errors.some((e) => e.includes("ky-unit-missing"))).toBe(true);
   });
 
   it("(l) reports a 2-unit unlocksAfterUnitId cycle", () => {

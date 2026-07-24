@@ -45,6 +45,8 @@
   --primary: #e08820;
   --primary-pressed: #c27314;
   --on-primary: #241503;
+  --recall: #6a4c93;
+  --on-recall: #ffffff;
   --accent: #9c5c06;
   --correct-border: #2e7d32;
   --correct-bg: rgba(46, 125, 50, 0.12);
@@ -79,6 +81,8 @@
   --primary: #e08820;
   --primary-pressed: #f39c3a;
   --on-primary: #241503;
+  --recall: #b39ddb;
+  --on-recall: #241503;
   --accent: #f0a24a;
   --correct-border: #4caf50;
   --correct-bg: rgba(76, 175, 80, 0.15);
@@ -312,6 +316,18 @@ section.card {
 .card.incorrect {
   border-color: var(--incorrect-border);
   background: var(--incorrect-bg);
+}
+
+/* Cross-unit "Remember: …" recall card — a filled, tappable button styled as
+ * a card, distinct from --primary (Practice) and correct/incorrect (plan 0016). */
+.card.recall {
+  display: block;
+  width: 100%;
+  margin-top: 0.75rem;
+  text-align: left;
+  background: var(--recall);
+  border-color: var(--recall);
+  color: var(--on-recall);
 }
 
 .grade-buttons {

@@ -643,3 +643,29 @@ export function buildReviewSession(
     return recallQuestion(unit.item);
   });
 }
+
+/** Cap on how many of the linked unit's tasks a recall session samples (plan 0016). */
+const RECALL_SESSION_MAX_TASKS = 5;
+
+/**
+ * Builds a practice-only "Remember: …" recall session (plan 0016) over a
+ * random sample of up to `RECALL_SESSION_MAX_TASKS` of `linkedUnit`'s own
+ * tasks — reusing `buildUnitSession` unchanged (it reads only `unit.taskIds`
+ * plus `content`), so the per-task question shape is identical to practicing
+ * the linked unit directly. No content is authored for the link itself.
+ */
+export function buildRecallSession(
+  linkedUnit: Unit,
+  content: Content,
+  rng: Rng,
+): { question: Question; taskId: string }[] {
+  const sampledTaskIds = shuffle(linkedUnit.taskIds, rng).slice(
+    0,
+    RECALL_SESSION_MAX_TASKS,
+  );
+  return buildUnitSession(
+    { ...linkedUnit, taskIds: sampledTaskIds },
+    content,
+    rng,
+  );
+}

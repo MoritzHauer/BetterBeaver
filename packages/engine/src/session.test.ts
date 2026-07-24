@@ -4,6 +4,8 @@ import {
   buildTaskSession,
   buildReviewSession,
   buildUnitSession,
+  buildRecallSession,
+  shuffle,
   checkScrambleAnswer,
   checkMatchingPair,
   matchingOutcomes,
@@ -1218,5 +1220,82 @@ describe("countUnitQuestions", () => {
         queueRng([0.9, 0.1, 0.5, 0.9, 0.1, 0.5, 0, 0]),
       ).length,
     );
+  });
+});
+
+describe("buildRecallSession", () => {
+  // Seven single-item recall tasks over seven lexeme items, pooled into one
+  // unit — more than RECALL_SESSION_MAX_TASKS (5), so sampling is exercised.
+  const recallItems: Item[] = Array.from({ length: 7 }, (_, i) => ({
+    id: `t-item-recall-${i + 1}`,
+    kind: "lexeme",
+    payload: {
+      script: `Script ${i + 1}`,
+      transliteration: `Translit ${i + 1}`,
+      gloss: `Gloss ${i + 1}`,
+    },
+    sourceRef: "t-resource-1",
+  }));
+  const recallTasks: Task[] = recallItems.map((item, i) => ({
+    id: `t-task-recall-${i + 1}`,
+    type: "recall",
+    itemIds: [item.id],
+  }));
+  const bigRecallUnit: Unit = {
+    id: "t-unit-recall-big",
+    lessonId: "t-topic",
+    title: "Big recall unit",
+    goal: "Goal",
+    itemIds: recallItems.map((item) => item.id),
+    taskIds: recallTasks.map((task) => task.id),
+    noteIds: [],
+  };
+  const bigRecallContent: Content = {
+    topic: {
+      id: "t-topic",
+      code: "t",
+      domainId: "t",
+      title: "Book",
+      description: "",
+      lessonIds: [bigRecallUnit.id],
+    },
+    lessons: [],
+    units: [bigRecallUnit],
+    items: recallItems,
+    tasks: recallTasks,
+    resources: [],
+    notes: [],
+  };
+
+  it("samples exactly RECALL_SESSION_MAX_TASKS (5) distinct tasks when the linked unit has more than 5", () => {
+    const pairs = buildRecallSession(bigRecallUnit, bigRecallContent, () => 0);
+    const distinctTaskIds = new Set(pairs.map((pair) => pair.taskId));
+    expect(distinctTaskIds.size).toBe(5);
+  });
+
+  it("includes every task when the linked unit has fewer than 5", () => {
+    const smallUnit: Unit = {
+      ...bigRecallUnit,
+      id: "t-unit-recall-small",
+      taskIds: recallTasks.slice(0, 3).map((task) => task.id),
+    };
+    const pairs = buildRecallSession(smallUnit, bigRecallContent, () => 0);
+    const distinctTaskIds = new Set(pairs.map((pair) => pair.taskId));
+    expect(distinctTaskIds.size).toBe(3);
+  });
+
+  it("is just a capped buildUnitSession: matches buildUnitSession over the same sampled subset", () => {
+    // rng is stateless (always 0), so re-deriving the sampled subset and
+    // feeding it straight to buildUnitSession must reproduce the same pairs.
+    const sampledTaskIds = shuffle(bigRecallUnit.taskIds, () => 0).slice(0, 5);
+    const expected = buildUnitSession(
+      { ...bigRecallUnit, taskIds: sampledTaskIds },
+      bigRecallContent,
+      () => 0,
+    );
+
+    const actual = buildRecallSession(bigRecallUnit, bigRecallContent, () => 0);
+
+    expect(actual).toEqual(expected);
   });
 });

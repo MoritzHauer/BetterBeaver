@@ -120,6 +120,8 @@ export const unitSchema = z.object({
   taskIds: z.array(slugSchema),
   noteIds: z.array(slugSchema),
   unlocksAfterUnitId: slugSchema.optional(),
+  /** Manual cross-unit recall links (plan 0016): zero or more earlier units in the same book to prompt a refresher on. */
+  recallUnitIds: z.array(slugSchema).optional(),
 });
 export type Unit = z.infer<typeof unitSchema>;
 

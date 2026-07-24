@@ -185,6 +185,7 @@ export function UnitScreen({
   unitId,
   lookup,
   onPractice,
+  onRecall,
   onPinNote,
   isNotePinned,
   onEdit,
@@ -198,6 +199,8 @@ export function UnitScreen({
   /** Unit-scoped now (plan 0010): launches one pooled, shuffled session
    * across the whole unit's task set, rather than picking a single task. */
   onPractice: () => void;
+  /** Launches a practice-only recall session over the linked unit's tasks (plan 0016). */
+  onRecall: (linkedUnitId: string) => void;
   /** Pins a note for review — schedules it, entering it into the domain's
    * review queue like any other unit (it reviews as a flashcard there). */
   onPinNote: (noteId: string) => void;
@@ -412,6 +415,22 @@ export function UnitScreen({
             contentKind="unit"
             contentId={unit.id}
           />
+          {(unit.recallUnitIds ?? []).flatMap((id) => {
+            const linkedUnit = content.units.find((u) => u.id === id);
+            if (linkedUnit === undefined) {
+              return [];
+            }
+            return [
+              <button
+                key={linkedUnit.id}
+                type="button"
+                className="card recall"
+                onClick={() => onRecall(linkedUnit.id)}
+              >
+                Remember: {linkedUnit.title}
+              </button>,
+            ];
+          })}
         </>
       ) : null}
 
