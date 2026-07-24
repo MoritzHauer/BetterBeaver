@@ -37,6 +37,7 @@ import { createLocalStorageProgressStore } from "./progress/local-storage";
 import { createLocalStorageVocabListStore } from "./progress/vocab-lists";
 import { createLocalStorageUserEntryStore } from "./progress/user-entries";
 import { getPinnedTaskIds, togglePinnedTask } from "./progress/pinned-tasks";
+import { AUTO_UPDATE_KEY } from "./autoUpdate";
 import { MyBooksScreen } from "./screens/MyBooksScreen";
 import { LibraryScreen } from "./screens/LibraryScreen";
 import { BookScreen } from "./screens/BookScreen";
@@ -375,21 +376,36 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   const [update, setUpdate] = useState<ContentUpdate | null>(null);
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
+  async function acceptUpdateNow(target: ContentUpdate) {
+    setUpdating(true);
+    setUpdateError(null);
+    try {
+      await contentInit.acceptUpdate(target);
+    } catch (error) {
+      setUpdateError(error instanceof Error ? error.message : String(error));
+      setUpdating(false);
+    }
+  }
   useEffect(() => {
-    void contentInit.checkForUpdate().then(setUpdate);
+    void contentInit.checkForUpdate().then((result) => {
+      // Auto-update only covers an actual content download — an
+      // app-shell-only reload still needs the user's say-so.
+      if (
+        result !== null &&
+        result.changed.length > 0 &&
+        localStorage.getItem(AUTO_UPDATE_KEY) === "on"
+      ) {
+        void acceptUpdateNow(result);
+        return;
+      }
+      setUpdate(result);
+    });
   }, [contentInit]);
   async function handleAcceptUpdate() {
     if (update === null) {
       return;
     }
-    setUpdating(true);
-    setUpdateError(null);
-    try {
-      await contentInit.acceptUpdate(update);
-    } catch (error) {
-      setUpdateError(error instanceof Error ? error.message : String(error));
-      setUpdating(false);
-    }
+    await acceptUpdateNow(update);
   }
 
   const [screen, setScreen] = useState<Screen>({ screen: "books" });

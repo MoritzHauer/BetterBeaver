@@ -96,6 +96,13 @@
   box-sizing: border-box;
 }
 
+html,
+body {
+  /* Installed PWA (Android): suppress the browser's pull-to-refresh
+   * gesture — content updates go through the in-app update banner. */
+  overscroll-behavior-y: contain;
+}
+
 body {
   margin: 0;
   background: var(--bg);

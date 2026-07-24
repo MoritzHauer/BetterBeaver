@@ -13,6 +13,8 @@ import { FeedbackWidget } from "../components/FeedbackWidget";
 import { ChatThread } from "../components/ChatThread";
 import { BookWatermark } from "../components/BookWatermark";
 
+const CHAT_ENABLED = false;
+
 /** One practice-able task and where it lives, for the shuffle buttons (plan 0008). */
 export interface PracticeTarget {
   lessonId: string;
@@ -242,7 +244,9 @@ export function BookScreen({
           );
         })}
       </ul>
-      <ChatThread docId={`topic:${content.topic.id}`} />
+      {/* ponytail: chat deactivated per owner call, not removed — code
+       * stays intact for later; flip this back to re-enable. */}
+      {CHAT_ENABLED && <ChatThread docId={`topic:${content.topic.id}`} />}
     </main>
   );
 }

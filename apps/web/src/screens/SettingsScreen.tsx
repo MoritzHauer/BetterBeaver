@@ -10,6 +10,7 @@ import type { User } from "@supabase/supabase-js";
 import { clearCachedDocuments } from "../content/cache";
 import { eraseAllData, exportBackup, importBackup } from "../progress/backup";
 import { SOUND_KEY } from "../sounds";
+import { AUTO_UPDATE_KEY } from "../autoUpdate";
 import { getThemePref, setThemePref, type ThemePref } from "../theme";
 import { getDisplayName, setDisplayName } from "../identity";
 
@@ -32,6 +33,9 @@ export function SettingsScreen({
   const [displayName, setDisplayNameState] = useState(getDisplayName);
   const [soundOn, setSoundOn] = useState(
     () => localStorage.getItem(SOUND_KEY) !== "off",
+  );
+  const [autoUpdateOn, setAutoUpdateOn] = useState(
+    () => localStorage.getItem(AUTO_UPDATE_KEY) === "on",
   );
   const [user, setUser] = useState<User | null | "loading">(
     getSupabase() === null ? null : "loading",
@@ -63,6 +67,15 @@ export function SettingsScreen({
       localStorage.setItem(SOUND_KEY, "off");
     }
     setSoundOn(on);
+  }
+
+  function toggleAutoUpdate(on: boolean): void {
+    if (on) {
+      localStorage.setItem(AUTO_UPDATE_KEY, "on");
+    } else {
+      localStorage.removeItem(AUTO_UPDATE_KEY);
+    }
+    setAutoUpdateOn(on);
   }
 
   async function handleImportProgress(file: File): Promise<void> {
@@ -261,6 +274,18 @@ export function SettingsScreen({
         </button>
         <p className="status">
           Clears cached lessons and re-downloads. Your progress is not affected.
+        </p>
+        <label>
+          <input
+            type="checkbox"
+            checked={autoUpdateOn}
+            onChange={(event) => toggleAutoUpdate(event.target.checked)}
+          />{" "}
+          Auto-update on startup
+        </label>
+        <p className="status">
+          Apply a found content update right away instead of showing the update
+          banner.
         </p>
       </section>
 
