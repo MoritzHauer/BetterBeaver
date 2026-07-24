@@ -1,6 +1,5 @@
 ## ToDo's
 
-
 - [x] on downloaded android app, deactivate refresh via scroll down (`overscroll-behavior-y: contain` in styles.css). Update button on the start screen already existed (the opt-in update banner, only shows when `checkForUpdate` finds something). Added an "Auto-update on startup" toggle in Settings.
 - add offline mode in settings. No update, no connection to the db.
 - [x] chat deactivated (not removed) — `CHAT_ENABLED = false` in BookScreen.tsx, code kept as-is for later.
@@ -15,6 +14,7 @@
 - append enhance icons list for generation
 
 # icons to be generated
+
 🎯 target
 🔊 speaker
 Mute
