@@ -51,6 +51,12 @@ export const bookSchema = z.object({
   domainId: slugSchema,
   /** Library/My Books card icon (plan 0015 decision 6); absent means no icon, no default. */
   icon: z.enum(BOOK_ICONS).optional(),
+  /** Whether a decorative cover-art watermark renders behind this book's My
+   * Books card (plan-less UI polish batch, 2026-07-25). The image itself is
+   * NOT part of content — it must exist at `art/icons/<book.id>.png` in the
+   * web app's public assets (same convention/location the one-off Kyrgyz
+   * watermark already used); this field only toggles whether it's shown. */
+  hasCoverArt: z.boolean().optional(),
 });
 export type Book = z.infer<typeof bookSchema>;
 

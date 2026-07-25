@@ -1,4 +1,4 @@
-import type { Content, Item, Task } from "@betterbeaver/schema";
+import type { Content, Item } from "@betterbeaver/schema";
 import { parseClozeMarkup } from "@betterbeaver/schema";
 
 /**
@@ -26,6 +26,14 @@ export function blankUnitId(itemId: string, blankNumber: number): string {
 /** The scheduling-unit id of a note — the SRS persistence key, minted here only (plan 0008 step 7). */
 export function noteUnitId(noteId: string): string {
   return `note:${noteId}`;
+}
+
+/** The item id underlying a scheduling-unit id: strips a cloze blank's
+ * `::c<n>` suffix (added by `blankUnitId`) if present, otherwise returns
+ * the id unchanged. Not meaningful for note unit ids (`note:<id>`). */
+export function itemIdFromUnitId(unitId: string): string {
+  const i = unitId.indexOf("::c");
+  return i === -1 ? unitId : unitId.slice(0, i);
 }
 
 /**
@@ -115,34 +123,4 @@ export function domainSchedulingUnits(
     }
   }
   return units;
-}
-
-/**
- * The scheduling-unit ids a pinned `task` should surface first (plan 0008):
- * a non-cloze task's `itemIds` as-is, or a cloze task's blank unit ids
- * (`blankUnitId`, per `parseClozeMarkup`) across its items. An item missing
- * from `itemById` or not a parseable sentence is skipped defensively.
- */
-export function taskSchedulingUnitIds(
-  task: Task,
-  itemById: ReadonlyMap<string, Item>,
-): string[] {
-  if (task.type !== "cloze") {
-    return [...task.itemIds];
-  }
-  const ids: string[] = [];
-  for (const itemId of task.itemIds) {
-    const item = itemById.get(itemId);
-    if (item === undefined || item.kind !== "sentence") {
-      continue;
-    }
-    const parsed = parseClozeMarkup(item.payload.text);
-    if (!parsed.valid) {
-      continue;
-    }
-    for (const blank of parsed.blanks) {
-      ids.push(blankUnitId(itemId, blank.number));
-    }
-  }
-  return ids;
 }

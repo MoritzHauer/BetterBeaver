@@ -312,14 +312,27 @@ type View =
   | { v: "family"; id: string };
 
 /** Deep-link target from the learner screens' Edit buttons: the editor
- * opens directly at the matching level (book/lesson/unit/note). */
+ * opens directly at the matching level (book/lesson/unit/note/item/entry/
+ * task). */
 export interface EditTarget {
   lessonId?: string;
   unitId?: string;
   noteStem?: string;
+  itemId?: string;
+  entryId?: string;
+  taskId?: string;
 }
 
 function initialView(target: EditTarget | undefined): View {
+  if (target?.entryId !== undefined) {
+    return { v: "entry", id: target.entryId };
+  }
+  if (target?.itemId !== undefined) {
+    return { v: "item", backTo: { v: "root" }, id: target.itemId };
+  }
+  if (target?.taskId !== undefined) {
+    return { v: "task", backTo: { v: "root" }, id: target.taskId };
+  }
   if (target?.lessonId !== undefined && target.unitId !== undefined) {
     const unitView: View = {
       v: "unit",
@@ -1018,6 +1031,22 @@ function BookEditor({
         ]}
         onChange={(next) => onChange({ ...doc, topic: next })}
       />
+      <label className="field">
+        Cover art
+        <input
+          type="checkbox"
+          checked={book.hasCoverArt === true}
+          onChange={(e) => {
+            if (e.target.checked) {
+              onChange({ ...doc, topic: { ...book, hasCoverArt: true } });
+              return;
+            }
+            const next = { ...book };
+            delete next.hasCoverArt;
+            onChange({ ...doc, topic: next });
+          }}
+        />
+      </label>
       <h3>Lessons</h3>
       <ul className="editor-list">
         {lessonIds.map((id) => (

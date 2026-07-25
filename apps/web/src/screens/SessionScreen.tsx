@@ -649,6 +649,16 @@ function MatchingBoard({
   );
 }
 
+/** The scheduling-unit id(s) a question resolves to for pinning purposes: a
+ * matching board's several ids (every prompt's and answer's unitId — a
+ * matching board is one question), or the single `unitId` of every other
+ * kind. */
+function questionUnitIds(q: Question): string[] {
+  return q.kind === "matching"
+    ? [...q.prompts, ...q.answers].map((p) => p.unitId)
+    : [q.unitId];
+}
+
 /** Renders the interaction for one question, per the plan's per-kind table.
  * Views only render and forward answers; all checking/normalization is
  * engine code (`checkTypedAnswer`, `checkScrambleAnswer`,
@@ -943,8 +953,9 @@ export function SessionScreen({
   readAloudLang,
   lookup,
   taskIds,
-  pinnedTaskIds,
+  pinnedUnitIds,
   onTogglePin,
+  onEdit,
   onGrade,
   onAllAnswered,
   onTaskAnswered,
@@ -967,8 +978,13 @@ export function SessionScreen({
    * session passes this — `TaskSession`/`ReviewSession` omit it, so the pin
    * control never renders there. */
   taskIds?: (string | undefined)[];
-  pinnedTaskIds?: ReadonlySet<string>;
-  onTogglePin?: (taskId: string) => void;
+  pinnedUnitIds?: ReadonlySet<string>;
+  onTogglePin?: (unitIds: string[]) => void;
+  /** Author-only Edit affordance: opens `EditScreen` at the current
+   * question's item/entry/task. Hidden on `NoteQuestion` (no resolvable
+   * target) but otherwise independent of `taskIds` — unlike Pin, it renders
+   * in `TaskSession`/`ReviewSession` too, not just pooled unit sessions. */
+  onEdit?: (index: number) => void;
   onGrade: (unitId: string, quality: Quality) => Promise<void>;
   onAllAnswered?: () => void;
   /** Fires once per task, the moment every question tagged with that task's
@@ -1071,6 +1087,13 @@ export function SessionScreen({
   }
 
   const currentTaskId = taskIds?.[index];
+  const currentUnitIds =
+    currentTaskId !== undefined && question !== undefined
+      ? questionUnitIds(question)
+      : [];
+  const isPinned =
+    currentUnitIds.length > 0 &&
+    currentUnitIds.every((id) => pinnedUnitIds?.has(id));
 
   return (
     <main className="session">
@@ -1096,14 +1119,26 @@ export function SessionScreen({
         {currentTaskId !== undefined ? (
           <button
             className="plain"
-            onClick={() => onTogglePin?.(currentTaskId)}
+            onClick={() => onTogglePin?.(currentUnitIds)}
           >
             <img
               className="icon-glyph"
               src={`${import.meta.env.BASE_URL}art/icons/pin.png`}
               alt=""
             />{" "}
-            {pinnedTaskIds?.has(currentTaskId) ? "Pinned" : "Pin"}
+            {isPinned ? "Pinned" : "Pin"}
+          </button>
+        ) : null}
+        {onEdit !== undefined &&
+        question !== undefined &&
+        question.kind !== "note" ? (
+          <button className="plain" onClick={() => onEdit(index)}>
+            <img
+              className="icon-glyph"
+              src={`${import.meta.env.BASE_URL}art/icons/edit.png`}
+              alt=""
+            />{" "}
+            Edit
           </button>
         ) : null}
         {currentTaskId !== undefined ? (

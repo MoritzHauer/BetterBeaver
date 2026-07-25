@@ -221,6 +221,7 @@ export function createDocumentContentSource(
             description: content.topic.description,
             domainId: content.topic.domainId,
             icon: content.topic.icon,
+            hasCoverArt: content.topic.hasCoverArt,
           })),
         );
       },

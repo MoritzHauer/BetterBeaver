@@ -40,6 +40,12 @@
   --bg: #fffdfa;
   --fg: #221a10;
   --card-bg: #f8f4ee;
+  --card-bg-translucent: rgba(
+    248,
+    244,
+    238,
+    0.9
+  ); /* --card-bg (#f8f4ee) at ~90% */
   --card-border: #ddd5c9;
   --locked-fg: #6e6759;
   --primary: #e08820;
@@ -47,6 +53,12 @@
   --on-primary: #241503;
   --recall: #6a4c93;
   --on-recall: #ffffff;
+  --review: #2f7a72;
+  --on-review: #ffffff;
+  --review-pressed: #24625c;
+  --vocab: #3a628f;
+  --on-vocab: #ffffff;
+  --vocab-pressed: #2c4d70;
   --accent: #9c5c06;
   --correct-border: #2e7d32;
   --correct-bg: rgba(46, 125, 50, 0.12);
@@ -76,6 +88,12 @@
   --bg: #16130e;
   --fg: #efe9df;
   --card-bg: #221e17;
+  --card-bg-translucent: rgba(
+    34,
+    30,
+    23,
+    0.9
+  ); /* --card-bg (#221e17) at ~90% */
   --card-border: #40392e;
   --locked-fg: #948c7e;
   --primary: #e08820;
@@ -83,6 +101,12 @@
   --on-primary: #241503;
   --recall: #b39ddb;
   --on-recall: #241503;
+  --review: #7fd6c9;
+  --on-review: #123330;
+  --review-pressed: #a0e8dd;
+  --vocab: #8ec2ee;
+  --on-vocab: #16324a;
+  --vocab-pressed: #b0d8f5;
   --accent: #f0a24a;
   --correct-border: #4caf50;
   --correct-bg: rgba(76, 175, 80, 0.15);
@@ -202,15 +226,16 @@ button.plain {
   background: var(--card-bg);
 }
 
-/* One-off decorative watermark, tried on the Kyrgyz book only (ponytail:
- * per-book id check, not a schema field - promote to a general Book field
- * if more books want this). z-index:0 on the card gives it its own stacking
- * context so the icon's z-index:-1 stays behind the card's own content
- * instead of escaping to sibling cards. */
-.card-bg-kyrgyz {
+/* Decorative cover-art watermark, opted into per-book via `hasCoverArt`
+ * (plan-less UI polish batch, 2026-07-25; formerly a Kyrgyz-only one-off).
+ * z-index:0 on the card gives it its own stacking context so the icon's
+ * z-index:-1 stays behind the card's own content instead of escaping to
+ * sibling cards. */
+.card-bg-cover {
   position: relative;
   z-index: 0;
   overflow: hidden;
+  background: var(--card-bg-translucent);
 }
 
 .card-bg-icon {
@@ -220,7 +245,7 @@ button.plain {
   width: 45%;
   max-width: 140px;
   height: auto;
-  opacity: 0.16;
+  opacity: 0.28;
   z-index: -1;
   pointer-events: none;
 }
@@ -330,6 +355,21 @@ section.card {
   color: var(--on-recall);
 }
 
+/* BookScreen's Daily Review (only when due) and Vocabulary (always
+ * available) cards get their own fills, distinct from --primary's amber
+ * (Practice) and from each other (UI polish batch, 2026-07-25). */
+.card.review.primary {
+  background: var(--review);
+  border-color: var(--review);
+  color: var(--on-review);
+}
+
+.card.vocab {
+  background: var(--vocab);
+  border-color: var(--vocab);
+  color: var(--on-vocab);
+}
+
 .grade-buttons {
   display: flex;
   gap: 0.75rem;
@@ -346,7 +386,7 @@ section.card {
  * ponytail: below 44px tap height by explicit owner request. */
 .book-actions {
   position: absolute;
-  top: 0.75rem;
+  top: 1rem;
   right: 0.75rem;
   display: flex;
   gap: 0.5rem;
@@ -354,12 +394,31 @@ section.card {
 
 .book-actions button {
   min-height: 0;
-  background: var(--primary);
-  color: var(--on-primary);
 }
 
-.book-actions button:active:not(:disabled) {
-  background: var(--primary-pressed);
+.book-actions .vocab-btn {
+  background: var(--vocab);
+  color: var(--on-vocab);
+}
+.book-actions .vocab-btn:active:not(:disabled) {
+  background: var(--vocab-pressed);
+}
+.book-actions .review-btn {
+  background: var(--review);
+  color: var(--on-review);
+}
+.book-actions .review-btn:active:not(:disabled) {
+  background: var(--review-pressed);
+}
+
+.book-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.book-icon {
+  font-size: 1.5rem;
+  line-height: 1;
 }
 
 .token-row {
@@ -523,9 +582,11 @@ input[type="text"] {
   background: var(--card-bg);
 }
 
-/* Same one-off watermark idea as .card-bg-kyrgyz, but pinned to the
- * viewport (not the page) so it stays put while the book's screens scroll —
- * rendered by <BookWatermark> on every screen inside the book. */
+/* Same watermark idea as .card-bg-cover, but pinned to the viewport (not
+ * the page) so it stays put while the book's screens scroll — rendered by
+ * <BookWatermark> on every screen inside the book. This one is still the
+ * Kyrgyz-only one-off (out of scope for the plan-less UI polish batch that
+ * promoted .card-bg-cover to a general field). */
 .book-bg-icon {
   position: fixed;
   right: -2rem;

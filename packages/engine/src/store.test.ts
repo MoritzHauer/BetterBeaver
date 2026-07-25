@@ -185,7 +185,10 @@ describe("dueUnits / dueDomainUnits pinning (plan 0008)", () => {
   const sentence: Item = {
     id: "t-item-sentence",
     kind: "sentence",
-    payload: { text: "A {{c1::single}} blank.", translation: "t" },
+    payload: {
+      text: "A {{c1::single}} {{c2::small}} blank.",
+      translation: "t",
+    },
     sourceRef: "t-resource-1",
   };
   const taskA: Task = { id: "t-task-a", type: "recall", itemIds: [itemA.id] };
@@ -244,8 +247,8 @@ describe("dueUnits / dueDomainUnits pinning (plan 0008)", () => {
     await store.setItemState(`${sentence.id}::c1`, earlierDue);
   });
 
-  it("pins a task's unit(s) first even when a non-pinned unit is due earlier", async () => {
-    const result = await dueUnits(content, store, now, new Set([taskA.id]));
+  it("pins a scheduling unit first even when a non-pinned unit is due earlier", async () => {
+    const result = await dueUnits(content, store, now, new Set([itemA.id]));
     expect(result.map((u) => u.id)).toEqual([
       itemA.id,
       itemB.id,
@@ -253,16 +256,32 @@ describe("dueUnits / dueDomainUnits pinning (plan 0008)", () => {
     ]);
   });
 
-  it("expands a pinned cloze task to its blank unit ids", async () => {
-    const result = await dueUnits(content, store, now, new Set([clozeTask.id]));
+  it("pinning one blank of a multi-blank cloze task pins only that blank, not its sibling blank", async () => {
+    // sentence has two blanks (c1, c2); only c1 has state from beforeEach.
+    // Give c2 its own due state, later than everything else so it can only
+    // land last if narrowing actually held (the old task-expansion behavior
+    // would have hoisted it alongside its pinned sibling c1).
+    await store.setItemState(`${sentence.id}::c2`, {
+      due: "2026-07-05T12:00:00.000Z",
+      intervalDays: 1,
+      ease: 2.5,
+      reps: 1,
+    });
+    const result = await dueUnits(
+      content,
+      store,
+      now,
+      new Set([`${sentence.id}::c1`]),
+    );
     expect(result.map((u) => u.id)).toEqual([
       `${sentence.id}::c1`,
       itemB.id,
       itemA.id,
+      `${sentence.id}::c2`,
     ]);
   });
 
-  it("without pinnedTaskIds, order is due-ascending as before", async () => {
+  it("without pinnedUnitIds, order is due-ascending as before", async () => {
     const result = await dueUnits(content, store, now);
     expect(result.map((u) => u.id)).toEqual([
       itemB.id,
@@ -271,13 +290,13 @@ describe("dueUnits / dueDomainUnits pinning (plan 0008)", () => {
     ]);
   });
 
-  it("dueDomainUnits threads pinnedTaskIds the same way", async () => {
+  it("dueDomainUnits threads pinnedUnitIds the same way", async () => {
     const result = await dueDomainUnits(
       [content],
       [],
       store,
       now,
-      new Set([taskA.id]),
+      new Set([itemA.id]),
     );
     expect(result.map((u) => u.id)).toEqual([
       itemA.id,

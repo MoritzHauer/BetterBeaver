@@ -2,9 +2,9 @@ import { describe, it, expect } from "vitest";
 import type { Content, Item, Task, Unit } from "@betterbeaver/schema";
 import {
   domainSchedulingUnits,
+  itemIdFromUnitId,
   noteUnitId,
   schedulingUnits,
-  taskSchedulingUnitIds,
 } from "./units.js";
 
 const sharedSentence: Item = {
@@ -366,32 +366,17 @@ describe("domainSchedulingUnits — notes across books (plan 0008 step 7)", () =
   });
 });
 
-describe("taskSchedulingUnitIds (plan 0008)", () => {
-  const itemById = new Map(content.items.map((item) => [item.id, item]));
-
-  it("a non-cloze task's ids are its itemIds as-is", () => {
-    expect(taskSchedulingUnitIds(dictationTask, itemById)).toEqual([
+describe("itemIdFromUnitId", () => {
+  it("strips a cloze blank's ::c<n> suffix", () => {
+    expect(itemIdFromUnitId(`${sharedSentence.id}::c1`)).toBe(
       sharedSentence.id,
-    ]);
-    expect(taskSchedulingUnitIds(recallTask, itemById)).toEqual([
-      lexeme.id,
-      concept.id,
-    ]);
+    );
+    expect(itemIdFromUnitId(`${sharedSentence.id}::c2`)).toBe(
+      sharedSentence.id,
+    );
   });
 
-  it("a cloze task's ids are each item's blank unit ids", () => {
-    expect(taskSchedulingUnitIds(clozeTask, itemById)).toEqual([
-      `${sharedSentence.id}::c1`,
-      `${sharedSentence.id}::c2`,
-      `${clozeOnlySentence.id}::c1`,
-    ]);
-  });
-
-  it("skips an item missing from itemById", () => {
-    const sparse = new Map([[sharedSentence.id, sharedSentence]]);
-    expect(taskSchedulingUnitIds(clozeTask, sparse)).toEqual([
-      `${sharedSentence.id}::c1`,
-      `${sharedSentence.id}::c2`,
-    ]);
+  it("returns a plain item id unchanged", () => {
+    expect(itemIdFromUnitId(lexeme.id)).toBe(lexeme.id);
   });
 });

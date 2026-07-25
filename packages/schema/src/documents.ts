@@ -18,9 +18,10 @@
  * seed.
  *
  * Exemption (plan 0015 §6a): an additive _optional_ entity field that
- * non-strict zod parsing safely ignores — e.g. `bookSchema`'s `icon` — does
- * NOT bump. Old clients strip the unknown key harmlessly instead of
- * rejecting the document, so there's nothing to force a republish over.
+ * non-strict zod parsing safely ignores — e.g. `bookSchema`'s `icon` or
+ * `hasCoverArt` — does NOT bump. Old clients strip the unknown key
+ * harmlessly instead of rejecting the document, so there's nothing to force
+ * a republish over.
  */
 export const CONTENT_SCHEMA_VERSION = 1;
 

@@ -23,10 +23,12 @@ import {
   buildUnitSession,
   dueDomainUnits,
   isLessonComplete,
+  itemIdFromUnitId,
   noteUnitId,
   recordGrade,
   symmetricLinks,
 } from "@betterbeaver/engine";
+import type { Question } from "@betterbeaver/engine";
 import type { Quality } from "@betterbeaver/srs";
 import { recallQuality } from "@betterbeaver/srs";
 import type { TapLookup } from "./components/TappableText";
@@ -37,7 +39,7 @@ import { readArchived } from "./content/myBooks";
 import { createLocalStorageProgressStore } from "./progress/local-storage";
 import { createLocalStorageVocabListStore } from "./progress/vocab-lists";
 import { createLocalStorageUserEntryStore } from "./progress/user-entries";
-import { getPinnedTaskIds, togglePinnedTask } from "./progress/pinned-tasks";
+import { getPinnedUnitIds, togglePinnedUnits } from "./progress/pinned-tasks";
 import { AUTO_UPDATE_KEY } from "./autoUpdate";
 import { MyBooksScreen } from "./screens/MyBooksScreen";
 import { LibraryScreen } from "./screens/LibraryScreen";
@@ -114,6 +116,34 @@ const progressStore = createLocalStorageProgressStore();
 const vocabListStore = createLocalStorageVocabListStore();
 const userEntryStore = createLocalStorageUserEntryStore();
 
+/** Resolves the author Edit button's `EditScreen` deep-link target for one
+ * non-matching question's scheduling unit, shared by `TaskSession`,
+ * `UnitSession`, and `ReviewSession`: a lexeme/concept item routes to the
+ * domain's entry view; any other kind (sentence/pair) routes to its book's
+ * item view via `bookIdForItem` — a fixed book id in `TaskSession`/
+ * `UnitSession`, a per-item lookup in `ReviewSession` (which pools items
+ * across every book of the domain). Returns `undefined` when no target can
+ * be resolved (the item's book isn't known — shouldn't happen in practice);
+ * callers then simply don't navigate. */
+function itemEditTarget(
+  itemId: string,
+  itemKind: string | undefined,
+  domainId: string,
+  bookIdForItem: (itemId: string) => string | undefined,
+): { docId: string; target: EditTarget } | undefined {
+  if (itemKind === "lexeme" || itemKind === "concept") {
+    return {
+      docId: documentId("domain", domainId),
+      target: { entryId: itemId },
+    };
+  }
+  const bookId = bookIdForItem(itemId);
+  if (bookId === undefined) {
+    return undefined;
+  }
+  return { docId: documentId("topic", bookId), target: { itemId } };
+}
+
 /** Wires the engine's task-session building and grading to `SessionScreen`.
  * Questions are built once per mount (keyed by `task.id` via `useMemo`), so
  * they don't reshuffle across re-renders. An attempt is recorded only once
@@ -122,6 +152,8 @@ function TaskSession({
   content,
   lookup,
   task,
+  isAuthor,
+  onOpenEdit,
   onDone,
 }: {
   content: Content;
@@ -129,6 +161,11 @@ function TaskSession({
    * surfaces (SessionScreen's pinned rules). */
   lookup: TapLookup;
   task: Task;
+  /** Whether the signed-in user can edit this content (plan 0012); gates
+   * the session screen's author-only Edit button. */
+  isAuthor: boolean;
+  /** Opens `EditScreen` at the given deep-link target. */
+  onOpenEdit: (docId: string, target: EditTarget) => void;
   onDone: () => void;
 }) {
   const domainId = content.topic.domainId;
@@ -142,12 +179,39 @@ function TaskSession({
     await recordGrade(progressStore, unitId, quality, new Date(), domainId);
   }
 
+  const onEdit = isAuthor
+    ? (index: number) => {
+        const question = questions[index];
+        if (question === undefined) {
+          return;
+        }
+        if (question.kind === "matching") {
+          onOpenEdit(documentId("topic", content.topic.id), {
+            taskId: task.id,
+          });
+          return;
+        }
+        const itemId = itemIdFromUnitId(question.unitId);
+        const kind = content.items.find((item) => item.id === itemId)?.kind;
+        const resolved = itemEditTarget(
+          itemId,
+          kind,
+          domainId,
+          () => content.topic.id,
+        );
+        if (resolved !== undefined) {
+          onOpenEdit(resolved.docId, resolved.target);
+        }
+      }
+    : undefined;
+
   return (
     <SessionScreen
       title={task.instructions ?? `${task.type} practice`}
       questions={questions}
       bookId={content.topic.id}
       lookup={lookup}
+      onEdit={onEdit}
       onGrade={handleGrade}
       onAllAnswered={() => void progressStore.markTaskAttempted(task.id)}
       onFinished={onDone}
@@ -166,8 +230,10 @@ function UnitSession({
   content,
   unit,
   lookup,
-  pinnedTaskIds,
+  pinnedUnitIds,
   onTogglePin,
+  isAuthor,
+  onOpenEdit,
   onDone,
 }: {
   content: Content;
@@ -175,8 +241,13 @@ function UnitSession({
   /** Tap-to-lookup dependencies (plan 0006 step 4), for post-answer reveal
    * surfaces (SessionScreen's pinned rules). */
   lookup: TapLookup;
-  pinnedTaskIds: ReadonlySet<string>;
-  onTogglePin: (taskId: string) => void;
+  pinnedUnitIds: ReadonlySet<string>;
+  onTogglePin: (unitIds: string[]) => void;
+  /** Whether the signed-in user can edit this content (plan 0012); gates
+   * the session screen's author-only Edit button. */
+  isAuthor: boolean;
+  /** Opens `EditScreen` at the given deep-link target. */
+  onOpenEdit: (docId: string, target: EditTarget) => void;
   onDone: () => void;
 }) {
   const domainId = content.topic.domainId;
@@ -192,6 +263,34 @@ function UnitSession({
     await recordGrade(progressStore, unitId, quality, new Date(), domainId);
   }
 
+  const onEdit = isAuthor
+    ? (index: number) => {
+        const question = questions[index];
+        if (question === undefined) {
+          return;
+        }
+        if (question.kind === "matching") {
+          const taskId = taskIds[index];
+          if (taskId === undefined) {
+            return;
+          }
+          onOpenEdit(documentId("topic", content.topic.id), { taskId });
+          return;
+        }
+        const itemId = itemIdFromUnitId(question.unitId);
+        const kind = content.items.find((item) => item.id === itemId)?.kind;
+        const resolved = itemEditTarget(
+          itemId,
+          kind,
+          domainId,
+          () => content.topic.id,
+        );
+        if (resolved !== undefined) {
+          onOpenEdit(resolved.docId, resolved.target);
+        }
+      }
+    : undefined;
+
   return (
     <SessionScreen
       title={unit.title}
@@ -199,8 +298,9 @@ function UnitSession({
       bookId={content.topic.id}
       lookup={lookup}
       taskIds={taskIds}
-      pinnedTaskIds={pinnedTaskIds}
+      pinnedUnitIds={pinnedUnitIds}
       onTogglePin={onTogglePin}
+      onEdit={onEdit}
       onGrade={handleGrade}
       onTaskAnswered={(taskId) => void progressStore.markTaskAttempted(taskId)}
       onFinished={onDone}
@@ -262,6 +362,8 @@ function ReviewSession({
   booksContent,
   store,
   lookup,
+  isAuthor,
+  onOpenEdit,
   onDone,
 }: {
   domainContent: DomainContent;
@@ -270,12 +372,35 @@ function ReviewSession({
   store: ProgressStore;
   /** Tap-to-lookup dependencies (plan 0006 step 4), for post-answer reveal surfaces. */
   lookup: TapLookup;
+  /** Whether the signed-in user can edit this content (plan 0012); gates
+   * the session screen's author-only Edit button. */
+  isAuthor: boolean;
+  /** Opens `EditScreen` at the given deep-link target. */
+  onOpenEdit: (docId: string, target: EditTarget) => void;
   onDone: () => void;
 }) {
   const domainId = domainContent.domain.id;
   const [questions, setQuestions] = useState<ReturnType<
     typeof buildReviewSession
   > | null>(null);
+
+  // Non-lexeme/concept item id -> the book it belongs to (Edit-button
+  // routing): ReviewSession pools items across every book of the domain, so
+  // (unlike TaskSession/UnitSession) a topic-owned item's book isn't known
+  // without this lookup. Lexeme/concept items are skipped — they always
+  // route to the domain doc, not a specific book, regardless of which book
+  // referenced them (see `itemEditTarget`).
+  const itemBookId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const bookContent of booksContent) {
+      for (const item of bookContent.items) {
+        if (item.kind !== "lexeme" && item.kind !== "concept") {
+          map.set(item.id, bookContent.topic.id);
+        }
+      }
+    }
+    return map;
+  }, [booksContent]);
 
   useEffect(() => {
     let cancelled = false;
@@ -284,7 +409,7 @@ function ReviewSession({
       domainContent.entries,
       store,
       new Date(),
-      getPinnedTaskIds(domainId),
+      getPinnedUnitIds(domainId),
     ).then((due) => {
       if (cancelled) {
         return;
@@ -343,12 +468,34 @@ function ReviewSession({
   // per-question book resolution instead — out of scope for this step.
   const bookId = booksContent[0]?.topic.id ?? domainId;
 
+  const onEdit = isAuthor
+    ? (index: number) => {
+        const question: Question | undefined = questions[index];
+        // Matching never occurs in ReviewSession (review questions are
+        // single-unit only), so that branch doesn't apply here.
+        if (question === undefined || question.kind === "matching") {
+          return;
+        }
+        const itemId = itemIdFromUnitId(question.unitId);
+        const kind = domainContent.entries.find(
+          (entry) => entry.id === itemId,
+        )?.kind;
+        const resolved = itemEditTarget(itemId, kind, domainId, (id) =>
+          itemBookId.get(id),
+        );
+        if (resolved !== undefined) {
+          onOpenEdit(resolved.docId, resolved.target);
+        }
+      }
+    : undefined;
+
   return (
     <SessionScreen
-      title="Review"
+      title="Daily Review"
       questions={questions}
       bookId={bookId}
       lookup={lookup}
+      onEdit={onEdit}
       onGrade={handleGrade}
       onFinished={onDone}
       onExit={onDone}
@@ -589,15 +736,15 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   // Bumped whenever a task's pinned state is toggled (plan 0008), so
   // UnitSession re-reads the pin store without requiring a navigation.
   const [pinEpoch, setPinEpoch] = useState(0);
-  // The current book's domain's pinned task ids, re-read whenever pinEpoch
-  // bumps (plan 0008); only ever consumed by UnitSession (plan 0010: pin
-  // moved from UnitScreen's task list into the pooled practice session), but
-  // computed here (not inside the screen-specific branch below) since it's a
-  // hook.
-  const pinnedTaskIds = useMemo(
+  // The current book's domain's pinned scheduling-unit ids, re-read whenever
+  // pinEpoch bumps (plan 0008); only ever consumed by UnitSession (plan
+  // 0010: pin moved from UnitScreen's task list into the pooled practice
+  // session), but computed here (not inside the screen-specific branch
+  // below) since it's a hook.
+  const pinnedUnitIds = useMemo(
     () =>
       content !== null
-        ? getPinnedTaskIds(content.topic.domainId)
+        ? getPinnedUnitIds(content.topic.domainId)
         : new Set<string>(),
     [content, pinEpoch],
   );
@@ -1091,11 +1238,15 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           content={content}
           unit={unit}
           lookup={lookup}
-          pinnedTaskIds={pinnedTaskIds}
-          onTogglePin={(taskId) => {
-            togglePinnedTask(content.topic.domainId, taskId);
+          pinnedUnitIds={pinnedUnitIds}
+          onTogglePin={(unitIds) => {
+            togglePinnedUnits(content.topic.domainId, unitIds);
             setPinEpoch((epoch) => epoch + 1);
           }}
+          isAuthor={isAuthor}
+          onOpenEdit={(docId, target) =>
+            setScreen({ screen: "edit", docId, target })
+          }
           onDone={onDone}
         />
       );
@@ -1154,6 +1305,10 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
         content={content}
         lookup={lookup}
         task={task}
+        isAuthor={isAuthor}
+        onOpenEdit={(docId, target) =>
+          setScreen({ screen: "edit", docId, target })
+        }
         onDone={onTaskDone}
       />
     );
@@ -1218,6 +1373,10 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
       booksContent={domainBooksContent}
       store={progressStore}
       lookup={lookup}
+      isAuthor={isAuthor}
+      onOpenEdit={(docId, target) =>
+        setScreen({ screen: "edit", docId, target })
+      }
       onDone={onReviewDone}
     />
   );

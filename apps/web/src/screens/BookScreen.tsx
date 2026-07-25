@@ -154,10 +154,11 @@ export function BookScreen({
       <ul className="card-list">
         <li className={`card review${dueCount !== 0 ? " primary" : ""}`}>
           <button onClick={onReview} disabled={dueCount === 0}>
-            <strong>Review</strong>
+            <strong>Daily Review</strong>
             {dueCount !== null && dueCount > 0 ? (
               <span className="badge">{dueCount}</span>
             ) : null}
+            <p>Repeat previous units due for review, spaced out over time.</p>
             <p className="status">
               {dueCount === null
                 ? "Loading…"
@@ -182,7 +183,7 @@ export function BookScreen({
             <p className="status">A random task from your opened lessons</p>
           </button>
         </li>
-        <li className="card">
+        <li className="card vocab">
           <button onClick={onVocabulary}>
             <img
               className="topic-glyph"

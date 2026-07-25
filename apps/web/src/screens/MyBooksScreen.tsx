@@ -122,23 +122,30 @@ export function MyBooksScreen({
           return (
             <li
               key={book.id}
-              className={book.id === "kyrgyz" ? "card card-bg-kyrgyz" : "card"}
+              className={
+                book.hasCoverArt === true ? "card card-bg-cover" : "card"
+              }
             >
-              {book.id === "kyrgyz" && (
+              {book.hasCoverArt === true && (
                 <img
                   className="card-bg-icon"
-                  src={`${import.meta.env.BASE_URL}art/icons/kyrgyz.png`}
+                  src={`${import.meta.env.BASE_URL}art/icons/${book.id}.png`}
                   alt=""
                   aria-hidden="true"
+                  onError={(e) => {
+                    e.currentTarget.style.display = "none";
+                  }}
                 />
               )}
               <button onClick={() => onSelectBook(book.id)}>
-                {book.icon !== undefined && (
-                  <span className="topic-glyph" aria-hidden="true">
-                    {book.icon}
-                  </span>
-                )}
-                <strong>{book.title}</strong>
+                <span className="book-title-row">
+                  {book.icon !== undefined && (
+                    <span className="book-icon" aria-hidden="true">
+                      {book.icon}
+                    </span>
+                  )}
+                  <strong>{book.title}</strong>
+                </span>
                 <p>{book.description}</p>
                 <ProgressBar value={progress.completed} max={progress.total} />
                 <p className="status">
@@ -148,7 +155,7 @@ export function MyBooksScreen({
               <div className="book-actions">
                 <button
                   type="button"
-                  className="plain icon-button"
+                  className="plain icon-button vocab-btn"
                   onClick={() => onVocabulary(book.domainId)}
                   aria-label="Vocabulary"
                 >
@@ -159,9 +166,9 @@ export function MyBooksScreen({
                 </button>
                 <button
                   type="button"
-                  className="plain icon-button"
+                  className="plain icon-button review-btn"
                   onClick={() => onReview(book.domainId)}
-                  aria-label="Review"
+                  aria-label="Daily Review"
                 >
                   <img
                     src={`${import.meta.env.BASE_URL}art/icons/repeat.png`}

@@ -1008,3 +1008,38 @@ describe("bookSchema icon (plan 0015 decision 6)", () => {
     }
   });
 });
+
+describe("bookSchema hasCoverArt (UI polish batch, 2026-07-25)", () => {
+  const baseBook = {
+    id: "kyrgyz",
+    code: "ky",
+    title: "Kyrgyz",
+    description: "Kyrgyz language book",
+    lessonIds: [] as string[],
+    domainId: "ky",
+  };
+
+  it("parses with hasCoverArt true", () => {
+    const result = bookSchema.safeParse({ ...baseBook, hasCoverArt: true });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.hasCoverArt).toBe(true);
+    }
+  });
+
+  it("parses with hasCoverArt false", () => {
+    const result = bookSchema.safeParse({ ...baseBook, hasCoverArt: false });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.hasCoverArt).toBe(false);
+    }
+  });
+
+  it("parses with hasCoverArt absent", () => {
+    const result = bookSchema.safeParse(baseBook);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.hasCoverArt).toBeUndefined();
+    }
+  });
+});

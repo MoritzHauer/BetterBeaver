@@ -22,6 +22,8 @@ export interface BookSummary {
   domainId: string;
   /** Library/My Books card icon (plan 0015 decision 6); absent means no icon, no default. */
   icon?: string;
+  /** Whether to render the My Books card cover-art watermark (UI polish batch, 2026-07-25); absent/false means no watermark. */
+  hasCoverArt?: boolean;
 }
 
 /** Summary of a domain, as listed before its full content is loaded (plan 0006). */
