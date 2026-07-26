@@ -7,7 +7,7 @@
 - First chapter with more info / comparison to english
 - references between chapters and do you remember quiz
 - short history facts within or between chapters
-- [~] as non maintainer amendment proposal — implementing now via docs/specs/0012-proposal-flow.md (already fully designed, spec pre-approved)
+- [x] as non maintainer amendment proposal — landed 2026-07-26 via docs/specs/0012-proposal-flow.md. Still needs a two-account browser pass (spec's Verification section).
 - creating private book
   - no syncing but ex/import possible
 
