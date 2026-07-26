@@ -34,8 +34,29 @@ import {
   archiveInMembership,
   restoreInMembership,
 } from "./myBooks";
+import { isOffline } from "../offline";
 
 export type { ContentUpdate } from "@betterbeaver/engine";
+
+/**
+ * Set just before a My Books membership/content reload so `App` skips the
+ * welcome cover on the way back up: adding, removing or archiving a Book is
+ * a My Books action, and landing on the start screen afterwards reads as
+ * having lost the tap. Session-scoped, so a genuinely fresh launch (or
+ * "erase all my data") still shows the cover.
+ */
+export const SKIP_COVER_KEY = "bb.skipCover";
+
+/** Reload after a membership/content change, keeping the user on My Books. */
+function reloadToMyBooks(): void {
+  try {
+    sessionStorage.setItem(SKIP_COVER_KEY, "1");
+  } catch {
+    // Storage denied (private-mode webviews throw rather than no-op) — the
+    // reload still has to happen; the user just sees the cover on the way back.
+  }
+  window.location.reload();
+}
 
 export interface ContentInit {
   result: { source: ContentSource } | { errors: string[] };
@@ -67,6 +88,12 @@ export async function fetchRest(
   select: string,
   filter = "",
 ): Promise<unknown> {
+  if (isOffline()) {
+    // Throw rather than resolve empty: `checkForUpdate` already treats any
+    // failure as "no update", and the Library — the only other caller — is
+    // unreachable in offline mode, so nothing renders this message.
+    throw new Error("offline mode is on");
+  }
   const response = await fetch(
     `${SUPABASE_URL}/rest/v1/${table}?select=${select}${filter}`,
     {
@@ -499,7 +526,7 @@ export async function initContentSource(): Promise<ContentInit> {
 
       if (toCommit.length > 0) {
         await putCachedDocuments(toCommit);
-        window.location.reload();
+        reloadToMyBooks();
       }
 
       if (failedAffected.length > 0) {
@@ -561,7 +588,7 @@ export async function initContentSource(): Promise<ContentInit> {
 
       await putCachedDocuments(newDocs);
       addToMyBooks(bookId);
-      window.location.reload();
+      reloadToMyBooks();
     },
 
     async removeBook(bookId: string): Promise<void> {
@@ -591,17 +618,17 @@ export async function initContentSource(): Promise<ContentInit> {
         toDelete.push(documentId("domain", domainId));
       }
       await deleteCachedDocuments(toDelete);
-      window.location.reload();
+      reloadToMyBooks();
     },
 
     archiveBook(bookId: string): void {
       archiveInMembership(bookId);
-      window.location.reload();
+      reloadToMyBooks();
     },
 
     restoreBook(bookId: string): void {
       restoreInMembership(bookId);
-      window.location.reload();
+      reloadToMyBooks();
     },
   };
 }

@@ -381,13 +381,28 @@ section.card {
   padding: 0.75rem;
 }
 
-/* Per-card Vocabulary/Review shortcuts on My Books: orange icon chips
- * pinned top-right of the card, level with the book title.
- * ponytail: below 44px tap height by explicit owner request. */
+/* Per-card Vocabulary/Review shortcuts on My Books: icon chips pinned
+ * top-right of the card, level with the book title.
+ * ponytail: below 44px tap height by explicit owner request.
+ *
+ * The chips are taller than a line of title text, so the title row reserves
+ * exactly their height (--book-chip-row) and both boxes start at the card
+ * button's own 1rem padding edge. Equal top, equal height ⇒ their centres
+ * coincide by construction, with no fudge offset, and the description below
+ * clears the chips instead of being overlapped by them. `padding: 0`
+ * overrides `.card > div`: this is corner chrome, not a content block, and
+ * that inherited 1rem inset is what pushed the chips down onto the text. */
+:root {
+  --book-chip-row: 2.25rem;
+}
+
 .book-actions {
   position: absolute;
   top: 1rem;
   right: 0.75rem;
+  height: var(--book-chip-row);
+  align-items: center;
+  padding: 0;
   display: flex;
   gap: 0.5rem;
 }
@@ -415,6 +430,8 @@ section.card {
   display: flex;
   align-items: center;
   gap: 0.4rem;
+  /* Reserves the chips' height — see .book-actions above. */
+  min-height: var(--book-chip-row);
 }
 .book-icon {
   font-size: 1.5rem;

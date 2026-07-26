@@ -544,21 +544,16 @@ export function UnitScreen({
               <tr>
                 <th>Term</th>
                 <th>Definition</th>
-                <th>Feedback</th>
               </tr>
             </thead>
             <tbody>
+              {/* No per-row FeedbackWidget here (owner request): a third
+                  column of thumbs crowded the table off a phone screen. The
+                  unit-level widget on Overview still covers reports. */}
               {conceptRows.map((item) => (
                 <tr key={item.id}>
                   <td>{item.payload.term}</td>
                   <td>{item.payload.definition}</td>
-                  <td>
-                    <FeedbackWidget
-                      docId={`domain:${domainId}`}
-                      contentKind="item"
-                      contentId={item.id}
-                    />
-                  </td>
                 </tr>
               ))}
             </tbody>

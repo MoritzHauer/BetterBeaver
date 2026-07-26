@@ -11,6 +11,7 @@ import { clearCachedDocuments } from "../content/cache";
 import { eraseAllData, exportBackup, importBackup } from "../progress/backup";
 import { SOUND_KEY } from "../sounds";
 import { AUTO_UPDATE_KEY } from "../autoUpdate";
+import { OFFLINE_KEY, isOffline } from "../offline";
 import { getThemePref, setThemePref, type ThemePref } from "../theme";
 import { getDisplayName, setDisplayName } from "../identity";
 
@@ -37,6 +38,7 @@ export function SettingsScreen({
   const [autoUpdateOn, setAutoUpdateOn] = useState(
     () => localStorage.getItem(AUTO_UPDATE_KEY) === "on",
   );
+  const [offlineOn, setOfflineOn] = useState(isOffline);
   const [user, setUser] = useState<User | null | "loading">(
     getSupabase() === null ? null : "loading",
   );
@@ -76,6 +78,15 @@ export function SettingsScreen({
       localStorage.removeItem(AUTO_UPDATE_KEY);
     }
     setAutoUpdateOn(on);
+  }
+
+  function toggleOffline(on: boolean): void {
+    if (on) {
+      localStorage.setItem(OFFLINE_KEY, "on");
+    } else {
+      localStorage.removeItem(OFFLINE_KEY);
+    }
+    setOfflineOn(on);
   }
 
   async function handleImportProgress(file: File): Promise<void> {
@@ -218,6 +229,23 @@ export function SettingsScreen({
         </p>
       </section>
 
+      <section className="card">
+        <h2>Offline mode</h2>
+        <label>
+          <input
+            type="checkbox"
+            checked={offlineOn}
+            onChange={(event) => toggleOffline(event.target.checked)}
+          />{" "}
+          Never go online
+        </label>
+        <p className="status">
+          No content updates and no connection to the database. Your downloaded
+          Books, vocabulary and progress all keep working; the Library, content
+          editing, feedback and chat are hidden while this is on.
+        </p>
+      </section>
+
       {getSupabase() !== null ? (
         <section className="card">
           <h2>Feedback name</h2>
@@ -264,8 +292,12 @@ export function SettingsScreen({
 
       <section className="card">
         <h2>Content</h2>
+        {/* Both controls need the network: refreshing deletes the cached
+            documents before re-downloading them, which in offline mode would
+            leave every added Book unloadable with no way to get it back. */}
         <button
           className="plain"
+          disabled={offlineOn}
           onClick={() => {
             void clearCachedDocuments().then(() => location.reload());
           }}
@@ -279,6 +311,7 @@ export function SettingsScreen({
           <input
             type="checkbox"
             checked={autoUpdateOn}
+            disabled={offlineOn}
             onChange={(event) => toggleAutoUpdate(event.target.checked)}
           />{" "}
           Auto-update on startup
@@ -287,6 +320,9 @@ export function SettingsScreen({
           Apply a found content update right away instead of showing the update
           banner.
         </p>
+        {offlineOn ? (
+          <p className="setting-hint">Unavailable while offline mode is on.</p>
+        ) : null}
       </section>
 
       <section className="card">

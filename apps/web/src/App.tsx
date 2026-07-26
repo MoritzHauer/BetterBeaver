@@ -33,6 +33,7 @@ import type { Quality } from "@betterbeaver/srs";
 import { recallQuality } from "@betterbeaver/srs";
 import type { TapLookup } from "./components/TappableText";
 import type { ContentInit, ContentUpdate } from "./content/source";
+import { SKIP_COVER_KEY } from "./content/source";
 import { resolvedLinksByEntryId } from "./content/links";
 import { readCachedDocuments } from "./content/cache";
 import { readArchived } from "./content/myBooks";
@@ -41,6 +42,7 @@ import { createLocalStorageVocabListStore } from "./progress/vocab-lists";
 import { createLocalStorageUserEntryStore } from "./progress/user-entries";
 import { getPinnedUnitIds, togglePinnedUnits } from "./progress/pinned-tasks";
 import { AUTO_UPDATE_KEY } from "./autoUpdate";
+import { isOffline } from "./offline";
 import { MyBooksScreen } from "./screens/MyBooksScreen";
 import { LibraryScreen } from "./screens/LibraryScreen";
 import { BookScreen } from "./screens/BookScreen";
@@ -649,8 +651,28 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     });
   }, []);
   // ponytail: welcome cover shows on every load (plan 0009); persist a
-  // "seen" flag if the extra tap ever annoys.
-  const [started, setStarted] = useState(false);
+  // "seen" flag if the extra tap ever annoys. The one exception is a reload
+  // the app itself triggered from My Books (add/remove/archive/restore/
+  // update): the cover would read as having lost the tap, so those set
+  // `SKIP_COVER_KEY` first. Read in the initializer, cleared in an effect —
+  // not in the initializer itself, which StrictMode double-invokes.
+  // Both accesses are try/caught: a private-mode webview throws on
+  // sessionStorage rather than no-opping, and a throw out of the initializer
+  // would render nothing at all — the very failure this batch fixed.
+  const [started, setStarted] = useState(() => {
+    try {
+      return sessionStorage.getItem(SKIP_COVER_KEY) !== null;
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    try {
+      sessionStorage.removeItem(SKIP_COVER_KEY);
+    } catch {
+      // Nothing was stored either, so nothing to clear.
+    }
+  }, []);
   const [books, setBooks] = useState<BookSummary[]>([]);
   const [domains, setDomains] = useState<DomainSummary[]>([]);
   const [content, setContent] = useState<Content | null>(null);
@@ -807,6 +829,22 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
+
+  // Re-arms the trap after every commit, because the handler above doesn't
+  // refill the one pop it lets through: at the root the ref is null, so that
+  // pop consumes the trap entry and nothing replaces it. Navigating back into
+  // the app afterwards then left the app with nothing to pop, and the next
+  // hardware back walked off the app's own history entry — the reported
+  // "back lands on a blank page and you have to restart". Guarded on the ref
+  // so the root screen keeps its exit-the-app pop: no back action, no trap.
+  useEffect(() => {
+    if (
+      backActionRef.current !== null &&
+      (window.history.state as { backTrap?: boolean } | null)?.backTrap !== true
+    ) {
+      window.history.pushState({ backTrap: true }, "");
+    }
+  });
 
   useEffect(() => {
     if (!("source" in contentSourceResult)) {
@@ -1031,7 +1069,10 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     const hasDownload = update !== null && update.changed.length > 0;
     return (
       <>
-        {update !== null && (
+        {/* `isOffline()` re-checked at render, not just when the update was
+            found: turning offline mode on afterwards must retract the banner,
+            since accepting it would only fail at the first fetch. */}
+        {update !== null && !isOffline() && (
           <div className="update-banner" role="status">
             <span>
               {hasDownload

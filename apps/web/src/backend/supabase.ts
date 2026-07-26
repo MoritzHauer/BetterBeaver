@@ -4,6 +4,7 @@ import {
   type User,
 } from "@supabase/supabase-js";
 import type { DomainDocument, BookDocument } from "@betterbeaver/schema";
+import { isOffline } from "../offline";
 
 /**
  * The authoring client (plan 0012 step 2). Learners never touch this
@@ -19,9 +20,10 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as
 
 let client: SupabaseClient | undefined;
 
-/** Null when the backend isn't configured — author UI hides entirely. */
+/** Null when the backend isn't configured, or when the learner has turned on
+ * offline mode — author UI, feedback and chat all hide entirely either way. */
 export function getSupabase(): SupabaseClient | null {
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || isOffline()) {
     return null;
   }
   client ??= createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
