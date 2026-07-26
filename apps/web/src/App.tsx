@@ -58,7 +58,7 @@ import { EditScreen, type EditTarget } from "./screens/EditScreen";
 import { PrivacyScreen } from "./screens/PrivacyScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { StatsScreen } from "./screens/StatsScreen";
-import { currentUser, getSupabase } from "./backend/supabase";
+import { currentUser, getSupabase, listMyDocuments } from "./backend/supabase";
 
 type Screen =
   | { screen: "books" }
@@ -103,8 +103,9 @@ type Screen =
   | { screen: "author" }
   // `target` deep-links into a level (lesson/unit/note); `back` returns to
   // the learner screen the Edit button was tapped on (default: author list).
-  // `mode` (plan 0012 §5): "propose" for a non-maintainer suggesting edits
-  // via AuthorScreen's "suggest edits" list; defaults to "maintain".
+  // `mode` (plan 0012 §5): "propose" for a non-maintainer suggesting edits.
+  // Leave it unset and the edit branch derives it from `maintainedDocIds`;
+  // set it only to pin a route (AuthorScreen's two lists, settings import).
   | {
       screen: "edit";
       docId: string;
@@ -619,14 +620,33 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   // Holds whatever handler the currently rendered screen would run on its
   // own back button (null at the root, where back should exit normally).
   const backActionRef = useRef<(() => void) | null>(null);
-  // Signed-in authors get ✎ Edit buttons on the book/lesson/unit screens
-  // (plan 0012). Whether they actually maintain a given document is the
-  // backend's call — a non-maintainer just sees the editor's load error.
+  // Signed-in users get ✎ Edit buttons on the book/lesson/unit screens
+  // (plan 0012). Which documents they actually maintain decides where those
+  // buttons land: their own open in maintain mode, everything else in
+  // propose mode (plan 0012 §5). RLS is still the real enforcement — this
+  // only picks the editor the user sees instead of showing them a load
+  // error. `null` means "not known yet, or the lookup failed", which falls
+  // back to maintain mode, the behaviour before the proposal flow.
   const [isAuthor, setIsAuthor] = useState(false);
+  const [maintainedDocIds, setMaintainedDocIds] = useState<Set<string> | null>(
+    null,
+  );
   useEffect(() => {
-    if (getSupabase() !== null) {
-      void currentUser().then((user) => setIsAuthor(user !== null));
+    if (getSupabase() === null) {
+      return;
     }
+    void currentUser().then((user) => {
+      if (user === null) {
+        return;
+      }
+      // `isAuthor` flips only once the lookup settles: it gates the ✎
+      // buttons, and showing them while `maintainedDocIds` is still null
+      // would route a non-maintainer to maintain mode for that window.
+      void listMyDocuments()
+        .then((docs) => setMaintainedDocIds(new Set(docs.map((doc) => doc.id))))
+        .catch(() => setMaintainedDocIds(null))
+        .finally(() => setIsAuthor(true));
+    });
   }, []);
   // ponytail: welcome cover shows on every load (plan 0009); persist a
   // "seen" flag if the extra tap ever annoys.
@@ -960,7 +980,15 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
       <EditScreen
         docId={screen.docId}
         target={screen.target}
-        mode={screen.mode}
+        // Resolved here rather than at each call site so every route into
+        // the editor — learner ✎ buttons, question screen, deep links —
+        // picks the right mode; an explicit `mode` still wins.
+        mode={
+          screen.mode ??
+          (maintainedDocIds?.has(screen.docId) === false
+            ? "propose"
+            : "maintain")
+        }
         onBack={onBack}
       />
     );
@@ -979,7 +1007,14 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
         onBack={onBack}
         onSignIn={() => setScreen({ screen: "author" })}
         onImportBook={(docId) =>
-          setScreen({ screen: "edit", docId, back: { screen: "settings" } })
+          // Import writes a maintain-mode local draft (`bb.author.draft.*`),
+          // so this route is pinned — propose mode would ignore it.
+          setScreen({
+            screen: "edit",
+            docId,
+            mode: "maintain",
+            back: { screen: "settings" },
+          })
         }
       />
     );
