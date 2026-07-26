@@ -138,3 +138,208 @@ export async function publishDocument(
     throw new Error(error.message);
   }
 }
+
+// ------------------------------------------------------------- proposals
+// Non-maintainer edits (plan 0012 §5). A proposer can't read `documents`
+// (RLS) — the base document comes from the same `catalog` view learners
+// read, not from `loadDocument` above.
+
+export interface CatalogSummary {
+  id: string;
+  kind: "topic" | "domain";
+  published_version: number;
+  schema_version: number;
+}
+
+export interface CatalogEntry extends CatalogSummary {
+  published: BookDocument | DomainDocument;
+}
+
+/** Every listed+published document, for the "suggest edits" list — light
+ * columns only, no document bodies. */
+export async function listCatalogSummaries(): Promise<CatalogSummary[]> {
+  const supabase = getSupabase();
+  if (supabase === null) {
+    return [];
+  }
+  const { data, error } = await supabase
+    .from("catalog")
+    .select("id,kind,published_version,schema_version")
+    .order("id");
+  if (error) {
+    throw new Error(error.message);
+  }
+  return data as CatalogSummary[];
+}
+
+/** One catalog row with its full published document — the propose-mode
+ * editor's load path. Null if the id isn't listed/published. */
+export async function loadCatalogEntry(
+  id: string,
+): Promise<CatalogEntry | null> {
+  const supabase = getSupabase();
+  if (supabase === null) {
+    return null;
+  }
+  const { data, error } = await supabase
+    .from("catalog")
+    .select("id,kind,published,published_version,schema_version")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) {
+    throw new Error(error.message);
+  }
+  return data as CatalogEntry | null;
+}
+
+export interface Proposal {
+  id: string;
+  doc_id: string;
+  base_version: number;
+  proposed_doc: BookDocument | DomainDocument;
+  author: string | null;
+  note: string | null;
+  status: "open" | "accepted" | "rejected";
+  decided_by: string | null;
+  decision_note: string | null;
+  created_at: string;
+  decided_at: string | null;
+}
+
+/** Submits a proposal (insert only — RLS forces `author`/`status`). */
+export async function submitProposal(
+  docId: string,
+  baseVersion: number,
+  proposedDoc: BookDocument | DomainDocument,
+  note: string,
+): Promise<void> {
+  const supabase = getSupabase();
+  if (supabase === null) {
+    throw new Error("backend not configured");
+  }
+  const user = await currentUser();
+  if (user === null) {
+    throw new Error("sign in to propose an edit");
+  }
+  const { error } = await supabase.from("proposals").insert({
+    doc_id: docId,
+    base_version: baseVersion,
+    proposed_doc: proposedDoc,
+    author: user.id,
+    note: note.trim() === "" ? null : note.trim(),
+  });
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+/** The signed-in user's own proposals (not the ones they maintain and could
+ * decide — RLS's select would return both, so this filters to authored). */
+export async function listMyProposals(): Promise<Proposal[]> {
+  const supabase = getSupabase();
+  if (supabase === null) {
+    return [];
+  }
+  const user = await currentUser();
+  if (user === null) {
+    return [];
+  }
+  const { data, error } = await supabase
+    .from("proposals")
+    .select("*")
+    .eq("author", user.id)
+    .order("created_at", { ascending: false });
+  if (error) {
+    throw new Error(error.message);
+  }
+  return data as Proposal[];
+}
+
+/** Open proposals against one document — the maintainer's review queue. */
+export async function listOpenProposals(docId: string): Promise<Proposal[]> {
+  const supabase = getSupabase();
+  if (supabase === null) {
+    return [];
+  }
+  const { data, error } = await supabase
+    .from("proposals")
+    .select("*")
+    .eq("doc_id", docId)
+    .eq("status", "open")
+    .order("created_at");
+  if (error) {
+    throw new Error(error.message);
+  }
+  return data as Proposal[];
+}
+
+/** Withdraws (deletes) one of the caller's own open proposals — RLS scopes
+ * both the ownership and the open-only rule. */
+export async function withdrawProposal(id: string): Promise<void> {
+  const supabase = getSupabase();
+  if (supabase === null) {
+    throw new Error("backend not configured");
+  }
+  const { error } = await supabase.from("proposals").delete().eq("id", id);
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+/** The base document a proposal's `base_version` was drafted against, from
+ * `versions` (maintainers have `select` there). Null if never published
+ * (`base_version = 0`) or the row is otherwise missing — callers diff
+ * against an empty document in that case. */
+export async function loadVersion(
+  docId: string,
+  version: number,
+): Promise<BookDocument | DomainDocument | null> {
+  const supabase = getSupabase();
+  if (supabase === null) {
+    return null;
+  }
+  const { data, error } = await supabase
+    .from("versions")
+    .select("doc")
+    .eq("doc_id", docId)
+    .eq("version", version)
+    .maybeSingle();
+  if (error) {
+    throw new Error(error.message);
+  }
+  return (data?.doc as BookDocument | DomainDocument | undefined) ?? null;
+}
+
+/**
+ * Maintainer decision on a proposal (plan 0012 §5 point 9): status +
+ * decided_by/decided_at/decision_note only — the column grant forbids
+ * touching anything else, RLS forbids anyone but a maintainer. Accepting
+ * into a draft is `saveDraft` followed by this call (draft first, so a
+ * failed status update just leaves the proposal open — harmless, retry).
+ */
+export async function decideProposal(
+  proposalId: string,
+  status: "accepted" | "rejected",
+  decisionNote: string | null,
+): Promise<void> {
+  const supabase = getSupabase();
+  if (supabase === null) {
+    throw new Error("backend not configured");
+  }
+  const user = await currentUser();
+  if (user === null) {
+    throw new Error("sign in to decide a proposal");
+  }
+  const { error } = await supabase
+    .from("proposals")
+    .update({
+      status,
+      decided_by: user.id,
+      decision_note: decisionNote,
+      decided_at: new Date().toISOString(),
+    })
+    .eq("id", proposalId);
+  if (error) {
+    throw new Error(error.message);
+  }
+}

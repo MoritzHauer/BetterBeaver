@@ -7,6 +7,8 @@ import {
   type BookDocument,
 } from "@betterbeaver/schema";
 import {
+  diffBookDocument,
+  diffDomainDocument,
   moveId,
   removeDomainEntry,
   removeEntity,
@@ -17,12 +19,20 @@ import {
   upsertEntity,
   upsertFamily,
   type BookCollection,
+  type CollectionDiff,
 } from "@betterbeaver/engine";
 import {
+  decideProposal,
+  loadCatalogEntry,
   loadDocument,
+  loadVersion,
+  listOpenProposals,
   publishDocument,
   saveDraft,
+  submitProposal,
   type AuthorDoc,
+  type CatalogEntry,
+  type Proposal,
 } from "../backend/supabase";
 import { validateForPublish } from "../backend/publishCheck";
 import { FeedbackPanel } from "../components/FeedbackPanel";
@@ -309,7 +319,9 @@ type View =
   | { v: "task"; backTo: View; id: string }
   | { v: "note"; backTo: View; stem: string }
   | { v: "entry"; id: string }
-  | { v: "family"; id: string };
+  | { v: "family"; id: string }
+  // Maintainer-only (plan 0012 §5): reviewing one open proposal.
+  | { v: "proposal"; id: string };
 
 /** Deep-link target from the learner screens' Edit buttons: the editor
  * opens directly at the matching level (book/lesson/unit/note/item/entry/
@@ -353,7 +365,372 @@ function initialView(target: EditTarget | undefined): View {
  * until the author explicitly syncs it from the root (book) view. */
 const draftKey = (docId: string) => `bb.author.draft.${docId}`;
 
+/** Dispatches on `mode` (plan 0012 §5): a maintainer edits their own draft
+ * through `documents`/publish; a non-maintainer edits a local-only working
+ * copy and submits a proposal instead. Splitting into two components (both
+ * sharing the `BookEditor`/`DomainEditor` forms below) keeps the two very
+ * different load/save/persist lifecycles from tangling inside one set of
+ * conditional hooks. */
 export function EditScreen({
+  docId,
+  target,
+  mode = "maintain",
+  onBack,
+}: {
+  docId: string;
+  target?: EditTarget;
+  mode?: "maintain" | "propose";
+  onBack: () => void;
+}) {
+  if (mode === "propose") {
+    return <ProposeEditScreen docId={docId} target={target} onBack={onBack} />;
+  }
+  return <MaintainEditScreen docId={docId} target={target} onBack={onBack} />;
+}
+
+/** Non-maintainer editing (plan 0012 §5): there is no `draft` column to
+ * autosave to, so the working copy lives entirely in localStorage under
+ * `bb.proposal.<docId>` until "Submit proposal" turns it into a `proposals`
+ * row. Same forms (`BookEditor`/`DomainEditor`) as the maintainer path,
+ * loaded from the learner-facing `catalog` view instead of `documents` —
+ * RLS gives a non-maintainer no other way to read this document. */
+const proposalKey = (docId: string) => `bb.proposal.${docId}`;
+
+interface StoredProposal {
+  baseVersion: number;
+  doc: AnyDoc;
+}
+
+function ProposeEditScreen({
+  docId,
+  target,
+  onBack,
+}: {
+  docId: string;
+  target?: EditTarget;
+  onBack: () => void;
+}) {
+  const [entry, setEntry] = useState<CatalogEntry | null>(null);
+  const [working, setWorking] = useState<AnyDoc | null>(null);
+  const [view, setView] = useState<View>(() => initialView(target));
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [localChoice, setLocalChoice] = useState<
+    | { s: "none" }
+    | { s: "offer-resume"; local: AnyDoc }
+    | { s: "offer-stale"; localBaseVersion: number }
+  >({ s: "none" });
+  const [saveState, setSaveState] = useState<"saved" | "saving" | "error">(
+    "saved",
+  );
+  // Named to avoid shadowing the engine's `setNote` (note-editing op), which
+  // `BookEditor` below still calls unshadowed.
+  const [proposalNote, setProposalNote] = useState("");
+  const [proposeState, setProposeState] = useState<
+    | { s: "idle" }
+    | { s: "checking" }
+    | { s: "confirm-errors"; errors: string[] }
+    | { s: "submitting" }
+    | { s: "done" }
+    | { s: "error"; message: string }
+  >({ s: "idle" });
+  const dirtyRef = useRef(false);
+  const workingRef = useRef<AnyDoc | null>(null);
+  workingRef.current = working;
+
+  // Same debounce + unmount-flush pattern as the maintainer path's
+  // localStorage autosave, just against a different key and value shape
+  // (baseVersion travels with the doc so a stale local copy can be told
+  // apart from a resumable one on the next load).
+  useEffect(() => {
+    const flush = () => {
+      if (dirtyRef.current && workingRef.current !== null && entry !== null) {
+        localStorage.setItem(
+          proposalKey(docId),
+          JSON.stringify({
+            baseVersion: entry.published_version,
+            doc: workingRef.current,
+          } satisfies StoredProposal),
+        );
+        dirtyRef.current = false;
+      }
+    };
+    window.addEventListener("beforeunload", flush);
+    return () => {
+      window.removeEventListener("beforeunload", flush);
+      flush();
+    };
+  }, [docId, entry]);
+
+  useEffect(() => {
+    loadCatalogEntry(docId).then(
+      (loaded) => {
+        if (loaded === null) {
+          setLoadError("this document isn't published/listed");
+          return;
+        }
+        setEntry(loaded);
+        const raw = localStorage.getItem(proposalKey(docId));
+        if (raw !== null) {
+          try {
+            const stored = JSON.parse(raw) as StoredProposal;
+            if (stored.baseVersion === loaded.published_version) {
+              setLocalChoice({ s: "offer-resume", local: stored.doc });
+            } else {
+              setLocalChoice({
+                s: "offer-stale",
+                localBaseVersion: stored.baseVersion,
+              });
+            }
+            return;
+          } catch {
+            localStorage.removeItem(proposalKey(docId));
+          }
+        }
+        setWorking(loaded.published as AnyDoc);
+      },
+      (e: unknown) => setLoadError(e instanceof Error ? e.message : String(e)),
+    );
+  }, [docId]);
+
+  // Draft autosave to localStorage, debounced (same 400ms pattern as the
+  // maintainer path).
+  useEffect(() => {
+    if (!dirtyRef.current || working === null || entry === null) {
+      return;
+    }
+    setSaveState("saving");
+    const timer = setTimeout(() => {
+      try {
+        localStorage.setItem(
+          proposalKey(docId),
+          JSON.stringify({
+            baseVersion: entry.published_version,
+            doc: working,
+          } satisfies StoredProposal),
+        );
+        dirtyRef.current = false;
+        setSaveState("saved");
+      } catch {
+        setSaveState("error");
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [working, docId, entry]);
+
+  function resumeLocal(local: AnyDoc) {
+    setWorking(local);
+    setLocalChoice({ s: "none" });
+  }
+
+  function startOver() {
+    localStorage.removeItem(proposalKey(docId));
+    if (entry !== null) {
+      setWorking(entry.published as AnyDoc);
+    }
+    setLocalChoice({ s: "none" });
+  }
+
+  if (loadError !== null) {
+    return (
+      <main>
+        <p className="error-text">{loadError}</p>
+        <button onClick={onBack}>Back</button>
+      </main>
+    );
+  }
+  if (entry === null) {
+    return <main>Loading…</main>;
+  }
+  const readOnly = entry.schema_version > CONTENT_SCHEMA_VERSION;
+
+  if (localChoice.s !== "none") {
+    return (
+      <main>
+        <header className="screen-header">
+          <button className="plain" onClick={onBack}>
+            <img
+              className="icon-glyph"
+              src={`${import.meta.env.BASE_URL}art/icons/arrow_W.png`}
+              alt=""
+            />
+          </button>
+          <h1>{docId}</h1>
+        </header>
+        {localChoice.s === "offer-resume" ? (
+          <div className="card">
+            <p>You have a saved suggestion for the current version.</p>
+            <button
+              className="primary"
+              onClick={() => resumeLocal(localChoice.local)}
+            >
+              Resume your suggestion
+            </button>
+            <button className="plain danger" onClick={startOver}>
+              Start over
+            </button>
+          </div>
+        ) : (
+          <div className="card">
+            <p>
+              Your saved suggestion was based on version{" "}
+              {localChoice.localBaseVersion}; the current version is{" "}
+              {entry.published_version}.
+            </p>
+            <button className="plain danger" onClick={startOver}>
+              Start over
+            </button>
+          </div>
+        )}
+      </main>
+    );
+  }
+  if (working === null) {
+    return <main>Loading…</main>;
+  }
+
+  const change = (next: AnyDoc) => {
+    if (readOnly) {
+      return;
+    }
+    dirtyRef.current = true;
+    setProposeState({ s: "idle" });
+    setWorking(next);
+  };
+
+  async function handleSubmit() {
+    if (working === null || entry === null) {
+      return;
+    }
+    if (proposeState.s !== "confirm-errors") {
+      setProposeState({ s: "checking" });
+      const errors = await validateForPublish(docId, entry.kind, working);
+      if (errors.length > 0) {
+        setProposeState({ s: "confirm-errors", errors });
+        return;
+      }
+    }
+    setProposeState({ s: "submitting" });
+    try {
+      await submitProposal(
+        docId,
+        entry.published_version,
+        working,
+        proposalNote,
+      );
+      localStorage.removeItem(proposalKey(docId));
+      dirtyRef.current = false;
+      setProposeState({ s: "done" });
+    } catch (e) {
+      setProposeState({
+        s: "error",
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+
+  const body =
+    entry.kind === "topic" ? (
+      <BookEditor
+        doc={working as BookDocument}
+        view={view}
+        setView={setView}
+        onChange={change}
+      />
+    ) : (
+      <DomainEditor
+        doc={working as DomainDocument}
+        view={view}
+        setView={setView}
+        onChange={change}
+      />
+    );
+
+  return (
+    <main className={readOnly ? "editor read-only" : "editor"}>
+      <header className="screen-header">
+        <button className="plain" onClick={onBack} title="Back to learning">
+          <img
+            className="icon-glyph"
+            src={`${import.meta.env.BASE_URL}art/icons/arrow_W.png`}
+            alt="Back to learning"
+          />
+        </button>
+        {view.v !== "root" && (
+          <button
+            className="plain"
+            onClick={() => setView(upView(view))}
+            title="Up one level"
+          >
+            <img
+              className="icon-glyph"
+              src={`${import.meta.env.BASE_URL}art/icons/arrow_N.png`}
+              alt="Up one level"
+            />
+          </button>
+        )}
+        <h1>{docId}</h1>
+      </header>
+      <p className="status">
+        Suggesting edits to version {entry.published_version}
+        {readOnly
+          ? " · read-only: this document needs a newer app"
+          : saveState === "saving"
+            ? " · saving…"
+            : saveState === "error"
+              ? " · local save failed — storage may be full"
+              : " · saved on this device"}
+      </p>
+      {body}
+      <div className="editor-publish card">
+        {proposeState.s === "confirm-errors" && (
+          <ul className="error-text">
+            {proposeState.errors.slice(0, 20).map((error) => (
+              <li key={error}>{error}</li>
+            ))}
+            {proposeState.errors.length > 20 && (
+              <li>…and {proposeState.errors.length - 20} more</li>
+            )}
+          </ul>
+        )}
+        {proposeState.s === "error" && (
+          <p className="error-text">{proposeState.message}</p>
+        )}
+        {proposeState.s === "done" && (
+          <p className="status">
+            Proposal submitted — the maintainer will review it.
+          </p>
+        )}
+        <label className="field">
+          Note (optional)
+          <textarea
+            rows={3}
+            value={proposalNote}
+            onChange={(e) => setProposalNote(e.target.value)}
+          />
+        </label>
+        <button
+          className="primary"
+          disabled={
+            readOnly ||
+            proposeState.s === "checking" ||
+            proposeState.s === "submitting"
+          }
+          onClick={() => void handleSubmit()}
+        >
+          {proposeState.s === "checking"
+            ? "Validating…"
+            : proposeState.s === "submitting"
+              ? "Submitting…"
+              : proposeState.s === "confirm-errors"
+                ? `Submit with ${proposeState.errors.length} validation issue${proposeState.errors.length === 1 ? "" : "s"}`
+                : "Submit proposal"}
+        </button>
+      </div>
+    </main>
+  );
+}
+
+function MaintainEditScreen({
   docId,
   target,
   onBack,
@@ -379,9 +756,16 @@ export function EditScreen({
   const [syncState, setSyncState] = useState<
     "synced" | "unsynced" | "syncing" | "error"
   >("synced");
+  // Open proposals against this document (plan 0012 §5 point 6).
+  const [openProposals, setOpenProposals] = useState<Proposal[] | null>(null);
   const dirtyRef = useRef(false);
   const workingRef = useRef<AnyDoc | null>(null);
   workingRef.current = working;
+
+  const refreshProposals = () => {
+    listOpenProposals(docId).then(setOpenProposals, () => setOpenProposals([]));
+  };
+  useEffect(refreshProposals, [docId]);
 
   // Local-first (plan 0012 §7 amended): every edit lands in localStorage;
   // the backend sees it only through the explicit Sync/Publish actions on
@@ -540,6 +924,33 @@ export function EditScreen({
     setSaveState("saved");
   }
 
+  // Accepting a proposal writes `documents.draft` on the server (plan 0012
+  // §5 point 9, via ProposalReview below). The maintainer's own
+  // `bb.author.draft.<docId>` localStorage entry otherwise always wins over
+  // the server draft on load (see the load effect above) and would shadow
+  // the just-accepted proposal — clear it and pull the fresh server state in,
+  // exactly like the post-publish tail below.
+  async function handleProposalAccepted() {
+    const reloaded = await loadDocument(docId);
+    setRecord(reloaded);
+    setWorking((reloaded.draft ?? reloaded.published) as AnyDoc);
+    dirtyRef.current = false;
+    localStorage.removeItem(draftKey(docId));
+    setSyncState("synced");
+    refreshProposals();
+    setView({ v: "root" });
+  }
+
+  function handleProposalRejected() {
+    refreshProposals();
+    setView({ v: "root" });
+  }
+
+  const reviewingProposal =
+    view.v === "proposal"
+      ? (openProposals?.find((p) => p.id === view.id) ?? null)
+      : undefined;
+
   const body =
     record.kind === "topic" ? (
       <BookEditor
@@ -614,45 +1025,89 @@ export function EditScreen({
         </p>
       )}
       {view.v === "root" && <FeedbackPanel docId={docId} />}
-      {body}
-      <div className="editor-publish card">
-        {publishState.s === "errors" && (
-          <ul className="error-text">
-            {publishState.errors.slice(0, 20).map((error) => (
-              <li key={error}>{error}</li>
-            ))}
-            {publishState.errors.length > 20 && (
-              <li>…and {publishState.errors.length - 20} more</li>
+      {view.v === "root" &&
+        openProposals !== null &&
+        openProposals.length > 0 && (
+          <section className="card">
+            <h2>
+              {openProposals.length} open proposal
+              {openProposals.length === 1 ? "" : "s"}
+            </h2>
+            <ul className="card-list">
+              {openProposals.map((proposal) => (
+                <li key={proposal.id} className="card">
+                  <p>{proposal.note ?? "(no note)"}</p>
+                  <button
+                    className="plain"
+                    onClick={() => setView({ v: "proposal", id: proposal.id })}
+                  >
+                    Review
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+      {reviewingProposal !== undefined ? (
+        reviewingProposal === null ? (
+          <p className="error-text">
+            unknown proposal: {view.v === "proposal" ? view.id : ""}
+          </p>
+        ) : (
+          <ProposalReview
+            docId={docId}
+            kind={record.kind}
+            publishedVersion={record.published_version}
+            hasDraft={record.draft !== null}
+            proposal={reviewingProposal}
+            onBack={() => setView({ v: "root" })}
+            onAccepted={() => void handleProposalAccepted()}
+            onRejected={handleProposalRejected}
+          />
+        )
+      ) : (
+        <>
+          {body}
+          <div className="editor-publish card">
+            {publishState.s === "errors" && (
+              <ul className="error-text">
+                {publishState.errors.slice(0, 20).map((error) => (
+                  <li key={error}>{error}</li>
+                ))}
+                {publishState.errors.length > 20 && (
+                  <li>…and {publishState.errors.length - 20} more</li>
+                )}
+              </ul>
             )}
-          </ul>
-        )}
-        {publishState.s === "done" && (
-          <p className="status">Published — learners will be offered it.</p>
-        )}
-        <button
-          className="primary"
-          disabled={
-            readOnly ||
-            publishState.s === "checking" ||
-            publishState.s === "publishing"
-          }
-          onClick={() => void handlePublish()}
-        >
-          {publishState.s === "checking"
-            ? "Validating…"
-            : publishState.s === "publishing"
-              ? "Publishing…"
-              : "Validate & publish"}
-        </button>
-        {record.published !== null && !readOnly && (
-          <button
-            className="plain danger"
-            onClick={() => void handleDiscardDraft()}
-          >
-            Discard draft
-          </button>
-        )}
-      </div>
+            {publishState.s === "done" && (
+              <p className="status">Published — learners will be offered it.</p>
+            )}
+            <button
+              className="primary"
+              disabled={
+                readOnly ||
+                publishState.s === "checking" ||
+                publishState.s === "publishing"
+              }
+              onClick={() => void handlePublish()}
+            >
+              {publishState.s === "checking"
+                ? "Validating…"
+                : publishState.s === "publishing"
+                  ? "Publishing…"
+                  : "Validate & publish"}
+            </button>
+            {record.published !== null && !readOnly && (
+              <button
+                className="plain danger"
+                onClick={() => void handleDiscardDraft()}
+              >
+                Discard draft
+              </button>
+            )}
+          </div>
+        </>
+      )}
     </main>
   );
 }
@@ -662,6 +1117,7 @@ function upView(view: View): View {
     case "lesson":
     case "entry":
     case "family":
+    case "proposal":
       return { v: "root" };
     case "unit":
       return { v: "lesson", lessonId: view.lessonId };
@@ -672,6 +1128,199 @@ function upView(view: View): View {
     case "root":
       return view;
   }
+}
+
+// -------------------------------------------------------- proposal review
+
+/** A never-published document, for diffing a proposal whose `base_version`
+ * is 0 or whose `versions` row is otherwise missing (plan 0012 §5 point 7). */
+function emptyDocFor(kind: "topic" | "domain"): AnyDoc {
+  return kind === "topic"
+    ? {
+        topic: {},
+        lessons: [],
+        units: [],
+        items: [],
+        tasks: [],
+        resources: [],
+        notes: [],
+      }
+    : { domain: {}, entries: [], families: [] };
+}
+
+function collectionDiffIsEmpty(diff: CollectionDiff): boolean {
+  return (
+    diff.added.length === 0 &&
+    diff.removed.length === 0 &&
+    diff.changed.length === 0
+  );
+}
+
+function CollectionDiffView({ diff }: { diff: CollectionDiff }) {
+  return (
+    <>
+      {diff.added.length > 0 && <p>Added: {diff.added.join(", ")}</p>}
+      {diff.removed.length > 0 && <p>Removed: {diff.removed.join(", ")}</p>}
+      {diff.changed.map((entity) => (
+        <div key={entity.id}>
+          <strong>{entity.id}</strong>
+          <ul>
+            {entity.fields.map((field) => (
+              <li key={field.path}>
+                {field.path}: "{field.before}" → "{field.after}"
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </>
+  );
+}
+
+/** The maintainer's review of one open proposal (plan 0012 §5 points 7–9):
+ * diffs the proposal's full document against the `versions` row for its
+ * `base_version`, flags staleness, and decides accept-into-draft or reject. */
+function ProposalReview({
+  docId,
+  kind,
+  publishedVersion,
+  hasDraft,
+  proposal,
+  onBack,
+  onAccepted,
+  onRejected,
+}: {
+  docId: string;
+  kind: "topic" | "domain";
+  publishedVersion: number;
+  hasDraft: boolean;
+  proposal: Proposal;
+  onBack: () => void;
+  onAccepted: () => void;
+  onRejected: () => void;
+}) {
+  const [base, setBase] = useState<AnyDoc | "loading">("loading");
+  const [decisionNote, setDecisionNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setBase("loading");
+    if (proposal.base_version === 0) {
+      setBase(emptyDocFor(kind));
+      return;
+    }
+    loadVersion(docId, proposal.base_version).then(
+      (doc) => setBase((doc as AnyDoc | null) ?? emptyDocFor(kind)),
+      () => setBase(emptyDocFor(kind)),
+    );
+  }, [docId, proposal.base_version, kind]);
+
+  async function handleAccept() {
+    if (
+      hasDraft &&
+      !window.confirm("This replaces your current draft. Continue?")
+    ) {
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      // Order pinned (plan 0012 §5 point 9): draft first, then status — if
+      // the status update fails the proposal just stays open, harmless.
+      await saveDraft(docId, proposal.proposed_doc);
+      await decideProposal(
+        proposal.id,
+        "accepted",
+        decisionNote.trim() === "" ? null : decisionNote.trim(),
+      );
+      onAccepted();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleReject() {
+    if (decisionNote.trim() === "") {
+      setError("A reason is required to reject a proposal.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await decideProposal(proposal.id, "rejected", decisionNote.trim());
+      onRejected();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (base === "loading") {
+    return <p>Loading base version…</p>;
+  }
+  const diff =
+    kind === "topic"
+      ? diffBookDocument(
+          base as BookDocument,
+          proposal.proposed_doc as BookDocument,
+        )
+      : diffDomainDocument(
+          base as DomainDocument,
+          proposal.proposed_doc as DomainDocument,
+        );
+
+  return (
+    <section>
+      <h2>Proposal review</h2>
+      {proposal.note !== null && proposal.note !== "" && (
+        <p>Note: {proposal.note}</p>
+      )}
+      {proposal.base_version < publishedVersion && (
+        <p className="error-text">
+          based on version {proposal.base_version}; current is{" "}
+          {publishedVersion} — review against current content before accepting.
+        </p>
+      )}
+      {Object.entries(diff).map(([name, collectionDiff]) =>
+        collectionDiffIsEmpty(collectionDiff) ? null : (
+          <div key={name} className="card">
+            <h3>{name}</h3>
+            <CollectionDiffView diff={collectionDiff} />
+          </div>
+        ),
+      )}
+      {error !== null && <p className="error-text">{error}</p>}
+      <label className="field">
+        Decision note (required to reject)
+        <textarea
+          rows={3}
+          value={decisionNote}
+          onChange={(e) => setDecisionNote(e.target.value)}
+        />
+      </label>
+      <button
+        className="primary"
+        disabled={busy}
+        onClick={() => void handleAccept()}
+      >
+        Accept into draft
+      </button>
+      <button
+        className="plain danger"
+        disabled={busy}
+        onClick={() => void handleReject()}
+      >
+        Reject
+      </button>
+      <button className="plain" onClick={onBack}>
+        Back
+      </button>
+    </section>
+  );
 }
 
 // ------------------------------------------------------------ book editor

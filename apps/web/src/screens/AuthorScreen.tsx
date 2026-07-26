@@ -2,23 +2,30 @@ import { useEffect, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import {
   currentUser,
+  listCatalogSummaries,
   listMyDocuments,
+  listMyProposals,
   signInWithEmail,
   signOut,
+  withdrawProposal,
   type AuthorDocSummary,
+  type CatalogSummary,
+  type Proposal,
 } from "../backend/supabase";
 
 /**
- * Author entry point (plan 0012 step 2): magic-link sign-in, then the list
- * of documents the account maintains. Reachable only when the backend is
- * configured; learners never need this screen.
+ * Author entry point (plan 0012 step 2, extended by §5): magic-link sign-in,
+ * the list of documents the account maintains, every other published
+ * document as a "suggest edits" entry point, and the account's own
+ * proposals. Reachable only when the backend is configured; learners never
+ * need this screen.
  */
 export function AuthorScreen({
   onOpenDocument,
   onPrivacy,
   onBack,
 }: {
-  onOpenDocument: (docId: string) => void;
+  onOpenDocument: (docId: string, mode?: "maintain" | "propose") => void;
   onPrivacy: () => void;
   onBack: () => void;
 }) {
@@ -26,6 +33,8 @@ export function AuthorScreen({
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [docs, setDocs] = useState<AuthorDocSummary[] | null>(null);
+  const [catalog, setCatalog] = useState<CatalogSummary[] | null>(null);
+  const [proposals, setProposals] = useState<Proposal[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -35,9 +44,11 @@ export function AuthorScreen({
     if (user === "loading" || user === null) {
       return;
     }
-    listMyDocuments().then(setDocs, (e: unknown) =>
-      setError(e instanceof Error ? e.message : String(e)),
-    );
+    const onError = (e: unknown) =>
+      setError(e instanceof Error ? e.message : String(e));
+    listMyDocuments().then(setDocs, onError);
+    listCatalogSummaries().then(setCatalog, onError);
+    listMyProposals().then(setProposals, onError);
   }, [user]);
 
   async function handleSignIn(event: React.FormEvent) {
@@ -50,6 +61,16 @@ export function AuthorScreen({
       setError(e instanceof Error ? e.message : String(e));
     }
   }
+
+  async function handleWithdraw(proposal: Proposal) {
+    await withdrawProposal(proposal.id);
+    setProposals(await listMyProposals());
+  }
+
+  const maintainedIds = new Set((docs ?? []).map((doc) => doc.id));
+  const suggestable = (catalog ?? []).filter(
+    (row) => !maintainedIds.has(row.id),
+  );
 
   return (
     <main>
@@ -115,6 +136,8 @@ export function AuthorScreen({
                 void signOut().then(() => {
                   setUser(null);
                   setDocs(null);
+                  setCatalog(null);
+                  setProposals(null);
                   setSent(false);
                 });
               }}
@@ -142,6 +165,61 @@ export function AuthorScreen({
                       {doc.listed ? "" : " · not listed yet"}
                     </span>
                   </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <h2>All published content — suggest edits</h2>
+          {catalog === null && <p>Loading…</p>}
+          {catalog !== null && suggestable.length === 0 && (
+            <p className="card">Nothing else to suggest edits on yet.</p>
+          )}
+          {catalog !== null && suggestable.length > 0 && (
+            <ul className="card-list">
+              {suggestable.map((row) => (
+                <li key={row.id} className="card">
+                  <button onClick={() => onOpenDocument(row.id, "propose")}>
+                    <strong>{row.id}</strong>
+                    <span className="status">
+                      {row.kind === "topic" ? "Book" : "Domain lexicon"} ·
+                      version {row.published_version}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <h2>My proposals</h2>
+          {proposals === null && <p>Loading…</p>}
+          {proposals !== null && proposals.length === 0 && (
+            <p className="card">You haven't proposed any edits yet.</p>
+          )}
+          {proposals !== null && proposals.length > 0 && (
+            <ul className="card-list">
+              {proposals.map((proposal) => (
+                <li key={proposal.id} className="card">
+                  <strong>{proposal.doc_id}</strong>
+                  <span className="status">
+                    {proposal.status}
+                    {proposal.note !== null &&
+                      proposal.note !== "" &&
+                      ` · ${proposal.note}`}
+                  </span>
+                  {proposal.decision_note !== null && (
+                    <p className="status">
+                      Maintainer: {proposal.decision_note}
+                    </p>
+                  )}
+                  {proposal.status === "open" && (
+                    <button
+                      className="plain danger"
+                      onClick={() => void handleWithdraw(proposal)}
+                    >
+                      Withdraw
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>

@@ -103,7 +103,15 @@ type Screen =
   | { screen: "author" }
   // `target` deep-links into a level (lesson/unit/note); `back` returns to
   // the learner screen the Edit button was tapped on (default: author list).
-  | { screen: "edit"; docId: string; target?: EditTarget; back?: Screen }
+  // `mode` (plan 0012 §5): "propose" for a non-maintainer suggesting edits
+  // via AuthorScreen's "suggest edits" list; defaults to "maintain".
+  | {
+      screen: "edit";
+      docId: string;
+      target?: EditTarget;
+      mode?: "maintain" | "propose";
+      back?: Screen;
+    }
   | { screen: "privacy" }
   // Learner settings and stats (reached from the home top bar); both are
   // back-button screens over on-device state.
@@ -936,7 +944,9 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     backActionRef.current = onBack;
     return (
       <AuthorScreen
-        onOpenDocument={(docId) => setScreen({ screen: "edit", docId })}
+        onOpenDocument={(docId, mode) =>
+          setScreen({ screen: "edit", docId, mode })
+        }
         onPrivacy={() => setScreen({ screen: "privacy" })}
         onBack={onBack}
       />
@@ -947,7 +957,12 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     const onBack = () => setScreen(back);
     backActionRef.current = onBack;
     return (
-      <EditScreen docId={screen.docId} target={screen.target} onBack={onBack} />
+      <EditScreen
+        docId={screen.docId}
+        target={screen.target}
+        mode={screen.mode}
+        onBack={onBack}
+      />
     );
   }
   if (screen.screen === "privacy") {
