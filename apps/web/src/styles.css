@@ -528,6 +528,12 @@ main.session {
   background: var(--bg);
   border-top: 1px solid var(--card-border);
   animation: bar-up 200ms ease;
+  /* Above .book-bg-icon's 1, below .popup-overlay's 10. The watermark used
+   * to sit at z-index -1, where this bar's opaque background hid it for
+   * free; now that it overlays content, the bar has to out-stack it
+   * explicitly — the post-answer grade-button bar grows to ~168px, past the
+   * 9rem the watermark offsets itself by, and bled through without this. */
+  z-index: 2;
 }
 
 @keyframes bar-up {
@@ -607,15 +613,22 @@ input[type="text"] {
 .book-bg-icon {
   position: fixed;
   right: -2rem;
-  /* Clears the fixed footer .action-bar (Practice/Answer) — same 9rem the
-   * screens reserve as padding-bottom — else the bar's opaque background
-   * hides the icon. */
+  /* Sits above the fixed footer .action-bar (Practice/Answer) — same 9rem
+   * the screens reserve as padding-bottom — so the emblem lands in open
+   * page area. The bar's own z-index (2) is what actually keeps it clear,
+   * since the taller post-answer bar overruns this offset. */
   bottom: 9rem;
   width: 50vw;
   max-width: 320px;
   height: auto;
-  opacity: 0.08;
-  z-index: -1;
+  /* Overlays the content rather than sitting behind it (measured: on the
+   * card-dense Book and Lesson screens, opaque .card backgrounds hid 88% of
+   * it at z-index -1, leaving a clipped sliver in the gutters). 1 clears the
+   * cards and the .action-bar while staying under .popup-overlay's 10.
+   * pointer-events: none keeps it non-interactive; the low opacity keeps
+   * text under it legible. */
+  opacity: 0.15;
+  z-index: 1;
   pointer-events: none;
 }
 
@@ -1156,6 +1169,77 @@ input[type="email"],
 
 .editor-add button {
   flex-shrink: 0;
+}
+
+/* EntityPicker (plan-less spec 0018): search + filter chips + a scrollable
+ * checkbox/radio list over a reference field's pool. */
+.entity-picker-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.5rem 0;
+}
+
+.entity-picker-filters button {
+  padding: 0.3rem 0.75rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border-radius: 1rem;
+}
+
+.entity-picker-filters button.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--on-primary);
+}
+
+.entity-picker-options {
+  list-style: none;
+  margin: 0.5rem 0;
+  padding: 0.25rem 0.5rem;
+  max-height: 14rem;
+  overflow-y: auto;
+  border: 1px solid var(--card-border);
+  border-radius: 0.5rem;
+}
+
+.entity-picker-options li {
+  padding: 0.3rem 0;
+  border-bottom: 1px solid var(--card-border);
+}
+
+.entity-picker-options li:last-child {
+  border-bottom: none;
+}
+
+.entity-picker-options label {
+  display: block;
+  font-weight: 400;
+}
+
+.entity-picker-options input[type="checkbox"],
+.entity-picker-options input[type="radio"] {
+  margin-right: 0.4rem;
+}
+
+.entity-picker-group-header {
+  font-weight: 600;
+  border-bottom: none;
+  padding-top: 0.6rem;
+}
+
+/* Asset manager previews (plan 0017 §4): an author-picked photo can be much
+ * wider than the card it sits in, and a bare <audio controls> defaults to
+ * ~300px which overflows a narrow phone screen otherwise. */
+.asset-list img,
+.asset-list audio {
+  max-width: 100%;
+}
+
+.asset-list img {
+  max-height: 8rem;
+  object-fit: contain;
+  display: block;
 }
 
 .editor-publish {

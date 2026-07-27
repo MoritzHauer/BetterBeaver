@@ -7,7 +7,10 @@ import {
   signOut,
 } from "../backend/supabase";
 import type { User } from "@supabase/supabase-js";
+import type { BookDocument, DomainDocument } from "@betterbeaver/schema";
 import { clearCachedDocuments } from "../content/cache";
+import { readPrivateBook } from "../content/private-store";
+import { parsePrivateBookImport } from "../content/private-transfer";
 import { eraseAllData, exportBackup, importBackup } from "../progress/backup";
 import { SOUND_KEY } from "../sounds";
 import { AUTO_UPDATE_KEY } from "../autoUpdate";
@@ -25,10 +28,20 @@ export function SettingsScreen({
   onBack,
   onSignIn,
   onImportBook,
+  importPrivateBook,
 }: {
   onBack: () => void;
   onSignIn: () => void;
   onImportBook: (docId: string) => void;
+  /** Validates + commits an imported private Book (spec 0017-5 §3 rules
+   * 3+5) — the cross-Book validation and replace-existing dry run need live
+   * membership state, which lives in `content/source.ts`. */
+  importPrivateBook: (
+    bookId: string,
+    book: BookDocument,
+    domain: DomainDocument,
+    assets: Record<string, Blob>,
+  ) => Promise<void>;
 }) {
   const [themePref, setThemePrefState] = useState<ThemePref>(getThemePref);
   const [displayName, setDisplayNameState] = useState(getDisplayName);
@@ -46,9 +59,13 @@ export function SettingsScreen({
   const [domainImportError, setDomainImportError] = useState<string | null>(
     null,
   );
+  const [privateImportError, setPrivateImportError] = useState<string | null>(
+    null,
+  );
   const progressFileRef = useRef<HTMLInputElement>(null);
   const bookFileRef = useRef<HTMLInputElement>(null);
   const domainFileRef = useRef<HTMLInputElement>(null);
+  const privateBookFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (getSupabase() === null) {
@@ -174,10 +191,44 @@ export function SettingsScreen({
   const handleImportDomain = (file: File) =>
     importFileOfKind(file, "domain", setDomainImportError);
 
+  /** Import a private Book export (spec 0017-5 §3): parses + shape-checks
+   * the file (rules 1-2), confirms a replace on a matching id already on
+   * this device (rule 4), then hands off to `importPrivateBook` for the
+   * cross-Book validation and commit (rules 3+5). */
+  async function handleImportPrivateBook(file: File): Promise<void> {
+    setPrivateImportError(null);
+    try {
+      const parsed = await parsePrivateBookImport(file);
+      if (!parsed.ok) {
+        setPrivateImportError(parsed.error);
+        return;
+      }
+      const existing = await readPrivateBook(parsed.bookId);
+      if (
+        existing !== undefined &&
+        !window.confirm(
+          "A Book with this id already exists on this device. Importing replaces it. Continue?",
+        )
+      ) {
+        return;
+      }
+      await importPrivateBook(
+        parsed.bookId,
+        parsed.book,
+        parsed.domain,
+        parsed.assets,
+      );
+    } catch (err) {
+      setPrivateImportError(
+        err instanceof Error ? err.message : "Import failed",
+      );
+    }
+  }
+
   async function handleErase(): Promise<void> {
     if (
       !window.confirm(
-        "This erases all your progress, settings, and drafts on this device. Export first if you want a backup. Continue?",
+        "This erases all your progress, settings, and drafts on this device, including any Books you created here — those can't be downloaded again. Export first if you want a backup. Continue?",
       )
     ) {
       return;
@@ -351,6 +402,38 @@ export function SettingsScreen({
             }}
           />
         </div>
+      </section>
+
+      <section className="card">
+        <h2>Your Books</h2>
+        <div className="grade-buttons">
+          <button
+            className="plain"
+            onClick={() => privateBookFileRef.current?.click()}
+          >
+            Import a Book…
+          </button>
+          <input
+            ref={privateBookFileRef}
+            type="file"
+            accept=".bbbook"
+            style={{ display: "none" }}
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+              if (file !== undefined) {
+                void handleImportPrivateBook(file);
+              }
+            }}
+          />
+        </div>
+        <p className="status">
+          Loads a Book someone exported from another device. No account needed.
+          A Book already on this device with the same id gets replaced.
+        </p>
+        {privateImportError !== null ? (
+          <p className="error-text">{privateImportError}</p>
+        ) : null}
       </section>
 
       {getSupabase() !== null && user !== "loading" && user !== null ? (

@@ -333,3 +333,136 @@ describe("planUpdate", () => {
     expect(update).not.toHaveProperty("removedIds");
   });
 });
+
+// --- malformed documents degrade to `broken`, never to an exception -------
+// Regression: documents at rest are untrusted (backend rows, IndexedDB
+// cache, imported files), but several fields were read directly before
+// `validateContent` saw them — `doc.topic.domainId` and `doc.notes.map(...)`
+// — so one bad document threw out of the build loop and bricked the whole
+// boot (white screen, empty #root) instead of landing itself in `broken`
+// as plan 0015 decision 11a promises.
+
+const EMPTY_ASSETS: AssetStems = {
+  audioByBook: new Map(),
+  imageByBook: new Map(),
+  audioByDomain: new Map(),
+  imageByDomain: new Map(),
+};
+
+describe("createDocumentContentSource with malformed documents", () => {
+  const malformed: [string, unknown][] = [
+    [
+      "missing notes",
+      {
+        topic: { id: "bad", domainId: "d" },
+        lessons: [],
+        units: [],
+        items: [],
+        tasks: [],
+        resources: [],
+      },
+    ],
+    [
+      "missing topic",
+      {
+        lessons: [],
+        units: [],
+        items: [],
+        tasks: [],
+        resources: [],
+        notes: [],
+      },
+    ],
+    [
+      "null topic",
+      {
+        topic: null,
+        lessons: [],
+        units: [],
+        items: [],
+        tasks: [],
+        resources: [],
+        notes: [],
+      },
+    ],
+    [
+      "notes not an array",
+      {
+        topic: { id: "bad", domainId: "d" },
+        lessons: [],
+        units: [],
+        items: [],
+        tasks: [],
+        resources: [],
+        notes: "nope",
+      },
+    ],
+    [
+      "a null note entry",
+      {
+        topic: { id: "bad", domainId: "d" },
+        lessons: [],
+        units: [],
+        items: [],
+        tasks: [],
+        resources: [],
+        notes: [null],
+      },
+    ],
+    [
+      "a note without markdown",
+      {
+        topic: { id: "bad", domainId: "d" },
+        lessons: [],
+        units: [],
+        items: [],
+        tasks: [],
+        resources: [],
+        notes: [{ stem: "s" }],
+      },
+    ],
+    [
+      "lessons not an array",
+      {
+        topic: { id: "bad", domainId: "d" },
+        lessons: 3,
+        units: [],
+        items: [],
+        tasks: [],
+        resources: [],
+        notes: [],
+      },
+    ],
+  ];
+
+  for (const [label, doc] of malformed) {
+    it(`reports "${label}" as broken instead of throwing`, () => {
+      const books = new Map([["bad", doc as BookDocument]]);
+      expect(() =>
+        createDocumentContentSource(books, new Map(), EMPTY_ASSETS),
+      ).not.toThrow();
+      const built = createDocumentContentSource(books, new Map(), EMPTY_ASSETS);
+      expect(built.broken.map((b) => b.bookId)).toEqual(["bad"]);
+      expect(built.broken[0]?.errors[0] ?? "").toContain(
+        "malformed book document",
+      );
+    });
+  }
+
+  it("a malformed Book does not take a healthy Book down with it", () => {
+    const { books, domains, assets } = loadFromFs();
+    const merged = new Map<string, BookDocument>([
+      [
+        "bad",
+        { topic: { id: "bad", domainId: "d" } } as unknown as BookDocument,
+      ],
+      ...books,
+    ]);
+    const built = createDocumentContentSource(merged, domains, {
+      ...assets,
+    });
+    expect(built.broken.map((b) => b.bookId)).toEqual(["bad"]);
+    // every genuinely valid Book still assembled
+    expect(built.source).toBeDefined();
+  });
+});

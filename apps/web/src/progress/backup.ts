@@ -52,9 +52,12 @@ export async function importBackup(file: File): Promise<void> {
 
 /**
  * The nuclear "Erase all my data" action (Settings › Danger): drops every
- * `bb.*` key (progress, settings, author drafts) and the content cache. The
- * caller must confirm and nudge an export first; this wipes unconditionally
- * and touches nothing on the backend.
+ * `bb.*` key (progress, settings, author drafts), the content cache, and the
+ * private-Book store (plan 0017 §6) — this is the one sweep allowed to take
+ * private Books with it, since it's already the explicit "erase everything"
+ * action behind its own confirm, and it's the one thing here that can't be
+ * re-downloaded afterwards. The caller must confirm and nudge an export
+ * first; this wipes unconditionally and touches nothing on the backend.
  */
 export async function eraseAllData(): Promise<void> {
   for (const key of Object.keys(localStorage)) {
@@ -64,4 +67,6 @@ export async function eraseAllData(): Promise<void> {
   }
   const { clearCachedDocuments } = await import("../content/cache");
   await clearCachedDocuments();
+  const { clearPrivateBooks } = await import("../content/private-store");
+  await clearPrivateBooks();
 }

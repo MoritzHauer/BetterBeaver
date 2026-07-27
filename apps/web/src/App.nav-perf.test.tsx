@@ -48,10 +48,13 @@ describe("App navigation render cost", () => {
     screen.getByText("Get Started").click();
 
     // A real book card, not a header icon button (Stats/Settings render
-    // first in the DOM but don't exercise the content-loading cascade).
+    // first in the DOM but don't exercise the content-loading cascade) and
+    // not the always-shown "Create a Book" card (plan 0017 §3) — both of
+    // those, like Library, render with the "primary" card class; a real
+    // book card never does.
     const bookButton = await waitFor(() => {
       const button = container.querySelector<HTMLButtonElement>(
-        ".card-list .card button",
+        ".card-list .card:not(.primary) button",
       );
       expect(button).not.toBeNull();
       return button!;

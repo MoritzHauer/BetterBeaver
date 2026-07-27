@@ -1,5 +1,7 @@
 import type { BookSummary } from "@betterbeaver/engine";
 import { ProgressBar } from "../components/ProgressBar";
+import { readPrivateBook } from "../content/private-store";
+import { exportPrivateBook } from "../content/private-transfer";
 
 /**
  * Home screen (plan 0015): My Books — added Books only, flat (no domain
@@ -16,6 +18,7 @@ export function MyBooksScreen({
   bookProgress,
   broken,
   archivedBooks,
+  privateBookIds,
   onSelectBook,
   onVocabulary,
   onReview,
@@ -23,6 +26,7 @@ export function MyBooksScreen({
   onRestore,
   onRemove,
   onLibrary,
+  onCreateBook,
   onAuthor,
   onOpenStats,
   onOpenSettings,
@@ -41,6 +45,10 @@ export function MyBooksScreen({
     description: string;
     icon?: string;
   }[];
+  /** Ids currently in the private store (plan 0017 §3) — drives the card's
+   * `private` marker, its Export action, and Remove's branched confirm
+   * (spec 0017-5). */
+  privateBookIds: Set<string>;
   onSelectBook: (bookId: string) => void;
   /** Domain-scoped (plan 0006); reached per-card now that the front list is
    * flat (no more domain-header row to hang these off of). */
@@ -51,20 +59,36 @@ export function MyBooksScreen({
   onRemove: (bookId: string) => Promise<void>;
   /** The Library entry point; absent when the backend isn't configured (plan 0015 decision 15). */
   onLibrary?: () => void;
+  /** Creates a private Book (plan 0017 §3) — unlike Library/Author, needs no
+   * backend, so its card is always shown, offline included. */
+  onCreateBook?: () => void;
   /** Author entry (plan 0012); absent when the backend isn't configured. */
   onAuthor?: () => void;
   onOpenStats: () => void;
   onOpenSettings: () => void;
 }) {
-  function handleRemove(bookId: string) {
-    if (
-      !window.confirm(
-        "This removes the downloaded book from this device. Your learning progress is kept, and restored if you add it again. Continue?",
-      )
-    ) {
+  function handleRemove(bookId: string, title: string) {
+    // A private Book has nothing to re-download from (spec 0017-5 §5) — the
+    // public copy's "restored if you add it again" promise is false for it.
+    const message = privateBookIds.has(bookId)
+      ? `"${title}" only exists on this device. Removing it deletes it permanently — it cannot be downloaded again. Your learning progress is kept. Export it first if you want a copy. Continue?`
+      : "This removes the downloaded book from this device. Your learning progress is kept, and restored if you add it again. Continue?";
+    if (!window.confirm(message)) {
       return;
     }
     void onRemove(bookId);
+  }
+
+  async function handleExport(bookId: string) {
+    // `readPrivateBook` returns undefined on a miss AND on any IndexedDB
+    // failure (it swallows errors, like the rest of private-store.ts). The
+    // card only renders Export for an id `privateBookIds` says exists, so
+    // undefined here means the store went unreadable — silently doing
+    // nothing rather than downloading a broken file.
+    const record = await readPrivateBook(bookId);
+    if (record !== undefined) {
+      await exportPrivateBook(record);
+    }
   }
 
   const empty = books.length === 0 && broken.length === 0;
@@ -114,6 +138,21 @@ export function MyBooksScreen({
             </button>
           </li>
         )}
+        <li className="card primary">
+          <button onClick={onCreateBook}>
+            <strong>
+              <img
+                className="icon-glyph"
+                src={`${import.meta.env.BASE_URL}art/icons/edit.png`}
+                alt=""
+              />{" "}
+              Create a Book
+            </strong>
+            <p className="status">
+              Write your own — stays on this device, no account needed
+            </p>
+          </button>
+        </li>
         {books.map((book) => {
           const progress = bookProgress.get(book.id) ?? {
             completed: 0,
@@ -145,6 +184,9 @@ export function MyBooksScreen({
                     </span>
                   )}
                   <strong>{book.title}</strong>
+                  {privateBookIds.has(book.id) && (
+                    <span className="status">private</span>
+                  )}
                 </span>
                 <p>{book.description}</p>
                 <ProgressBar value={progress.completed} max={progress.total} />
@@ -179,12 +221,20 @@ export function MyBooksScreen({
               <details className="card-menu">
                 <summary aria-label="More actions">⋯</summary>
                 <div className="grade-buttons">
+                  {privateBookIds.has(book.id) && (
+                    <button
+                      className="plain"
+                      onClick={() => void handleExport(book.id)}
+                    >
+                      Export
+                    </button>
+                  )}
                   <button className="plain" onClick={() => onArchive(book.id)}>
                     Archive
                   </button>
                   <button
                     className="plain danger"
-                    onClick={() => handleRemove(book.id)}
+                    onClick={() => handleRemove(book.id, book.title)}
                   >
                     Remove
                   </button>
@@ -209,7 +259,7 @@ export function MyBooksScreen({
                 )}
                 <button
                   className="plain danger"
-                  onClick={() => handleRemove(bookId)}
+                  onClick={() => handleRemove(bookId, title)}
                 >
                   Remove
                 </button>
@@ -248,7 +298,7 @@ export function MyBooksScreen({
                     </button>
                     <button
                       className="plain danger"
-                      onClick={() => handleRemove(book.id)}
+                      onClick={() => handleRemove(book.id, book.title)}
                     >
                       Remove
                     </button>

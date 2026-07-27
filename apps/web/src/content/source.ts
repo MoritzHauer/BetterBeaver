@@ -14,6 +14,7 @@ import {
   type DocumentContentSource,
 } from "@betterbeaver/engine";
 import {
+  allAssetStems,
   bundledAssetStems,
   bundledDomainDocuments,
   bundledBookDocuments,
@@ -24,6 +25,14 @@ import {
   deleteCachedDocuments,
   type CachedDocument,
 } from "./cache";
+import {
+  readPrivateBooks,
+  putPrivateBook,
+  deletePrivateBook,
+  type PrivateBookRecord,
+} from "./private-store";
+import { newPrivateId } from "./private-ids";
+import { registerPrivateAssets } from "./private-assets";
 import {
   isFirstRun,
   readMyBooks,
@@ -68,6 +77,27 @@ export interface ContentInit {
   acceptUpdate(update: ContentUpdate): Promise<void>;
   /** Fetches a Book from the Library, validates it against the current My Books set, caches it, and reloads. Throws a human-readable message on failure; membership is untouched on failure. */
   addBook(bookId: string, domainId: string): Promise<void>;
+  /** Book ids currently in the private store (plan 0017 §3) — lets the view
+   * layer ungate the ✎ Edit buttons and route to the private editor for a
+   * private Book without re-reading IndexedDB itself. */
+  privateBookIds: Set<string>;
+  /** Creates a minimum-viable private Book + the Domain it exclusively owns
+   * (plan 0017 §3), adds it to My Books, and reloads onto My Books. No
+   * backend, no validation gate — a freshly created Book is deliberately
+   * empty and gets fleshed out in the editor. */
+  createPrivateBook(title: string): Promise<void>;
+  /** Imports a private Book export (spec 0017-5 §3 rules 3+5): validates
+   * `book`+`domain` against the user's already-added Books — a cross-Book
+   * collision (duplicate item id or domain code) is refused, same dry-run
+   * shape as `addBook` — then commits and reloads. The caller
+   * (SettingsScreen) has already run the parse + kind/schemaVersion checks
+   * and any replace-existing confirm before calling this. */
+  importPrivateBook(
+    bookId: string,
+    book: BookDocument,
+    domain: DomainDocument,
+    assets: Record<string, Blob>,
+  ): Promise<void>;
   /** Drops the Book from My Books (added or archived) and evicts its cache; reloads. Progress is untouched. */
   removeBook(bookId: string): Promise<void>;
   archiveBook(bookId: string): void;
@@ -184,6 +214,9 @@ async function seedOnboardingIfAbsent(cached: CachedDocument[]): Promise<void> {
  * referenced by current membership, keeping exactly `topic:<id>` for each
  * added/archived Book plus `domain:<id>` for each domain a kept book
  * document references. A no-op on a genuinely fresh install.
+ *
+ * Unchanged by plan 0017: a private Book has no cached document, so it's
+ * simply absent from `cached`/`byId` and never touched here.
  */
 async function purgeUnmembered(
   cached: CachedDocument[],
@@ -222,16 +255,25 @@ async function purgeUnmembered(
  * run). A `bookId` missing its cached `topic:` document is reported in
  * `missing` — except `demo`, whose bundled seed serves as the offline
  * fallback (decision 3's "offline Add source" rule), so it's built from the
- * seed in memory instead of ever appearing missing.
+ * seed in memory instead of ever appearing missing. A `bookId` present in
+ * `privateById` (plan 0017 §4) resolves straight from that record instead —
+ * no cache lookup, never reported missing.
  */
 function buildMembers(
   cachedById: Map<string, CachedDocument>,
   bookIds: string[],
+  privateById: Map<string, PrivateBookRecord>,
 ): { built: DocumentContentSource; missing: string[] } {
   const books = new Map<string, BookDocument>();
   const domains = new Map<string, DomainDocument>();
   const missing: string[] = [];
   for (const bookId of bookIds) {
+    const privateRec = privateById.get(bookId);
+    if (privateRec !== undefined) {
+      books.set(bookId, privateRec.book);
+      domains.set(rawDomainId(privateRec.book), privateRec.domain);
+      continue;
+    }
     const rec = cachedById.get(documentId("topic", bookId));
     if (rec === undefined) {
       if (bookId === "demo") {
@@ -258,15 +300,16 @@ function buildMembers(
       }
     }
   }
-  const built = createDocumentContentSource(
-    books,
-    domains,
-    bundledAssetStems(),
-  );
+  const built = createDocumentContentSource(books, domains, allAssetStems());
   return { built, missing };
 }
 
-/** Cached versions of exactly the added+archived Books' documents — what `planUpdate` scopes update-checking to (decision 11). */
+/**
+ * Cached versions of exactly the added+archived Books' documents — what
+ * `planUpdate` scopes update-checking to (decision 11). Unchanged by plan
+ * 0017: a private Book has no cached document and no catalog row, so `rec`
+ * is `undefined` for it and it's skipped here too.
+ */
 function memberCachedVersions(
   cachedById: Map<string, CachedDocument>,
   added: string[],
@@ -341,7 +384,11 @@ export async function initContentSource(): Promise<ContentInit> {
   const archived = readArchived();
   const cachedById = new Map(cached.map((record) => [record.id, record]));
 
-  const { built, missing } = buildMembers(cachedById, added);
+  const privateRecords = await readPrivateBooks();
+  registerPrivateAssets(privateRecords);
+  const privateById = new Map(privateRecords.map((rec) => [rec.id, rec]));
+
+  const { built, missing } = buildMembers(cachedById, added, privateById);
   const broken: { bookId: string; errors: string[] }[] = [
     ...missing.map((bookId) => ({
       bookId,
@@ -366,6 +413,7 @@ export async function initContentSource(): Promise<ContentInit> {
   return {
     result: errors !== undefined ? { errors } : { source: built.source },
     broken: errors !== undefined ? [] : broken,
+    privateBookIds: new Set(privateById.keys()),
 
     async checkForUpdate(): Promise<ContentUpdate | null> {
       if (!configured || errors !== undefined) {
@@ -575,10 +623,11 @@ export async function initContentSource(): Promise<ContentInit> {
         dryRunById.set(doc.id, doc);
       }
       const currentAdded = readMyBooks();
-      const { built: dryRun } = buildMembers(dryRunById, [
-        ...currentAdded.filter((id) => id !== bookId),
-        bookId,
-      ]);
+      const { built: dryRun } = buildMembers(
+        dryRunById,
+        [...currentAdded.filter((id) => id !== bookId), bookId],
+        privateById,
+      );
       const rejection = dryRun.broken.find((b) => b.bookId === bookId);
       if (rejection !== undefined) {
         throw new Error(
@@ -587,6 +636,97 @@ export async function initContentSource(): Promise<ContentInit> {
       }
 
       await putCachedDocuments(newDocs);
+      addToMyBooks(bookId);
+      reloadToMyBooks();
+    },
+
+    async createPrivateBook(title: string): Promise<void> {
+      const bookId = newPrivateId();
+      const domainId = newPrivateId();
+      // Load-bearing (plan 0017 §3): every non-Book entity id must start
+      // with "<book.code>-", and a domain's code must be globally unique
+      // across every added Book. The book UUID's first 8 hex characters
+      // (before its first hyphen) is itself a valid slug and, at 16^8
+      // possibilities, cannot practically collide with another private
+      // Book's code or a shipped Book's short code (e.g. "dx", "ky").
+      const code = bookId.slice(0, 8);
+      const book: BookDocument = {
+        topic: {
+          id: bookId,
+          code,
+          title,
+          domainId,
+          lessonIds: [],
+          description: "",
+        },
+        lessons: [],
+        units: [],
+        items: [],
+        tasks: [],
+        resources: [],
+        notes: [],
+      };
+      const domain: DomainDocument = {
+        domain: {
+          id: domainId,
+          code,
+          kind: "general",
+          title,
+          glossLanguage: "en",
+        },
+        entries: [],
+        families: [],
+      };
+      await putPrivateBook({ id: bookId, book, domain, assets: {} });
+      addToMyBooks(bookId);
+      reloadToMyBooks();
+    },
+
+    async importPrivateBook(
+      bookId: string,
+      book: BookDocument,
+      domain: DomainDocument,
+      assets: Record<string, Blob>,
+    ): Promise<void> {
+      // Dry-run against the current added Books, the imported Book appended
+      // last (mirrors addBook/createPrivateBook: earliest wins, so an
+      // introduced collision rejects only the imported Book — existing
+      // content untouched). Replacing an existing private Book: overwriting
+      // `bookId`'s entry in `dryRunPrivateById` below means the OLD version
+      // is never part of the dry run, so it can't collide with the new one.
+      const freshCached = await readCachedDocuments();
+      const cachedById = new Map(freshCached.map((d) => [d.id, d]));
+      const freshPrivate = await readPrivateBooks();
+      const dryRunPrivateById = new Map(
+        freshPrivate.map((rec) => [rec.id, rec]),
+      );
+      dryRunPrivateById.set(bookId, {
+        id: bookId,
+        book,
+        domain,
+        assets,
+        updatedAt: 0,
+      });
+      const currentAdded = readMyBooks();
+      const { built: dryRun } = buildMembers(
+        cachedById,
+        [...currentAdded.filter((id) => id !== bookId), bookId],
+        dryRunPrivateById,
+      );
+      const rejection = dryRun.broken.find((b) => b.bookId === bookId);
+      if (rejection !== undefined) {
+        // Spec 0017-5 §3 rule 3: "show the error list" — every validation
+        // error for this Book, not just the first (unlike addBook/
+        // acceptUpdate, which only ever report one book's headline error
+        // because they always have other, unaffected books to fall back on).
+        const detail =
+          rejection.errors.length > 0
+            ? rejection.errors.join("; ")
+            : "content conflict";
+        throw new Error(`can't import this book: ${detail}`);
+      }
+
+      await putPrivateBook({ id: bookId, book, domain, assets });
       addToMyBooks(bookId);
       reloadToMyBooks();
     },
@@ -613,11 +753,18 @@ export async function initContentSource(): Promise<ContentInit> {
 
       removeFromMembership(bookId);
 
-      const toDelete = [documentId("topic", bookId)];
-      if (domainId !== "" && !domainStillReferenced) {
-        toDelete.push(documentId("domain", domainId));
+      if (privateById.has(bookId)) {
+        // A private Book has no cached document — purgeUnmembered-style
+        // sweeps can't reach it by design (plan 0017 §2/§5) — so deleting
+        // its own record is the only thing that actually removes it.
+        await deletePrivateBook(bookId);
+      } else {
+        const toDelete = [documentId("topic", bookId)];
+        if (domainId !== "" && !domainStillReferenced) {
+          toDelete.push(documentId("domain", domainId));
+        }
+        await deleteCachedDocuments(toDelete);
       }
-      await deleteCachedDocuments(toDelete);
       reloadToMyBooks();
     },
 

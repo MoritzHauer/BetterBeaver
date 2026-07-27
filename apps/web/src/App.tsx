@@ -36,6 +36,7 @@ import type { ContentInit, ContentUpdate } from "./content/source";
 import { SKIP_COVER_KEY } from "./content/source";
 import { resolvedLinksByEntryId } from "./content/links";
 import { readCachedDocuments } from "./content/cache";
+import { readPrivateBooks } from "./content/private-store";
 import { readArchived } from "./content/myBooks";
 import { createLocalStorageProgressStore } from "./progress/local-storage";
 import { createLocalStorageVocabListStore } from "./progress/vocab-lists";
@@ -108,11 +109,14 @@ type Screen =
   // `mode` (plan 0012 §5): "propose" for a non-maintainer suggesting edits.
   // Leave it unset and the edit branch derives it from `maintainedDocIds`;
   // set it only to pin a route (AuthorScreen's two lists, settings import).
+  // "private" (plan 0017 §3): the Book being viewed has no account behind
+  // it at all — always pinned explicitly by the ✎ call sites, never left
+  // for the maintainedDocIds fallback to guess at.
   | {
       screen: "edit";
       docId: string;
       target?: EditTarget;
-      mode?: "maintain" | "propose";
+      mode?: "maintain" | "propose" | "private";
       back?: Screen;
     }
   | { screen: "privacy" }
@@ -650,6 +654,12 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
         .finally(() => setIsAuthor(true));
     });
   }, []);
+  // A private Book has no account behind it at all (plan 0017 §3), so its
+  // ✎ Edit buttons must render regardless of `isAuthor`, routed to the
+  // private editor rather than the maintain/propose fallback.
+  function isPrivateBook(bookId: string): boolean {
+    return contentInit.privateBookIds.has(bookId);
+  }
   // ponytail: welcome cover shows on every load (plan 0009); persist a
   // "seen" flag if the extra tap ever annoys. The one exception is a reload
   // the app itself triggered from My Books (add/remove/archive/restore/
@@ -731,6 +741,30 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           icon: typeof topic.icon === "string" ? topic.icon : undefined,
         });
       }
+      // Private Books live in their own object store (plan 0017 §2), so
+      // `readCachedDocuments` never sees them — without this an archived
+      // private Book would vanish from the Archive section entirely, with
+      // no way to Restore it even though its id is still in
+      // `bb.mybooks.archived`.
+      void readPrivateBooks().then((records) => {
+        if (cancelled) {
+          return;
+        }
+        for (const record of records) {
+          const topic = record.book.topic as {
+            title?: unknown;
+            description?: unknown;
+            icon?: unknown;
+          };
+          map.set(record.id, {
+            title: typeof topic.title === "string" ? topic.title : record.id,
+            description:
+              typeof topic.description === "string" ? topic.description : "",
+            icon: typeof topic.icon === "string" ? topic.icon : undefined,
+          });
+        }
+        setCachedBookSummaries(new Map(map));
+      });
       setCachedBookSummaries(map);
     });
     return () => {
@@ -1054,6 +1088,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
             back: { screen: "settings" },
           })
         }
+        importPrivateBook={contentInit.importPrivateBook}
       />
     );
   }
@@ -1104,6 +1139,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           bookProgress={bookProgress}
           broken={brokenBooks}
           archivedBooks={archivedBooks}
+          privateBookIds={contentInit.privateBookIds}
           onSelectBook={(bookId) => goToBook(bookId)}
           onVocabulary={(domainId) => setScreen({ screen: "vocab", domainId })}
           onReview={(domainId) => setScreen({ screen: "review", domainId })}
@@ -1115,6 +1151,13 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
               ? () => setScreen({ screen: "library" })
               : undefined
           }
+          onCreateBook={() => {
+            const title = window.prompt("Title for your new Book:");
+            if (title === null || title.trim() === "") {
+              return;
+            }
+            void contentInit.createPrivateBook(title.trim());
+          }}
           onAuthor={
             getSupabase() !== null
               ? () => setScreen({ screen: "author" })
@@ -1186,11 +1229,12 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
             setScreen({ screen: "vocab", domainId: content.topic.domainId })
           }
           onEdit={
-            isAuthor
+            isAuthor || isPrivateBook(screen.bookId)
               ? () =>
                   setScreen({
                     screen: "edit",
                     docId: documentId("topic", screen.bookId),
+                    mode: isPrivateBook(screen.bookId) ? "private" : undefined,
                     back: screen,
                   })
               : undefined
@@ -1224,12 +1268,13 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
             })
           }
           onEdit={
-            isAuthor
+            isAuthor || isPrivateBook(screen.bookId)
               ? () =>
                   setScreen({
                     screen: "edit",
                     docId: documentId("topic", screen.bookId),
                     target: { lessonId: screen.lessonId },
+                    mode: isPrivateBook(screen.bookId) ? "private" : undefined,
                     back: screen,
                   })
               : undefined
@@ -1286,7 +1331,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
               .then((state) => state !== null)
           }
           onEdit={
-            isAuthor
+            isAuthor || isPrivateBook(screen.bookId)
               ? (target) =>
                   setScreen({
                     screen: "edit",
@@ -1296,6 +1341,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
                       unitId: screen.unitId,
                       ...target,
                     },
+                    mode: isPrivateBook(screen.bookId) ? "private" : undefined,
                     back: screen,
                   })
               : undefined

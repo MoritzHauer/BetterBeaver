@@ -1,5 +1,15 @@
 import type { DomainDocument, BookDocument } from "@betterbeaver/schema";
 import type { AssetStems } from "@betterbeaver/engine";
+import { getPrivateAssetUrl, privateAssetStems } from "./private-assets";
+
+/**
+ * Bundled book/lexicon content — and, since plan 0017 §4, the app's asset
+ * resolution point. `getAssetUrl`/`getLexiconAssetUrl` used to be purely
+ * build-time lookups into the globs below; now they also consult the
+ * runtime private-Book overlay (`private-assets.ts`) first, so a private
+ * Book's assets resolve through the exact same calls the screens already
+ * make.
+ */
 
 // Eager globs so every bundled book is statically included and available
 // synchronously (no network fetch, no async import) — this is what makes
@@ -239,6 +249,10 @@ export function getAssetUrl(
   kind: "audio" | "img",
   stem: string,
 ): string | undefined {
+  const privateUrl = getPrivateAssetUrl(bookDir, kind, stem);
+  if (privateUrl !== undefined) {
+    return privateUrl;
+  }
   const byDir = kind === "audio" ? audioUrlsByDir : imageUrlsByDir;
   const direct = byDir.get(bookDir)?.get(stem);
   if (direct !== undefined) {
@@ -260,9 +274,38 @@ export function getLexiconAssetUrl(
   kind: "audio" | "img",
   stem: string,
 ): string | undefined {
+  const privateUrl = getPrivateAssetUrl(domainId, kind, stem);
+  if (privateUrl !== undefined) {
+    return privateUrl;
+  }
   const byDir =
     kind === "audio" ? lexiconAudioUrlsByDir : lexiconImageUrlsByDir;
   return byDir.get(domainId)?.get(stem);
+}
+
+/** Bundled stems merged with any registered private-Book stems. */
+export function allAssetStems(): AssetStems {
+  const merge = (
+    a: Map<string, string[]>,
+    b: Map<string, string[]>,
+  ): Map<string, string[]> => {
+    const merged = new Map(a);
+    for (const [id, stems] of b) {
+      // A key present in both is impossible today (private ids are UUIDs),
+      // but concatenate rather than overwrite so a future collision doesn't
+      // silently drop one side's stems.
+      merged.set(id, [...(merged.get(id) ?? []), ...stems]);
+    }
+    return merged;
+  };
+  const bundled = bundledAssetStems();
+  const priv = privateAssetStems();
+  return {
+    audioByBook: merge(bundled.audioByBook, priv.audioByBook),
+    imageByBook: merge(bundled.imageByBook, priv.imageByBook),
+    audioByDomain: merge(bundled.audioByDomain, priv.audioByDomain),
+    imageByDomain: merge(bundled.imageByDomain, priv.imageByDomain),
+  };
 }
 
 /**

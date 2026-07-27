@@ -58,8 +58,10 @@ export function planUpdate(
 
 /**
  * Per-book and per-domain asset stem inventories (plan 0012: assets stay
- * bundled and frozen, so these always come from the bundled asset maps —
- * regardless of where the documents themselves came from).
+ * bundled and frozen). These usually come from the bundled asset maps
+ * regardless of where the documents themselves came from — except a private
+ * Book (plan 0017 §4), whose stems come from the private-Book store's
+ * runtime asset overlay instead.
  */
 export interface AssetStems {
   audioByBook: Map<string, string[]>;
@@ -107,16 +109,55 @@ function crossSetErrors(
 }
 
 /**
+ * Structural check for an untrusted `BookDocument`, covering exactly the
+ * fields `createDocumentContentSource` reads *before* validation. This is not
+ * a substitute for `validateContent` — it only guarantees the document can be
+ * handed to it without throwing, so a bad one degrades to a `broken` entry
+ * instead of an exception.
+ */
+function bookDocumentShapeError(doc: BookDocument): string | undefined {
+  if (typeof doc !== "object" || doc === null) {
+    return "malformed book document: not an object";
+  }
+  if (typeof doc.topic !== "object" || doc.topic === null) {
+    return "malformed book document: missing or invalid topic";
+  }
+  for (const field of [
+    "lessons",
+    "units",
+    "items",
+    "tasks",
+    "resources",
+    "notes",
+  ] as const) {
+    if (!Array.isArray(doc[field])) {
+      return `malformed book document: "${field}" must be an array`;
+    }
+  }
+  for (const note of doc.notes) {
+    if (
+      typeof note !== "object" ||
+      note === null ||
+      typeof note.stem !== "string" ||
+      typeof note.markdown !== "string"
+    ) {
+      return "malformed book document: every note needs a string stem and markdown";
+    }
+  }
+  return undefined;
+}
+
+/**
  * Builds a `ContentSource` from a set of content documents (plan 0012,
  * per-Book granularity per plan 0015 decision 11a). The single validation
  * path shared by the bundled seed, the IndexedDB cache, and the
  * update-accept dry run: validates every book against its domain
  * (`validateContent`), then folds it into the running set and re-checks
- * the whole set (`validateContentSet`). A book that fails either check is
- * excluded and reported in `broken` instead of throwing — including a
- * cross-Book collision, where the earliest Book (by `bookDocs` insertion
- * order) wins and the later one is excluded. Never throws; callers inspect
- * `broken`.
+ * the whole set (`validateContentSet`). A book that fails either check —
+ * or is too malformed to even hand to the validator — is excluded and
+ * reported in `broken` instead of throwing, including a cross-Book
+ * collision, where the earliest Book (by `bookDocs` insertion order) wins
+ * and the later one is excluded. Never throws; callers inspect `broken`.
  *
  * Map keys must equal the contained book/domain ids — they are the
  * document identities (directory names for bundled content, row ids for
@@ -133,6 +174,19 @@ export function createDocumentContentSource(
   const broken: { bookId: string; errors: string[] }[] = [];
 
   for (const [key, doc] of bookDocs) {
+    // Documents at rest are untrusted (see this file's header comment): a
+    // backend row, a cached document or an imported file can be any shape.
+    // Several fields are read directly below before `validateContent` ever
+    // sees them — `doc.topic.domainId`, `doc.notes.map(...)` — so one
+    // malformed document used to throw straight out of this loop and brick
+    // the whole boot (white screen, empty #root), taking every other Book
+    // with it instead of landing itself in `broken` as plan 0015 decision
+    // 11a promises. Shape-check before touching anything.
+    const shapeError = bookDocumentShapeError(doc);
+    if (shapeError !== undefined) {
+      broken.push({ bookId: key, errors: [shapeError] });
+      continue;
+    }
     const domainId =
       typeof (doc.topic as { domainId?: unknown }).domainId === "string"
         ? (doc.topic as { domainId: string }).domainId

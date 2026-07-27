@@ -1,12 +1,15 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   BOOK_ICONS,
   CONTENT_SCHEMA_VERSION,
   TASK_TYPES,
+  contentIdOf,
+  documentId,
   type DomainDocument,
   type BookDocument,
 } from "@betterbeaver/schema";
 import {
+  createDocumentContentSource,
   diffBookDocument,
   diffDomainDocument,
   moveId,
@@ -36,6 +39,27 @@ import {
 } from "../backend/supabase";
 import { validateForPublish } from "../backend/publishCheck";
 import { FeedbackPanel } from "../components/FeedbackPanel";
+import {
+  readPrivateBook,
+  readPrivateBooks,
+  putPrivateBook,
+} from "../content/private-store";
+import {
+  privateAssetStems,
+  registerPrivateAssets,
+} from "../content/private-assets";
+import { newPrivateId } from "../content/private-ids";
+import { noteTitle } from "../content/noteTitle";
+import { newEntityId } from "../content/entity-ids";
+import {
+  visiblePickerRows,
+  groupPickerRows,
+  optionsFrom,
+  notePoolOptions,
+  unitPoolOptionsGroupedByLesson,
+  type PickerOption,
+  type PickerFilter,
+} from "./entityPicker";
 
 /**
  * Form-based document editor (plan 0012 §7, the "common 80%"): book
@@ -66,6 +90,10 @@ const fm = (label: string, ...path: string[]): FieldSpec => ({
   multiline: true,
 });
 
+// `sourceRef` used to live here as a free-text FieldSpec; spec 0018 §3 moves
+// it out to an `EntityPicker` rendered alongside `EntityForm` at each of
+// this record's two call sites (item view, domain entry view) instead —
+// `FieldSpec`/`Field` stay string-only, on purpose (§3).
 const ITEM_FIELDS: Record<string, FieldSpec[]> = {
   sentence: [
     {
@@ -76,13 +104,11 @@ const ITEM_FIELDS: Record<string, FieldSpec[]> = {
     },
     fm("Translation", "payload", "translation"),
     f("Audio ref", "payload", "audioRef"),
-    f("Source ref", "sourceRef"),
   ],
   concept: [
     f("Term", "payload", "term"),
     fm("Definition", "payload", "definition"),
     fm("Example", "payload", "example"),
-    f("Source ref", "sourceRef"),
   ],
   lexeme: [
     f("Script", "payload", "script"),
@@ -92,7 +118,6 @@ const ITEM_FIELDS: Record<string, FieldSpec[]> = {
     f("Example translation", "payload", "example", "translation"),
     fm("Usage note", "payload", "usageNote"),
     f("Audio ref", "payload", "audioRef"),
-    f("Source ref", "sourceRef"),
   ],
   pair: [
     f("A script", "payload", "a", "script"),
@@ -100,7 +125,6 @@ const ITEM_FIELDS: Record<string, FieldSpec[]> = {
     f("B script", "payload", "b", "script"),
     f("B audio ref", "payload", "b", "audioRef"),
     fm("Contrast", "payload", "contrast"),
-    f("Source ref", "sourceRef"),
   ],
 };
 
@@ -202,63 +226,29 @@ function EntityForm({
   );
 }
 
-/** One id per line; unknown/invalid ids surface at publish, not here. */
-function IdListField({
-  label,
-  ids,
-  onChange,
-}: {
-  label: string;
-  ids: string[];
-  onChange: (ids: string[]) => void;
-}) {
-  return (
-    <label className="field">
-      {label}
-      <textarea
-        rows={Math.min(8, ids.length + 2)}
-        value={ids.join("\n")}
-        onChange={(e) =>
-          onChange(
-            e.target.value
-              .split("\n")
-              .map((line) => line.trim())
-              .filter((line) => line !== ""),
-          )
-        }
-      />
-    </label>
-  );
-}
-
+/** Creates one new entity, id auto-generated (spec 0018 §1) — no more
+ * hand-typed slugs. `makeId` lets each call site pick the right shape
+ * (`${bookCode/domainCode}-${uuid}` for most entities, a bare uuid for a
+ * note's stem — the call site already wraps that as
+ * `${bookCode}-note-${stem}`), while `onAdd`'s signature stays the one
+ * every call site already had. */
 function AddEntityForm({
   label,
+  makeId,
   onAdd,
 }: {
   label: string;
+  makeId: () => string;
   onAdd: (id: string) => void;
 }) {
-  const [id, setId] = useState("");
   return (
-    <form
+    <button
+      type="button"
       className="editor-add"
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (id.trim() !== "") {
-          onAdd(id.trim());
-          setId("");
-        }
-      }}
+      onClick={() => onAdd(makeId())}
     >
-      <input
-        type="text"
-        placeholder="new-id-in-slug-form"
-        pattern="[a-z0-9]+(-[a-z0-9]+)*"
-        value={id}
-        onChange={(e) => setId(e.target.value)}
-      />
-      <button type="submit">{label}</button>
-    </form>
+      {label}
+    </button>
   );
 }
 
@@ -306,6 +296,206 @@ function RowActions({
         </button>
       )}
     </span>
+  );
+}
+
+/**
+ * One component behind every id-reference field (spec 0018 §2): a search
+ * box, optional filter chips, and a scrollable checkbox/radio list of
+ * `options` — never raw id text, but the id is always shown as a muted
+ * subtitle since that's what validation errors name. For `multiple`
+ * pickers, the current selection also renders as its own reorderable list
+ * (reusing `RowActions`, exactly as the pre-picker itemIds/taskIds/etc.
+ * lists already did) so removal/reordering/navigation keep working
+ * regardless of the search box's current filter.
+ *
+ * `onOpen`/`onRemove`/`removeLabel` are per-id callbacks, not spec'd on the
+ * abstract component (§2 lists only `onChange`) — added because the five
+ * existing reference lists this replaces (unit itemIds/taskIds/noteIds,
+ * lesson unitIds, book lessonIds) each has its own navigate-to-edit
+ * affordance and its own removal semantics (hard-delete the owned entity vs.
+ * unlink a shared reference); dropping either here would be a functional
+ * regression, not a UI simplification.
+ */
+function EntityPicker({
+  label,
+  options,
+  selected,
+  onChange,
+  multiple,
+  ordered = false,
+  groupBy = false,
+  filters,
+  defaultFilterKey,
+  onRemove,
+  removeLabel,
+  onOpen,
+  freeTextWhenEmpty = false,
+}: {
+  label: string;
+  options: PickerOption[];
+  selected: string[];
+  onChange: (ids: string[]) => void;
+  multiple: boolean;
+  /** Multi only: up/down reordering, selection order is the array order. */
+  ordered?: boolean;
+  /** Renders a header per `group` value — unit references only (§2). */
+  groupBy?: boolean;
+  filters?: PickerFilter[];
+  defaultFilterKey?: string;
+  /** Defaults to a plain array filter (no side effect beyond unselecting). */
+  onRemove?: (id: string) => void;
+  removeLabel?: (id: string) => string;
+  /** Returns a handler to navigate to that entity's own edit view, or
+   * `undefined` when this row isn't separately editable (e.g. a lexicon
+   * entry referenced from a unit's items — edited in its own domain). */
+  onOpen?: (id: string) => (() => void) | undefined;
+  /**
+   * Single-select only: fall back to a text input when the pool is empty, so
+   * the field never becomes unsettable. `sourceRef` is REQUIRED on every item
+   * and lexicon entry (`entities.ts:182-203`), but its pool is a Book's
+   * `resources` — empty on a freshly-created Book, and absent entirely from a
+   * `DomainDocument`, which has no resources field at all. Without this an
+   * author could not produce one valid item.
+   */
+  freeTextWhenEmpty?: boolean;
+}) {
+  const [search, setSearch] = useState("");
+  const [activeFilterKey, setActiveFilterKey] = useState(defaultFilterKey);
+  const activeFilter = filters?.find(
+    (filter) => filter.key === activeFilterKey,
+  );
+  if (freeTextWhenEmpty && !multiple && options.length === 0) {
+    return (
+      <label className="field">
+        {label}
+        <input
+          type="text"
+          pattern="[a-z0-9]+(-[a-z0-9]+)*"
+          value={selected[0] ?? ""}
+          onChange={(e) =>
+            onChange(e.target.value === "" ? [] : [e.target.value])
+          }
+        />
+        <span className="status">
+          Nothing to pick from yet — add a resource to this Book, or type its
+          id.
+        </span>
+      </label>
+    );
+  }
+  const rows = visiblePickerRows(options, selected, search, activeFilter);
+  const groups = groupBy ? groupPickerRows(rows) : [{ group: undefined, rows }];
+  const selectedSet = new Set(selected);
+  const byId = new Map(options.map((option) => [option.id, option]));
+
+  const remove = (id: string) =>
+    onRemove !== undefined
+      ? onRemove(id)
+      : onChange(selected.filter((x) => x !== id));
+
+  const toggle = (id: string) => {
+    if (!multiple) {
+      onChange(selectedSet.has(id) ? [] : [id]);
+      return;
+    }
+    if (selectedSet.has(id)) {
+      remove(id);
+    } else {
+      onChange([...selected, id]);
+    }
+  };
+
+  return (
+    <div className="field entity-picker">
+      <span>{label}</span>
+      {multiple && selected.length > 0 && (
+        <ul className="editor-list">
+          {selected.map((id) => {
+            const option = byId.get(id);
+            return (
+              <li key={id}>
+                <span>
+                  {option?.title ?? id}
+                  {option === undefined && " · unresolved"}
+                  {option?.kind !== undefined && ` · ${option.kind}`}
+                  <span className="status"> {id}</span>
+                </span>
+                <RowActions
+                  onUp={
+                    ordered
+                      ? () => onChange(moveId(selected, id, -1))
+                      : undefined
+                  }
+                  onDown={
+                    ordered
+                      ? () => onChange(moveId(selected, id, 1))
+                      : undefined
+                  }
+                  onOpen={onOpen?.(id)}
+                  onRemove={() => remove(id)}
+                  removeLabel={removeLabel?.(id)}
+                />
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {filters !== undefined && filters.length > 0 && (
+        <div className="entity-picker-filters">
+          {filters.map((filter) => (
+            <button
+              key={filter.key}
+              type="button"
+              className={filter.key === activeFilterKey ? "active" : undefined}
+              onClick={() =>
+                setActiveFilterKey((current) =>
+                  current === filter.key ? undefined : filter.key,
+                )
+              }
+            >
+              {filter.label}
+            </button>
+          ))}
+        </div>
+      )}
+      <input
+        type="text"
+        aria-label={`Search ${label}`}
+        placeholder="Search…"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+      />
+      <ul className="entity-picker-options">
+        {groups.map(({ group, rows: groupRows }, groupIndex) => (
+          <Fragment key={groupIndex}>
+            {groupBy && (
+              <li className="entity-picker-group-header">
+                {group ?? "(no lesson)"}
+              </li>
+            )}
+            {groupRows
+              .filter((row) => !multiple || !selectedSet.has(row.id))
+              .map((row) => (
+                <li key={row.id}>
+                  <label>
+                    <input
+                      type={multiple ? "checkbox" : "radio"}
+                      name={multiple ? undefined : label}
+                      checked={selectedSet.has(row.id)}
+                      onChange={() => toggle(row.id)}
+                    />
+                    {row.title}
+                    {row.unresolved && " · unresolved"}
+                    {row.kind !== undefined && ` · ${row.kind}`}
+                    <span className="status"> {row.id}</span>
+                  </label>
+                </li>
+              ))}
+          </Fragment>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -379,11 +569,14 @@ export function EditScreen({
 }: {
   docId: string;
   target?: EditTarget;
-  mode?: "maintain" | "propose";
+  mode?: "maintain" | "propose" | "private";
   onBack: () => void;
 }) {
   if (mode === "propose") {
     return <ProposeEditScreen docId={docId} target={target} onBack={onBack} />;
+  }
+  if (mode === "private") {
+    return <PrivateEditScreen docId={docId} target={target} onBack={onBack} />;
   }
   return <MaintainEditScreen docId={docId} target={target} onBack={onBack} />;
 }
@@ -433,6 +626,10 @@ function ProposeEditScreen({
     | { s: "done" }
     | { s: "error"; message: string }
   >({ s: "idle" });
+  // The book's domain lexicon entries (spec 0018 §3), same as
+  // MaintainEditScreen below — best-effort, from the published catalog
+  // since a non-maintainer has no draft to read.
+  const [domainEntries, setDomainEntries] = useState<unknown[]>([]);
   const dirtyRef = useRef(false);
   const workingRef = useRef<AnyDoc | null>(null);
   workingRef.current = working;
@@ -491,6 +688,39 @@ function ProposeEditScreen({
       (e: unknown) => setLoadError(e instanceof Error ? e.message : String(e)),
     );
   }, [docId]);
+
+  // Same reasoning as MaintainEditScreen's identical effect: `domainId` is
+  // stable once `entry` loads, so this only fires once, not on every edit.
+  const domainId =
+    entry?.kind === "topic" && working !== null
+      ? rawPrivateDomainId(working as BookDocument)
+      : "";
+  useEffect(() => {
+    if (domainId === "") {
+      setDomainEntries([]);
+      return;
+    }
+    let cancelled = false;
+    loadCatalogEntry(documentId("domain", domainId)).then(
+      (loaded) => {
+        if (!cancelled) {
+          setDomainEntries(
+            loaded !== null
+              ? ((loaded.published as DomainDocument).entries ?? [])
+              : [],
+          );
+        }
+      },
+      () => {
+        if (!cancelled) {
+          setDomainEntries([]);
+        }
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [domainId]);
 
   // Draft autosave to localStorage, debounced (same 400ms pattern as the
   // maintainer path).
@@ -635,6 +865,7 @@ function ProposeEditScreen({
         view={view}
         setView={setView}
         onChange={change}
+        domainEntries={domainEntries}
       />
     ) : (
       <DomainEditor
@@ -758,6 +989,10 @@ function MaintainEditScreen({
   >("synced");
   // Open proposals against this document (plan 0012 §5 point 6).
   const [openProposals, setOpenProposals] = useState<Proposal[] | null>(null);
+  // The book's domain lexicon entries (spec 0018 §3): BookEditor's itemIds
+  // pickers merge book items with these. Best-effort — a fetch failure just
+  // leaves the Vocabulary side of the picker empty, it never blocks editing.
+  const [domainEntries, setDomainEntries] = useState<unknown[]>([]);
   const dirtyRef = useRef(false);
   const workingRef = useRef<AnyDoc | null>(null);
   workingRef.current = working;
@@ -766,6 +1001,39 @@ function MaintainEditScreen({
     listOpenProposals(docId).then(setOpenProposals, () => setOpenProposals([]));
   };
   useEffect(refreshProposals, [docId]);
+
+  // `domainId` is metadata the book form never edits (BookEditor's own
+  // EntityForm specs don't include it), so it's stable after the initial
+  // load — recomputed each render (cheap) but only fires the fetch below
+  // when its *value* changes, not on every keystroke elsewhere in `working`.
+  const domainId =
+    record?.kind === "topic" && working !== null
+      ? rawPrivateDomainId(working as BookDocument)
+      : "";
+  useEffect(() => {
+    if (domainId === "") {
+      setDomainEntries([]);
+      return;
+    }
+    let cancelled = false;
+    loadDocument(documentId("domain", domainId)).then(
+      (d) => {
+        if (!cancelled) {
+          setDomainEntries(
+            ((d.draft ?? d.published) as DomainDocument | null)?.entries ?? [],
+          );
+        }
+      },
+      () => {
+        if (!cancelled) {
+          setDomainEntries([]);
+        }
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [domainId]);
 
   // Local-first (plan 0012 §7 amended): every edit lands in localStorage;
   // the backend sees it only through the explicit Sync/Publish actions on
@@ -958,6 +1226,7 @@ function MaintainEditScreen({
         view={view}
         setView={setView}
         onChange={change}
+        domainEntries={domainEntries}
       />
     ) : (
       <DomainEditor
@@ -1109,6 +1378,516 @@ function MaintainEditScreen({
         </>
       )}
     </main>
+  );
+}
+
+/** A Book's declared domain id, read raw off its topic — same pattern
+ * `content/source.ts`'s and `content/private-assets.ts`'s own `rawDomainId`
+ * use (each file keeps its own tiny copy rather than sharing one across
+ * module boundaries). Despite the name (this predates spec 0018), it's not
+ * private-path-specific: Maintain/ProposeEditScreen below reuse it to look
+ * up the domain doc for `BookEditor`'s itemIds pickers' merged pool. */
+function rawPrivateDomainId(book: BookDocument): string {
+  return typeof (book.topic as { domainId?: unknown }).domainId === "string"
+    ? (book.topic as { domainId: string }).domainId
+    : "";
+}
+
+/** Item/entry ids (book items and domain entries) whose audioRef/imageRef —
+ * including a pair item's nested a/b sides — points at `stem`, so the Assets
+ * manager's delete confirm can name what a deletion would break (plan
+ * 0017 §4: "the author should hear that before it happens, not after"). */
+function assetReferences(
+  book: BookDocument,
+  domain: DomainDocument,
+  stem: string,
+): string[] {
+  const refs: string[] = [];
+  const check = (entity: Entity) => {
+    const payload = entity.payload;
+    if (typeof payload !== "object" || payload === null) {
+      return;
+    }
+    const p = payload as Record<string, unknown>;
+    if (p.audioRef === stem || p.imageRef === stem) {
+      refs.push(entity.id);
+      return;
+    }
+    for (const side of ["a", "b"] as const) {
+      const sidePayload = p[side];
+      if (
+        typeof sidePayload === "object" &&
+        sidePayload !== null &&
+        (sidePayload as Record<string, unknown>).audioRef === stem
+      ) {
+        refs.push(entity.id);
+        return;
+      }
+    }
+  };
+  for (const item of book.items as Entity[]) {
+    check(item);
+  }
+  for (const entry of domain.entries as Entity[]) {
+    check(entry);
+  }
+  return refs;
+}
+
+/** On-device editing for a private Book (plan 0017 §3): no account, no
+ * network, no draft/published distinction — every edit autosaves straight
+ * into the private store (`content/private-store.ts`) on the same
+ * debounce/flush idiom the maintainer path uses for its localStorage
+ * autosave. Unlike the other two shells, this one owns BOTH of the Book's
+ * documents (its topic and the Domain it exclusively owns, plan 0017
+ * decision 2) and toggles which one `BookEditor`/`DomainEditor` renders via
+ * `editingDomain` — a private Book has no catalog list to reach its Domain
+ * from otherwise, so the book root view grows a link to it (plan 0017 §3's
+ * "a link/tab on the root view is enough"). */
+function PrivateEditScreen({
+  docId,
+  target,
+  onBack,
+}: {
+  docId: string;
+  target?: EditTarget;
+  onBack: () => void;
+}) {
+  const bookId = contentIdOf(docId);
+  const [book, setBook] = useState<BookDocument | null>(null);
+  const [domain, setDomain] = useState<DomainDocument | null>(null);
+  const [assets, setAssets] = useState<Record<string, Blob>>({});
+  const [view, setView] = useState<View>(() => initialView(target));
+  const [editingDomain, setEditingDomain] = useState(false);
+  const [editingAssets, setEditingAssets] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [saveState, setSaveState] = useState<"saved" | "saving" | "error">(
+    "saved",
+  );
+  const dirtyRef = useRef(false);
+  const bookRef = useRef<BookDocument | null>(null);
+  const domainRef = useRef<DomainDocument | null>(null);
+  const assetsRef = useRef<Record<string, Blob>>({});
+  bookRef.current = book;
+  domainRef.current = domain;
+  assetsRef.current = assets;
+
+  useEffect(() => {
+    readPrivateBook(bookId).then((record) => {
+      if (record === undefined) {
+        setLoadError("this private book no longer exists on this device");
+        return;
+      }
+      setBook(record.book);
+      setDomain(record.domain);
+      setAssets(record.assets);
+    });
+  }, [bookId]);
+
+  // Same debounce + unmount-flush idiom as the maintainer path's localStorage
+  // autosave, writing straight to the private store instead — there is no
+  // server draft to sync to, so no separate Sync action. Unlike that
+  // localStorage write, `putPrivateBook` opens an IndexedDB transaction and
+  // can't be awaited from `beforeunload` (the page is already tearing down),
+  // so the tab-close path is best-effort: `visibilitychange` fires earlier
+  // and more reliably (especially on mobile, where `beforeunload` may not
+  // fire at all) and is registered alongside it; worst case is losing up to
+  // the 400ms debounce window's edit.
+  useEffect(() => {
+    const flush = () => {
+      if (
+        dirtyRef.current &&
+        bookRef.current !== null &&
+        domainRef.current !== null
+      ) {
+        putPrivateBook({
+          id: bookId,
+          book: bookRef.current,
+          domain: domainRef.current,
+          assets: assetsRef.current,
+        }).catch(() => {
+          // Exit-time write; there is no UI left to show the failure on.
+        });
+        dirtyRef.current = false;
+      }
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        flush();
+      }
+    };
+    window.addEventListener("beforeunload", flush);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.removeEventListener("beforeunload", flush);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      flush();
+    };
+  }, [bookId]);
+
+  // Debounced autosave (same 400ms pattern as the maintainer path). Reads
+  // the refs, not the closed-over `book`/`domain`/`assets`, when the timer
+  // fires: the Assets manager (plan 0017 §4) writes straight through
+  // `putPrivateBook` outside this debounce, and if that write's `await`
+  // straddles this timer firing, a closure-captured `assets` would be
+  // stale — overwriting the just-added/deleted asset with the pre-change
+  // map. The refs are current as of the timer's actual fire time instead.
+  useEffect(() => {
+    if (!dirtyRef.current || book === null || domain === null) {
+      return;
+    }
+    setSaveState("saving");
+    const timer = setTimeout(() => {
+      putPrivateBook({
+        id: bookId,
+        book: bookRef.current ?? book,
+        domain: domainRef.current ?? domain,
+        assets: assetsRef.current,
+      }).then(
+        () => {
+          dirtyRef.current = false;
+          setSaveState("saved");
+        },
+        () => setSaveState("error"),
+      );
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [book, domain, assets, bookId]);
+
+  const changeBook = (next: BookDocument) => {
+    dirtyRef.current = true;
+    setBook(next);
+  };
+  const changeDomain = (next: DomainDocument) => {
+    dirtyRef.current = true;
+    setDomain(next);
+  };
+
+  // Inline validation only (plan 0017 §3): a half-built private Book is a
+  // normal intermediate state, so this never gates the autosave above —
+  // it only surfaces the same `validateContent` errors the maintainer editor
+  // shows before publish. A private Book stands alone (it owns its Domain
+  // exclusively, plan 0017 decision 2), so — unlike `validateForPublish` —
+  // there is no wider catalog to assemble it against and no backend call.
+  const validationErrors = useMemo(() => {
+    if (book === null || domain === null) {
+      return [];
+    }
+    const domainId = rawPrivateDomainId(book);
+    const built = createDocumentContentSource(
+      new Map([[bookId, book]]),
+      domainId === "" ? new Map() : new Map([[domainId, domain]]),
+      privateAssetStems(),
+    );
+    return built.broken.find((b) => b.bookId === bookId)?.errors ?? [];
+    // `assets` isn't read directly here, but adding/deleting one re-runs
+    // `registerPrivateAssets` (AssetsManager below) before notifying this
+    // component, so it's the signal this memo needs to re-check dangling
+    // audioRef/imageRef against the fresh overlay in `privateAssetStems()`.
+  }, [book, domain, bookId, assets]);
+
+  if (loadError !== null) {
+    return (
+      <main>
+        <p className="error-text">{loadError}</p>
+        <button onClick={onBack}>Back</button>
+      </main>
+    );
+  }
+  if (book === null || domain === null) {
+    return <main>Loading…</main>;
+  }
+
+  function goUp() {
+    if (view.v !== "root") {
+      setView(upView(view));
+      return;
+    }
+    if (editingDomain) {
+      setEditingDomain(false);
+      return;
+    }
+    if (editingAssets) {
+      setEditingAssets(false);
+    }
+  }
+
+  return (
+    <main className="editor">
+      <header className="screen-header">
+        <button className="plain" onClick={onBack} title="Back to learning">
+          <img
+            className="icon-glyph"
+            src={`${import.meta.env.BASE_URL}art/icons/arrow_W.png`}
+            alt="Back to learning"
+          />
+        </button>
+        {(view.v !== "root" || editingDomain || editingAssets) && (
+          <button className="plain" onClick={goUp} title="Up one level">
+            <img
+              className="icon-glyph"
+              src={`${import.meta.env.BASE_URL}art/icons/arrow_N.png`}
+              alt="Up one level"
+            />
+          </button>
+        )}
+        <h1>{docId}</h1>
+      </header>
+      <p className="status">
+        {saveState === "saving"
+          ? "saving…"
+          : saveState === "error"
+            ? "local save failed — storage may be full"
+            : "saved on this device"}
+      </p>
+      {!editingDomain && !editingAssets && view.v === "root" && (
+        <p>
+          <button
+            className="plain"
+            onClick={() => {
+              setEditingDomain(true);
+              setView({ v: "root" });
+            }}
+          >
+            Edit this Book's lexicon (Domain) →
+          </button>
+        </p>
+      )}
+      {!editingDomain && !editingAssets && view.v === "root" && (
+        <p>
+          <button
+            className="plain"
+            onClick={() => {
+              setEditingAssets(true);
+              setView({ v: "root" });
+            }}
+          >
+            Manage assets →
+          </button>
+        </p>
+      )}
+      {editingAssets ? (
+        <AssetsManager
+          book={book}
+          domain={domain}
+          bookId={bookId}
+          assets={assets}
+          onAssetsChange={setAssets}
+        />
+      ) : editingDomain ? (
+        <DomainEditor
+          doc={domain}
+          view={view}
+          setView={setView}
+          onChange={changeDomain}
+        />
+      ) : (
+        <BookEditor
+          doc={book}
+          view={view}
+          setView={setView}
+          onChange={changeBook}
+          hideCoverArt
+          domainEntries={domain.entries}
+        />
+      )}
+      {validationErrors.length > 0 && (
+        <div className="editor-publish card">
+          <ul className="error-text">
+            {validationErrors.slice(0, 20).map((error) => (
+              <li key={error}>{error}</li>
+            ))}
+            {validationErrors.length > 20 && (
+              <li>…and {validationErrors.length - 20} more</li>
+            )}
+          </ul>
+        </div>
+      )}
+    </main>
+  );
+}
+
+// ----------------------------------------------------------- asset manager
+
+/** Kind label for display, from the blob's MIME type — same "image vs.
+ * audio" split `content/private-assets.ts`'s runtime overlay uses. */
+function assetKind(blob: Blob): "audio" | "image" {
+  return blob.type.startsWith("image/") ? "image" : "audio";
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+// ponytail: a flat per-file ceiling, not real IndexedDB quota detection —
+// quota isn't reliably queryable across browsers, and a private Book is
+// later serialised into one JSON string at export time (plan 0017 §7: "fine
+// to roughly 20 MB"), so keeping each asset well under that keeps the export
+// small too. Upgrade path if real files need to exceed this: chunked/zip
+// export, at which point a dependency is worth it.
+const MAX_ASSET_BYTES = 10 * 1024 * 1024;
+
+/** Asset manager for a private Book (plan 0017 §4): list/add/delete blobs
+ * and show each stem as copyable text. Deliberately NOT a per-field file
+ * picker — that would mean changing `EntityForm`/`Field`, which the
+ * maintainer and propose paths share, for a feature only private Books use.
+ * The author copies a stem here and pastes it into an item's
+ * audioRef/imageRef field by hand; the stems are the contract between this
+ * view and the book/domain forms. */
+function AssetsManager({
+  book,
+  domain,
+  bookId,
+  assets,
+  onAssetsChange,
+}: {
+  book: BookDocument;
+  domain: DomainDocument;
+  bookId: string;
+  assets: Record<string, Blob>;
+  onAssetsChange: (next: Record<string, Blob>) => void;
+}) {
+  const [error, setError] = useState<string | null>(null);
+  const [previewUrls, setPreviewUrls] = useState<Map<string, string>>(
+    new Map(),
+  );
+
+  // One object URL per current stem. The cleanup revokes exactly what this
+  // run's setup created, and runs both on the next `assets` change and on
+  // unmount (plan 0017 §4: "Revoke those URLs on unmount") — a plain
+  // effect+cleanup pair rather than manual prev/next diffing, so it stays
+  // correct under StrictMode's double-invoke too.
+  useEffect(() => {
+    const urls = new Map<string, string>();
+    for (const [stem, blob] of Object.entries(assets)) {
+      urls.set(stem, URL.createObjectURL(blob));
+    }
+    setPreviewUrls(urls);
+    return () => {
+      for (const url of urls.values()) {
+        URL.revokeObjectURL(url);
+      }
+    };
+  }, [assets]);
+
+  const bookCode =
+    typeof (book.topic as Entity).code === "string"
+      ? ((book.topic as Entity).code as string)
+      : "";
+
+  /** Persists the full record, then re-registers the runtime overlay
+   * (`content/private-assets.ts`) before notifying the parent — an asset
+   * added or removed mid-session is otherwise invisible to
+   * `registerPrivateAssets` until reload (plan 0017 §4 point 3). Ordered
+   * before `onAssetsChange` so the dangling-ref check in `PrivateEditScreen`
+   * re-renders against the fresh overlay, not the stale one. */
+  async function writeThrough(nextAssets: Record<string, Blob>) {
+    await putPrivateBook({ id: bookId, book, domain, assets: nextAssets });
+    registerPrivateAssets(await readPrivateBooks());
+    onAssetsChange(nextAssets);
+  }
+
+  async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // so picking the same file again still fires onChange
+    if (file === undefined) {
+      return;
+    }
+    if (file.size > MAX_ASSET_BYTES) {
+      setError(
+        `"${file.name}" is too large: ${formatBytes(file.size)} (max ${formatBytes(MAX_ASSET_BYTES)}).`,
+      );
+      return;
+    }
+    setError(null);
+    // Never the filename (plan 0017 §4 point 2): filenames contain spaces
+    // and other characters `slugPattern` rejects, so the stem is always
+    // generated, never derived from what the author picked.
+    const stem = `${bookCode}-${newPrivateId()}`;
+    try {
+      await writeThrough({ ...assets, [stem]: file });
+    } catch {
+      setError("failed to save the asset — storage may be full");
+    }
+  }
+
+  async function handleDelete(stem: string) {
+    const refs = assetReferences(book, domain, stem);
+    const warning =
+      refs.length > 0
+        ? `Still referenced by: ${refs.join(", ")}. Deleting it will make this Book invalid until those references are fixed.\n\n`
+        : "";
+    if (!window.confirm(`${warning}Delete asset "${stem}"?`)) {
+      return;
+    }
+    const next = { ...assets };
+    delete next[stem];
+    try {
+      await writeThrough(next);
+    } catch {
+      setError("failed to delete the asset — storage may be full");
+    }
+  }
+
+  const stems = Object.entries(assets);
+
+  return (
+    <section>
+      <h2>Assets</h2>
+      {error !== null && <p className="error-text">{error}</p>}
+      <label className="field">
+        Add audio or image
+        <input
+          type="file"
+          accept="audio/*,image/*"
+          onChange={(e) => void handleFileSelect(e)}
+        />
+      </label>
+      {stems.length === 0 ? (
+        <p className="status">No assets yet.</p>
+      ) : (
+        <ul className="card-list asset-list">
+          {stems.map(([stem, blob]) => {
+            const url = previewUrls.get(stem);
+            const kind = assetKind(blob);
+            return (
+              <li key={stem} className="card">
+                <p className="status">
+                  {kind} · {formatBytes(blob.size)}
+                </p>
+                {url !== undefined &&
+                  (kind === "image" ? (
+                    <img src={url} alt="" />
+                  ) : (
+                    <audio controls src={url} />
+                  ))}
+                <label className="field">
+                  Stem (copy into an audioRef/imageRef field)
+                  <input
+                    type="text"
+                    readOnly
+                    value={stem}
+                    onFocus={(e) => e.currentTarget.select()}
+                  />
+                </label>
+                <button
+                  className="plain danger"
+                  onClick={() => void handleDelete(stem)}
+                >
+                  Delete
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
   );
 }
 
@@ -1334,15 +2113,44 @@ function BookEditor({
   view,
   setView,
   onChange,
+  hideCoverArt,
+  domainEntries = [],
 }: {
   doc: BookDocument;
   view: View;
   setView: (view: View) => void;
   onChange: (doc: BookDocument) => void;
+  /** Private Books only (plan 0017 §3, open-questions resolution): the
+   * cover-art convention writes into the app's *public* assets, which a
+   * private Book can never reach, so the toggle is hidden rather than
+   * offered as a control that could only ever silently fail. Additive and
+   * unused by the maintainer/propose paths, which never pass it. */
+  hideCoverArt?: boolean;
+  /** The Book's domain lexicon entries (spec 0018 §3): the itemIds pickers'
+   * merged pool is book items plus these (validate.ts:313's own merge
+   * rule). Default `[]` degrades gracefully — an empty Vocabulary filter —
+   * when a shell hasn't (or couldn't) fetch the domain doc. */
+  domainEntries?: unknown[];
 }) {
   const book = doc.topic as Entity;
+  const bookCode = typeof book.code === "string" ? book.code : "";
   const upsert = (collection: BookCollection, entity: Entity) =>
     onChange(upsertEntity(doc, collection, entity));
+  const bookItems = doc.items as Entity[];
+  const lexiconEntries = domainEntries as Entity[];
+  const bookItemIds = new Set(bookItems.map((i) => i.id));
+  const lexiconIds = new Set(lexiconEntries.map((e) => e.id));
+  const itemPool: PickerOption[] = [
+    ...optionsFrom(bookItems, "book item"),
+    ...optionsFrom(lexiconEntries, "lexicon entry"),
+  ];
+  /** Owned book items get an Edit button + hard-delete; a merely-referenced
+   * lexicon entry doesn't (it's edited in its own domain) and is unlinked,
+   * not deleted — the exact distinction the old itemIds `<ul>` drew. */
+  const itemOnOpen = (id: string) =>
+    bookItemIds.has(id)
+      ? () => setView({ v: "item", backTo: view, id })
+      : undefined;
 
   if (view.v === "item" || view.v === "task") {
     const collection = view.v === "item" ? "items" : "tasks";
@@ -1354,17 +2162,58 @@ function BookEditor({
         </p>
       );
     }
+    // The task's owning unit (spec 0018 §4): the unit whose taskIds
+    // contains this task. An orphan task (legal) has none — "This unit"
+    // is omitted and "All" is the default chip instead.
+    const owningUnit =
+      view.v === "task"
+        ? (doc.units as Entity[]).find(
+            (u) =>
+              Array.isArray(u.taskIds) &&
+              (u.taskIds as string[]).includes(view.id),
+          )
+        : undefined;
+    const taskItemFilters: PickerFilter[] = [
+      ...(owningUnit !== undefined
+        ? [
+            {
+              key: "this-unit",
+              label: "This unit",
+              ids: new Set((owningUnit.itemIds as string[] | undefined) ?? []),
+            },
+          ]
+        : []),
+      { key: "book", label: "Book items", ids: bookItemIds },
+      { key: "vocabulary", label: "Vocabulary", ids: lexiconIds },
+      { key: "all", label: "All", ids: null },
+    ];
     return (
       <section>
         <h2>
           {view.v} · {view.id}
         </h2>
         {view.v === "item" ? (
-          <EntityForm
-            entity={entity}
-            specs={ITEM_FIELDS[String(entity.kind)] ?? []}
-            onChange={(next) => upsert("items", next)}
-          />
+          <>
+            <EntityForm
+              entity={entity}
+              specs={ITEM_FIELDS[String(entity.kind)] ?? []}
+              onChange={(next) => upsert("items", next)}
+            />
+            <EntityPicker
+              label="Source ref"
+              freeTextWhenEmpty
+              options={optionsFrom(doc.resources as Entity[])}
+              selected={
+                typeof entity.sourceRef === "string" && entity.sourceRef !== ""
+                  ? [entity.sourceRef]
+                  : []
+              }
+              onChange={(ids) =>
+                upsert("items", { ...entity, sourceRef: ids[0] ?? "" })
+              }
+              multiple={false}
+            />
+          </>
         ) : (
           <>
             <label className="field">
@@ -1385,14 +2234,20 @@ function BookEditor({
               specs={[f("Instructions", "instructions")]}
               onChange={(next) => upsert("tasks", next)}
             />
-            <IdListField
-              label="Item ids (one per line)"
-              ids={
+            <EntityPicker
+              label="Item ids"
+              options={itemPool}
+              selected={
                 Array.isArray(entity.itemIds)
                   ? (entity.itemIds as string[])
                   : []
               }
               onChange={(ids) => upsert("tasks", { ...entity, itemIds: ids })}
+              onOpen={itemOnOpen}
+              multiple
+              ordered
+              filters={taskItemFilters}
+              defaultFilterKey={owningUnit !== undefined ? "this-unit" : "all"}
             />
           </>
         )}
@@ -1416,7 +2271,7 @@ function BookEditor({
     }
     return (
       <section>
-        <h2>note · {note.stem}</h2>
+        <h2>note · {noteTitle(note.markdown, note.stem)}</h2>
         <label className="field">
           Markdown
           <textarea
@@ -1446,9 +2301,17 @@ function BookEditor({
     const itemIds = (unit.itemIds as string[] | undefined) ?? [];
     const taskIds = (unit.taskIds as string[] | undefined) ?? [];
     const noteIds = (unit.noteIds as string[] | undefined) ?? [];
-    const bookCode = typeof book.code === "string" ? book.code : "";
     const setList = (field: string, ids: string[]) =>
       upsert("units", { ...unit, [field]: ids });
+    // Lessons in `book.lessonIds` order (the same order the root view lists
+    // them), units excluding this one — a unit unlocking/recalling itself
+    // is already a known-invalid selection (validate.ts class (l)), so it's
+    // simplest not to offer it.
+    const orderedLessons = ((book.lessonIds as string[] | undefined) ?? [])
+      .map((id) => byId(doc.lessons, id))
+      .filter((l): l is Entity => l !== undefined);
+    const otherUnits = (doc.units as Entity[]).filter((u) => u.id !== unit.id);
+    const unitPool = unitPoolOptionsGroupedByLesson(orderedLessons, otherUnits);
     return (
       <section>
         <h2>unit · {unit.id}</h2>
@@ -1458,44 +2321,67 @@ function BookEditor({
           onChange={(next) => upsert("units", next)}
         />
 
+        <EntityPicker
+          label="Unlocks after unit"
+          options={unitPool}
+          selected={
+            typeof unit.unlocksAfterUnitId === "string"
+              ? [unit.unlocksAfterUnitId]
+              : []
+          }
+          onChange={(ids) => {
+            // A cleared single-select must delete the key, not set it to
+            // `undefined` (mirrors `setPath`'s own "" -> delete rule above,
+            // and the Cover-art checkbox below) — zod's `optional()` expects
+            // the key absent, and an `undefined` value would also survive
+            // in-memory while silently vanishing across a JSON round-trip
+            // (localStorage/proposal/private-store), leaving the live doc
+            // and its persisted copy disagree.
+            const next = { ...unit };
+            if (ids[0] === undefined) {
+              delete next.unlocksAfterUnitId;
+            } else {
+              next.unlocksAfterUnitId = ids[0];
+            }
+            upsert("units", next);
+          }}
+          multiple={false}
+          groupBy
+        />
+        <EntityPicker
+          label="Recall units"
+          options={unitPool}
+          selected={(unit.recallUnitIds as string[] | undefined) ?? []}
+          onChange={(ids) => setList("recallUnitIds", ids)}
+          multiple
+          groupBy
+        />
+
         <h3>Items</h3>
-        <ul className="editor-list">
-          {itemIds.map((id) => {
-            const owned = byId(doc.items, id) !== undefined;
-            return (
-              <li key={id}>
-                <span>
-                  {id}
-                  {owned ? "" : " · lexicon entry (edit in its domain)"}
-                </span>
-                <RowActions
-                  onUp={() => setList("itemIds", moveId(itemIds, id, -1))}
-                  onDown={() => setList("itemIds", moveId(itemIds, id, 1))}
-                  onOpen={
-                    owned
-                      ? () => setView({ v: "item", backTo: view, id })
-                      : undefined
-                  }
-                  onRemove={
-                    owned
-                      ? () => onChange(removeEntity(doc, "items", id))
-                      : () =>
-                          setList(
-                            "itemIds",
-                            itemIds.filter((x) => x !== id),
-                          )
-                  }
-                  removeLabel={owned ? "Delete" : "Unlink"}
-                />
-              </li>
-            );
-          })}
-        </ul>
-        <AddEntityForm
-          label="Link existing id"
-          onAdd={(id) => setList("itemIds", [...itemIds, id])}
+        <EntityPicker
+          label="Item ids"
+          options={itemPool}
+          selected={itemIds}
+          onChange={(ids) => setList("itemIds", ids)}
+          onRemove={(id) =>
+            bookItemIds.has(id)
+              ? onChange(removeEntity(doc, "items", id))
+              : setList(
+                  "itemIds",
+                  itemIds.filter((x) => x !== id),
+                )
+          }
+          removeLabel={(id) => (bookItemIds.has(id) ? "Delete" : "Unlink")}
+          onOpen={itemOnOpen}
+          multiple
+          ordered
+          filters={[
+            { key: "book", label: "Book items", ids: bookItemIds },
+            { key: "vocabulary", label: "Vocabulary", ids: lexiconIds },
+          ]}
         />
         <NewItemForm
+          makeId={() => newEntityId(bookCode)}
           onAdd={(id, kind) => {
             onChange(
               upsertEntity(
@@ -1514,23 +2400,19 @@ function BookEditor({
         />
 
         <h3>Tasks</h3>
-        <ul className="editor-list">
-          {taskIds.map((id) => (
-            <li key={id}>
-              <span>
-                {id} · {String(byId(doc.tasks, id)?.type ?? "?")}
-              </span>
-              <RowActions
-                onUp={() => setList("taskIds", moveId(taskIds, id, -1))}
-                onDown={() => setList("taskIds", moveId(taskIds, id, 1))}
-                onOpen={() => setView({ v: "task", backTo: view, id })}
-                onRemove={() => onChange(removeEntity(doc, "tasks", id))}
-              />
-            </li>
-          ))}
-        </ul>
+        <EntityPicker
+          label="Task ids"
+          options={optionsFrom(doc.tasks as Entity[])}
+          selected={taskIds}
+          onChange={(ids) => setList("taskIds", ids)}
+          onRemove={(id) => onChange(removeEntity(doc, "tasks", id))}
+          onOpen={(id) => () => setView({ v: "task", backTo: view, id })}
+          multiple
+          ordered
+        />
         <AddEntityForm
           label="New task"
+          makeId={() => newEntityId(bookCode)}
           onAdd={(id) => {
             onChange(
               upsertEntity(
@@ -1549,26 +2431,29 @@ function BookEditor({
         />
 
         <h3>Notes</h3>
-        <ul className="editor-list">
-          {noteIds.map((noteId) => {
-            const stem = noteId.startsWith(`${bookCode}-note-`)
-              ? noteId.slice(`${bookCode}-note-`.length)
-              : noteId;
-            return (
-              <li key={noteId}>
-                <span>{stem}</span>
-                <RowActions
-                  onUp={() => setList("noteIds", moveId(noteIds, noteId, -1))}
-                  onDown={() => setList("noteIds", moveId(noteIds, noteId, 1))}
-                  onOpen={() => setView({ v: "note", backTo: view, stem })}
-                  onRemove={() => onChange(removeNote(doc, stem))}
-                />
-              </li>
-            );
-          })}
-        </ul>
+        <EntityPicker
+          label="Note ids"
+          options={notePoolOptions(doc.notes, bookCode)}
+          selected={noteIds}
+          onChange={(ids) => setList("noteIds", ids)}
+          onRemove={(id) => {
+            const stem = id.startsWith(`${bookCode}-note-`)
+              ? id.slice(`${bookCode}-note-`.length)
+              : id;
+            onChange(removeNote(doc, stem));
+          }}
+          onOpen={(id) => {
+            const stem = id.startsWith(`${bookCode}-note-`)
+              ? id.slice(`${bookCode}-note-`.length)
+              : id;
+            return () => setView({ v: "note", backTo: view, stem });
+          }}
+          multiple
+          ordered
+        />
         <AddEntityForm
-          label="New note (stem)"
+          label="New note"
+          makeId={() => newPrivateId()}
           onAdd={(stem) => {
             onChange(
               setNote(
@@ -1584,7 +2469,10 @@ function BookEditor({
                   ),
                 },
                 stem,
-                "",
+                // Seed the heading a note is titled by. Without it a brand-new
+                // note has no `# ` line, so every list would label it by its
+                // stem — a UUID since spec 0018 generated ids.
+                "# New note\n\n",
               ),
             );
             setView({ v: "note", backTo: view, stem });
@@ -1609,35 +2497,21 @@ function BookEditor({
           onChange={(next) => upsert("lessons", next)}
         />
         <h3>Units</h3>
-        <ul className="editor-list">
-          {unitIds.map((id) => (
-            <li key={id}>
-              <span>
-                {id} · {String(byId(doc.units, id)?.title ?? "?")}
-              </span>
-              <RowActions
-                onUp={() =>
-                  upsert("lessons", {
-                    ...lesson,
-                    unitIds: moveId(unitIds, id, -1),
-                  })
-                }
-                onDown={() =>
-                  upsert("lessons", {
-                    ...lesson,
-                    unitIds: moveId(unitIds, id, 1),
-                  })
-                }
-                onOpen={() =>
-                  setView({ v: "unit", lessonId: lesson.id, unitId: id })
-                }
-                onRemove={() => onChange(removeEntity(doc, "units", id))}
-              />
-            </li>
-          ))}
-        </ul>
+        <EntityPicker
+          label="Unit ids"
+          options={optionsFrom(doc.units as Entity[])}
+          selected={unitIds}
+          onChange={(ids) => upsert("lessons", { ...lesson, unitIds: ids })}
+          onRemove={(id) => onChange(removeEntity(doc, "units", id))}
+          onOpen={(id) => () =>
+            setView({ v: "unit", lessonId: lesson.id, unitId: id })
+          }
+          multiple
+          ordered
+        />
         <AddEntityForm
           label="New unit"
+          makeId={() => newEntityId(bookCode)}
           onAdd={(id) => {
             onChange(
               upsertEntity(
@@ -1680,50 +2554,40 @@ function BookEditor({
         ]}
         onChange={(next) => onChange({ ...doc, topic: next })}
       />
-      <label className="field">
-        Cover art
-        <input
-          type="checkbox"
-          checked={book.hasCoverArt === true}
-          onChange={(e) => {
-            if (e.target.checked) {
-              onChange({ ...doc, topic: { ...book, hasCoverArt: true } });
-              return;
-            }
-            const next = { ...book };
-            delete next.hasCoverArt;
-            onChange({ ...doc, topic: next });
-          }}
-        />
-      </label>
+      {hideCoverArt !== true && (
+        <label className="field">
+          Cover art
+          <input
+            type="checkbox"
+            checked={book.hasCoverArt === true}
+            onChange={(e) => {
+              if (e.target.checked) {
+                onChange({ ...doc, topic: { ...book, hasCoverArt: true } });
+                return;
+              }
+              const next = { ...book };
+              delete next.hasCoverArt;
+              onChange({ ...doc, topic: next });
+            }}
+          />
+        </label>
+      )}
       <h3>Lessons</h3>
-      <ul className="editor-list">
-        {lessonIds.map((id) => (
-          <li key={id}>
-            <span>
-              {id} · {String(byId(doc.lessons, id)?.title ?? "?")}
-            </span>
-            <RowActions
-              onUp={() =>
-                onChange({
-                  ...doc,
-                  topic: { ...book, lessonIds: moveId(lessonIds, id, -1) },
-                })
-              }
-              onDown={() =>
-                onChange({
-                  ...doc,
-                  topic: { ...book, lessonIds: moveId(lessonIds, id, 1) },
-                })
-              }
-              onOpen={() => setView({ v: "lesson", lessonId: id })}
-              onRemove={() => onChange(removeEntity(doc, "lessons", id))}
-            />
-          </li>
-        ))}
-      </ul>
+      <EntityPicker
+        label="Lesson ids"
+        options={optionsFrom(doc.lessons as Entity[])}
+        selected={lessonIds}
+        onChange={(ids) =>
+          onChange({ ...doc, topic: { ...book, lessonIds: ids } })
+        }
+        onRemove={(id) => onChange(removeEntity(doc, "lessons", id))}
+        onOpen={(id) => () => setView({ v: "lesson", lessonId: id })}
+        multiple
+        ordered
+      />
       <AddEntityForm
         label="New lesson"
+        makeId={() => newEntityId(bookCode)}
         onAdd={(id) => {
           onChange(
             upsertEntity(
@@ -1748,27 +2612,22 @@ function BookEditor({
   );
 }
 
-function NewItemForm({ onAdd }: { onAdd: (id: string, kind: string) => void }) {
-  const [id, setId] = useState("");
+function NewItemForm({
+  makeId,
+  onAdd,
+}: {
+  makeId: () => string;
+  onAdd: (id: string, kind: string) => void;
+}) {
   const [kind, setKind] = useState("sentence");
   return (
     <form
       className="editor-add"
       onSubmit={(e) => {
         e.preventDefault();
-        if (id.trim() !== "") {
-          onAdd(id.trim(), kind);
-          setId("");
-        }
+        onAdd(makeId(), kind);
       }}
     >
-      <input
-        type="text"
-        placeholder="new-item-id"
-        pattern="[a-z0-9]+(-[a-z0-9]+)*"
-        value={id}
-        onChange={(e) => setId(e.target.value)}
-      />
       <select value={kind} onChange={(e) => setKind(e.target.value)}>
         {/* Book-owned kinds only — lexemes live in the domain lexicon. */}
         <option value="sentence">sentence</option>
@@ -1795,6 +2654,7 @@ function DomainEditor({
 }) {
   const [filter, setFilter] = useState("");
   const domain = doc.domain as Entity;
+  const domainCode = typeof domain.code === "string" ? domain.code : "";
   const entryKind = domain.kind === "general" ? "concept" : "lexeme";
 
   if (view.v === "entry") {
@@ -1809,6 +2669,28 @@ function DomainEditor({
           entity={entry}
           specs={ITEM_FIELDS[String(entry.kind)] ?? []}
           onChange={(next) => onChange(upsertDomainEntry(doc, next))}
+        />
+        {/* A DomainDocument carries no `resources` of its own (only a Book
+         * does — validate.ts's ValidateContentInput.resources is a Book
+         * field, shared with its entries at validation time). So this
+         * picker's pool is always empty here; see spec 0018 implementation
+         * report for the gap this opens (sourceRef becomes unsettable for a
+         * domain entry via the UI). */}
+        <EntityPicker
+          label="Source ref"
+          freeTextWhenEmpty
+          options={[]}
+          selected={
+            typeof entry.sourceRef === "string" && entry.sourceRef !== ""
+              ? [entry.sourceRef]
+              : []
+          }
+          onChange={(ids) =>
+            onChange(
+              upsertDomainEntry(doc, { ...entry, sourceRef: ids[0] ?? "" }),
+            )
+          }
+          multiple={false}
         />
         <button
           className="plain danger"
@@ -1836,14 +2718,16 @@ function DomainEditor({
           specs={[f("Name", "name")]}
           onChange={(next) => onChange(upsertFamily(doc, next))}
         />
-        <IdListField
-          label="Entry ids (one per line)"
-          ids={
+        <EntityPicker
+          label="Entry ids"
+          options={optionsFrom(doc.entries as Entity[])}
+          selected={
             Array.isArray(family.entryIds) ? (family.entryIds as string[]) : []
           }
           onChange={(ids) =>
             onChange(upsertFamily(doc, { ...family, entryIds: ids }))
           }
+          multiple
         />
         <button
           className="plain danger"
@@ -1902,6 +2786,7 @@ function DomainEditor({
       </ul>
       <AddEntityForm
         label="New entry"
+        makeId={() => newEntityId(domainCode)}
         onAdd={(id) => {
           onChange(
             upsertDomainEntry(doc, {
@@ -1930,6 +2815,7 @@ function DomainEditor({
       </ul>
       <AddEntityForm
         label="New family"
+        makeId={() => newEntityId(domainCode)}
         onAdd={(id) => {
           onChange(upsertFamily(doc, { id, name: "", entryIds: [] }));
           setView({ v: "family", id });
