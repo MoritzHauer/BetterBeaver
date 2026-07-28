@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchLibrary, type LibraryBook } from "../content/library";
+import { showsCoverArt } from "../components/BookWatermark";
 
 /**
  * The Library (plan 0015): browse the full catalog and Add a Book into My
@@ -82,8 +83,23 @@ export function LibraryScreen({
             const busy = addingId === book.id;
             const addError = addErrors.get(book.id);
             const showRating = book.upvotes > 0 || book.downvotes > 0;
+            const cover = showsCoverArt(book.id, book.hasCoverArt);
             return (
-              <li key={book.id} className="card">
+              <li
+                key={book.id}
+                className={cover ? "card card-bg-cover" : "card"}
+              >
+                {cover && (
+                  <img
+                    className="card-bg-icon"
+                    src={`${import.meta.env.BASE_URL}art/icons/${book.id}.png`}
+                    alt=""
+                    aria-hidden="true"
+                    onError={(e) => {
+                      e.currentTarget.style.display = "none";
+                    }}
+                  />
+                )}
                 <div>
                   {book.icon !== undefined && (
                     <span className="topic-glyph" aria-hidden="true">

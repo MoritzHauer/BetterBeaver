@@ -8,6 +8,7 @@ export interface LibraryBook {
   description: string;
   icon?: string;
   domainId: string;
+  hasCoverArt: boolean;
   upvotes: number;
   downvotes: number;
 }
@@ -18,6 +19,8 @@ interface CatalogTopicRow {
   description: string;
   icon: string | null;
   domainId: string;
+  /** `->>` extracts JSON as text, so the boolean arrives as "true"/"false". */
+  hasCoverArt: string | null;
 }
 
 interface VoteCountsRow {
@@ -27,7 +30,7 @@ interface VoteCountsRow {
 }
 
 const CATALOG_SELECT =
-  "id,title:published->topic->>title,description:published->topic->>description,icon:published->topic->>icon,domainId:published->topic->>domainId";
+  "id,title:published->topic->>title,description:published->topic->>description,icon:published->topic->>icon,domainId:published->topic->>domainId,hasCoverArt:published->topic->>hasCoverArt";
 
 /**
  * Two parallel requests (plan 0015 decision 2): the catalog for card
@@ -65,6 +68,7 @@ export async function fetchLibrary(): Promise<LibraryBook[]> {
       description: row.description,
       icon: row.icon ?? undefined,
       domainId: row.domainId,
+      hasCoverArt: row.hasCoverArt === "true",
       upvotes: votes.upvotes,
       downvotes: votes.downvotes,
     };

@@ -107,20 +107,8 @@ export function BookScreen({
   // rather than threaded down as a prop — BookScreen already has `content`
   // and `attemptedTaskIds`, so this is the fewer-props option.
   const nextUp = nextUnit(content, attemptedTaskIds);
-  const nextUnitTitle =
-    nextUp !== null
-      ? (content.units.find((u) => u.id === nextUp.unitId)?.title ?? null)
-      : null;
   const bookComplete = dueCount === 0 && nextUp === null;
   const playDisabled = dueCount === null || bookComplete;
-  const playSubtitle =
-    dueCount === null
-      ? "Loading…"
-      : dueCount > 0
-        ? `${dueCount} due for review`
-        : bookComplete
-          ? "Nothing left to study"
-          : nextUnitTitle;
 
   // Book-level Practice shuffles across the opened lessons' opened units
   // (plan 0008, pinned scope).
@@ -180,13 +168,14 @@ export function BookScreen({
       <ul className="card-list">
         <li className={"card" + (playDisabled ? "" : " primary")}>
           <button onClick={onPlay} disabled={playDisabled}>
-            <img
-              className="topic-glyph"
-              src={`${import.meta.env.BASE_URL}art/icons/${bookComplete ? "trophy" : "play"}.png`}
-              alt=""
-            />
-            <strong>{bookComplete ? "Book complete" : "Continue"}</strong>
-            <p className="status">{playSubtitle}</p>
+            <strong>
+              <img
+                className="icon-glyph"
+                src={`${import.meta.env.BASE_URL}art/icons/${bookComplete ? "trophy" : "play"}.png`}
+                alt=""
+              />{" "}
+              {bookComplete ? "Book complete" : "Continue learning"}
+            </strong>
           </button>
         </li>
         <li className={`card review${dueCount !== 0 ? " primary" : ""}`}>
@@ -195,7 +184,6 @@ export function BookScreen({
             {dueCount !== null && dueCount > 0 ? (
               <span className="badge">{dueCount}</span>
             ) : null}
-            <p>Repeat previous units due for review, spaced out over time.</p>
             <p className="status">
               {dueCount === null
                 ? "Loading…"
@@ -222,12 +210,14 @@ export function BookScreen({
         </li>
         <li className="card vocab">
           <button onClick={onVocabulary}>
-            <img
-              className="topic-glyph"
-              src={`${import.meta.env.BASE_URL}art/icons/book_front.png`}
-              alt=""
-            />
-            <strong>Vocabulary</strong>
+            <strong>
+              <img
+                className="icon-glyph"
+                src={`${import.meta.env.BASE_URL}art/icons/book_front.png`}
+                alt=""
+              />{" "}
+              Vocabulary
+            </strong>
           </button>
         </li>
         {content.topic.lessonIds.map((lessonId) => {

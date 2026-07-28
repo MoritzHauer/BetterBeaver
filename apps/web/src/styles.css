@@ -703,12 +703,6 @@ input[type="text"] {
   margin-bottom: 0.25rem;
 }
 
-img.topic-glyph {
-  width: 1.5rem;
-  height: 1.5rem;
-  object-fit: contain;
-}
-
 /* Inline replacement for emoji used as icons in text flow (back arrows,
  * edit pencils, eyebrow/badge glyphs) - sized relative to the surrounding
  * text so it drops into any context without per-usage tuning. */
@@ -717,6 +711,16 @@ img.topic-glyph {
   height: 1.1em;
   object-fit: contain;
   vertical-align: -0.2em;
+}
+
+/* Same inline slot as .icon-glyph, but for the illustrated beaver scenes
+ * (Library, Create a Book) — full drawings rather than glyphs, illegible at
+ * icon-glyph's text size. */
+.card-art {
+  width: 2.75rem;
+  height: 2.75rem;
+  object-fit: contain;
+  vertical-align: -0.9em;
 }
 
 .empty-state {
@@ -907,6 +911,15 @@ main.unit-screen {
   width: 1.5rem;
   background: var(--primary);
   border-color: var(--primary);
+}
+
+/* The trail's last dot is Practice, not a page — it never goes .active
+   (tapping it, or swiping past the final page, starts the session), so it
+   reads as the end of the trail rather than another stop on it. */
+.trail .dot.practice {
+  background: var(--primary);
+  border-color: var(--primary);
+  opacity: 0.55;
 }
 
 .screen-header .trail {

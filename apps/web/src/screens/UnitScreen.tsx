@@ -302,7 +302,14 @@ export function UnitScreen({
     setPage((p) => Math.max(0, p - 1));
   }
   function goNext() {
-    setPage((p) => Math.min(pages.length - 1, p + 1));
+    // Practice is the trail's last dot (owner request): advancing past the
+    // final page starts the unit's tasks instead of going nowhere. Read
+    // outside the updater — StrictMode double-invokes those.
+    if (page >= pages.length - 1) {
+      onPractice();
+      return;
+    }
+    setPage((p) => p + 1);
   }
 
   useEffect(() => {
@@ -315,7 +322,10 @@ export function UnitScreen({
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [pages.length]);
+    // `page`/`onPractice` are read by goNext — without them here the handler
+    // keeps the first render's unit and page (App.tsx renders UnitScreen
+    // unkeyed, so switching units reuses this instance).
+  }, [pages.length, page, onPractice]);
 
   function handleTouchStart(event: React.TouchEvent) {
     touchStartX.current = event.touches[0]?.clientX ?? null;
@@ -384,6 +394,12 @@ export function UnitScreen({
               onClick={() => setPage(index)}
             />
           ))}
+          <button
+            type="button"
+            className="dot practice"
+            aria-label="Practice"
+            onClick={onPractice}
+          />
         </div>
         {onEdit !== undefined && (
           <button

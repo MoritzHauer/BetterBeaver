@@ -1,5 +1,6 @@
 import type { BookSummary } from "@betterbeaver/engine";
 import { ProgressBar } from "../components/ProgressBar";
+import { showsCoverArt } from "../components/BookWatermark";
 import { readPrivateBook } from "../content/private-store";
 import { exportPrivateBook } from "../content/private-transfer";
 
@@ -136,8 +137,8 @@ export function MyBooksScreen({
             <button onClick={onLibrary}>
               <strong>
                 <img
-                  className="icon-glyph"
-                  src={`${import.meta.env.BASE_URL}art/icons/book_front.png`}
+                  className="card-art"
+                  src={`${import.meta.env.BASE_URL}art/icons/beaver_bookshelf.png`}
                   alt=""
                 />{" "}
                 Library
@@ -150,8 +151,8 @@ export function MyBooksScreen({
           <button onClick={onCreateBook}>
             <strong>
               <img
-                className="icon-glyph"
-                src={`${import.meta.env.BASE_URL}art/icons/edit.png`}
+                className="card-art"
+                src={`${import.meta.env.BASE_URL}art/icons/beaver_desk.png`}
                 alt=""
               />{" "}
               Create a Book
@@ -166,14 +167,10 @@ export function MyBooksScreen({
             completed: 0,
             total: 0,
           };
+          const cover = showsCoverArt(book.id, book.hasCoverArt);
           return (
-            <li
-              key={book.id}
-              className={
-                book.hasCoverArt === true ? "card card-bg-cover" : "card"
-              }
-            >
-              {book.hasCoverArt === true && (
+            <li key={book.id} className={cover ? "card card-bg-cover" : "card"}>
+              {cover && (
                 <img
                   className="card-bg-icon"
                   src={`${import.meta.env.BASE_URL}art/icons/${book.id}.png`}
