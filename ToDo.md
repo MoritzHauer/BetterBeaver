@@ -43,14 +43,6 @@
 
 # icons to be generated
 
-🎯 target
-🔊 speaker
-Mute
-lock closed
-lock open
-Accept (hook)
-Deny (X)
-
 ## ideas
 
 - language material recommendation / skill
