@@ -90,6 +90,28 @@ function rawBookId(book: BookDocument): string {
 }
 
 /**
+ * One private Book as a serialisable payload — the body of a `.bbbook` file,
+ * and also the per-Book unit the whole-app backup carries (`progress/backup.ts`).
+ */
+export async function privateBookExportFile(
+  record: PrivateBookRecord,
+): Promise<PrivateBookExportFile> {
+  const assetEntries = await Promise.all(
+    Object.entries(record.assets).map(
+      async ([stem, blob]) => [stem, await blobToDataUri(blob)] as const,
+    ),
+  );
+  return {
+    kind: PRIVATE_BOOK_KIND,
+    formatVersion: 1,
+    schemaVersion: CONTENT_SCHEMA_VERSION,
+    book: record.book,
+    domain: record.domain,
+    assets: Object.fromEntries(assetEntries),
+  };
+}
+
+/**
  * Builds the `.bbbook` file for one private Book and downloads it (spec
  * 0017-5 §1-2).
  *
@@ -100,19 +122,7 @@ function rawBookId(book: BookDocument): string {
 export async function exportPrivateBook(
   record: PrivateBookRecord,
 ): Promise<void> {
-  const assetEntries = await Promise.all(
-    Object.entries(record.assets).map(
-      async ([stem, blob]) => [stem, await blobToDataUri(blob)] as const,
-    ),
-  );
-  const file: PrivateBookExportFile = {
-    kind: PRIVATE_BOOK_KIND,
-    formatVersion: 1,
-    schemaVersion: CONTENT_SCHEMA_VERSION,
-    book: record.book,
-    domain: record.domain,
-    assets: Object.fromEntries(assetEntries),
-  };
+  const file = await privateBookExportFile(record);
   const blob = new Blob([JSON.stringify(file)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -145,6 +155,21 @@ export async function parsePrivateBookImport(file: File): Promise<
   } catch {
     return { ok: false, error: "this file could not be read as JSON" };
   }
+  return readPrivateBookFile(parsed);
+}
+
+/** `parsePrivateBookImport` minus the file read — the backup restore path
+ * already has the payload parsed out of the surrounding backup JSON. */
+export async function readPrivateBookFile(parsed: unknown): Promise<
+  | {
+      ok: true;
+      bookId: string;
+      book: BookDocument;
+      domain: DomainDocument;
+      assets: Record<string, Blob>;
+    }
+  | { ok: false; error: string }
+> {
   const shape = checkImportFileShape(parsed);
   if (!shape.ok) {
     return shape;

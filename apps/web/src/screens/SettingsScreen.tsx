@@ -59,6 +59,7 @@ export function SettingsScreen({
   const [domainImportError, setDomainImportError] = useState<string | null>(
     null,
   );
+  const [exportError, setExportError] = useState<string | null>(null);
   const [privateImportError, setPrivateImportError] = useState<string | null>(
     null,
   );
@@ -110,7 +111,13 @@ export function SettingsScreen({
     if (!window.confirm("Importing replaces all current progress. Continue?")) {
       return;
     }
-    await importBackup(file);
+    const skipped = await importBackup(file);
+    if (skipped > 0) {
+      // Alert rather than an inline error: the reload below wipes this screen.
+      window.alert(
+        `${skipped} Book(s) in this backup need a newer app and were not restored. Everything else was.`,
+      );
+    }
     location.reload();
   }
 
@@ -379,7 +386,20 @@ export function SettingsScreen({
       <section className="card">
         <h2>Data</h2>
         <div className="grade-buttons">
-          <button className="plain" onClick={exportBackup}>
+          <button
+            className="plain"
+            onClick={() => {
+              setExportError(null);
+              // Reading the private Books' assets can fail (FileReader). A
+              // silent no-download is the worst outcome for the one action
+              // whose job is "don't lose my data".
+              exportBackup().catch(() =>
+                setExportError(
+                  "Export failed — your Books' files could not be read.",
+                ),
+              );
+            }}
+          >
             Export my progress
           </button>
           <button
@@ -402,6 +422,14 @@ export function SettingsScreen({
             }}
           />
         </div>
+        <p className="status">
+          The export includes any Books you created on this device. Importing
+          restores your progress and adds those Books back; it never deletes a
+          Book you created since.
+        </p>
+        {exportError !== null ? (
+          <p className="error-text">{exportError}</p>
+        ) : null}
       </section>
 
       <section className="card">

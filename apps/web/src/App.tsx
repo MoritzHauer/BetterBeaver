@@ -1146,6 +1146,14 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           onArchive={contentInit.archiveBook}
           onRestore={contentInit.restoreBook}
           onRemove={contentInit.removeBook}
+          onEdit={(bookId) =>
+            setScreen({
+              screen: "edit",
+              docId: documentId("topic", bookId),
+              mode: "private",
+              back: { screen: "books" },
+            })
+          }
           onLibrary={
             getSupabase() !== null
               ? () => setScreen({ screen: "library" })

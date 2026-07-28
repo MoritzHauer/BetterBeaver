@@ -25,6 +25,7 @@ export function MyBooksScreen({
   onArchive,
   onRestore,
   onRemove,
+  onEdit,
   onLibrary,
   onCreateBook,
   onAuthor,
@@ -57,6 +58,9 @@ export function MyBooksScreen({
   onArchive: (bookId: string) => void;
   onRestore: (bookId: string) => void;
   onRemove: (bookId: string) => Promise<void>;
+  /** Opens a private Book in the editor — the only way back into one whose
+   * card is broken (there is no book screen to reach ✎ from). */
+  onEdit?: (bookId: string) => void;
   /** The Library entry point; absent when the backend isn't configured (plan 0015 decision 15). */
   onLibrary?: () => void;
   /** Creates a private Book (plan 0017 §3) — unlike Library/Author, needs no
@@ -244,6 +248,11 @@ export function MyBooksScreen({
           );
         })}
         {broken.map(({ bookId, errors, title }) => {
+          // A private Book still in the store failed validation, not loading:
+          // its only copy is right here, so it gets Export (rescue the data)
+          // and Edit (fix the errors) — otherwise Remove, which destroys it
+          // permanently, would be the only offered action.
+          const isPrivate = privateBookIds.has(bookId);
           const missingDocs = errors.some((e) =>
             e.includes("missing cached content"),
           );
@@ -252,10 +261,26 @@ export function MyBooksScreen({
               <div>
                 <strong>{title}</strong>
                 <p className="error-text">This Book can't be loaded.</p>
-                {missingDocs && (
+                {errors.length > 0 && (
+                  <p className="status">{errors.join("; ")}</p>
+                )}
+                {missingDocs && !isPrivate && (
                   <p className="status">
                     Try removing it and re-adding it from the Library.
                   </p>
+                )}
+                {isPrivate && (
+                  <button
+                    className="plain"
+                    onClick={() => void handleExport(bookId)}
+                  >
+                    Export
+                  </button>
+                )}
+                {isPrivate && onEdit !== undefined && (
+                  <button className="plain" onClick={() => onEdit(bookId)}>
+                    Edit
+                  </button>
                 )}
                 <button
                   className="plain danger"
