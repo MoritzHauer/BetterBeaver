@@ -44,6 +44,7 @@ import { createLocalStorageUserEntryStore } from "./progress/user-entries";
 import { getPinnedUnitIds, togglePinnedUnits } from "./progress/pinned-tasks";
 import { AUTO_UPDATE_KEY } from "./autoUpdate";
 import { isOffline } from "./offline";
+import { useStorageUnwritable } from "./storage-health";
 import { MyBooksScreen } from "./screens/MyBooksScreen";
 import { LibraryScreen } from "./screens/LibraryScreen";
 import { BookScreen } from "./screens/BookScreen";
@@ -419,7 +420,9 @@ function ReviewSession({
 
   useEffect(() => {
     let cancelled = false;
-    dueDomainUnits(
+    // Cannot reject: `dueDomainUnits` only ever awaits `readJson`-backed
+    // reads, which degrade to absent rather than throwing (spec 0019 §1).
+    void dueDomainUnits(
       booksContent,
       domainContent.entries,
       store,
@@ -590,6 +593,11 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   const [update, setUpdate] = useState<ContentUpdate | null>(null);
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
+  // True from the first `localStorage` write that actually fails (spec 0019
+  // §2) — not a boot-time probe. Read from a module-level flag rather than
+  // held as state here, because `myBooks.ts` reports failures during
+  // `initContentSource()`, before this component ever mounts.
+  const storageWarning = useStorageUnwritable();
   async function acceptUpdateNow(target: ContentUpdate) {
     setUpdating(true);
     setUpdateError(null);
@@ -716,7 +724,9 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
       return;
     }
     let cancelled = false;
-    readCachedDocuments().then((cached) => {
+    // Cannot reject: `cache.ts`'s `readCachedDocuments` is try/catch -> `[]`,
+    // documented "never to a crash" (spec 0019 §1).
+    void readCachedDocuments().then((cached) => {
       if (cancelled) {
         return;
       }
@@ -795,17 +805,34 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
       ]),
     [books, archivedBooks],
   );
+  // Book ids that failed to load *after* boot (spec 0019 §3a) — a stale
+  // `books`/`domainBookIds` snapshot outliving the source instance it came
+  // from (Add/Remove/accept-update swaps the source a commit before the
+  // snapshot catches up). Distinct from `contentInit.broken`, which is the
+  // boot-time set; merged into `brokenBooks` below so both render the same
+  // "This Book can't be loaded" card.
+  const [runtimeBrokenBookIds, setRuntimeBrokenBookIds] = useState<string[]>(
+    [],
+  );
   // Broken cards' titles, resolved from the same raw cache map (falls back
   // to the bare id when the doc is missing entirely — the common case, since
   // that's exactly what makes a Book broken via the "missing cached content"
   // path).
   const brokenBooks = useMemo(
-    () =>
-      contentInit.broken.map((b) => ({
+    () => [
+      ...contentInit.broken.map((b) => ({
         ...b,
         title: cachedBookSummaries.get(b.bookId)?.title ?? b.bookId,
       })),
-    [cachedBookSummaries],
+      ...runtimeBrokenBookIds
+        .filter((id) => !contentInit.broken.some((b) => b.bookId === id))
+        .map((id) => ({
+          bookId: id,
+          errors: ["This Book could not be loaded."],
+          title: cachedBookSummaries.get(id)?.title ?? id,
+        })),
+    ],
+    [cachedBookSummaries, runtimeBrokenBookIds],
   );
   const [attemptedTaskIds, setAttemptedTaskIds] = useState<Set<string>>(
     new Set(),
@@ -834,7 +861,9 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   );
 
   function reloadAttemptedTaskIds() {
-    progressStore
+    // Cannot reject: `getAttemptedTaskIds` is `Promise.resolve(readJson(...))`
+    // — a throw there would be synchronous, not a rejection.
+    void progressStore
       .getAttemptedTaskIds()
       .then((ids) => setAttemptedTaskIds(new Set(ids)));
   }
@@ -884,10 +913,27 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     if (!("source" in contentSourceResult)) {
       return;
     }
-    contentSourceResult.source.listBooks().then(setBooks);
-    contentSourceResult.source.listDomains().then(setDomains);
+    // Cannot reject: both are `Promise.resolve` over an in-memory Map.
+    void contentSourceResult.source.listBooks().then(setBooks);
+    void contentSourceResult.source.listDomains().then(setDomains);
     reloadAttemptedTaskIds();
   }, [contentSourceResult]);
+
+  // `loadBook` rejects for an id the source doesn't know — reachable when a
+  // `books`/`domainBookIds` snapshot outlives the source instance it came
+  // from (Add/Remove/accept-update swaps the source a commit before the
+  // snapshot catches up, spec 0019 §3a). One stale id must not take the
+  // whole `Promise.all` down, so each load resolves to `undefined` and the
+  // id joins the broken-card list instead.
+  function loadBookOrBroken(
+    source: ContentSource,
+    id: string,
+  ): Promise<Content | undefined> {
+    return source.loadBook(id).catch(() => {
+      setRuntimeBrokenBookIds((ids) => (ids.includes(id) ? ids : [...ids, id]));
+      return undefined;
+    });
+  }
 
   // Loads every book's full content once `books` is populated (plan 0010),
   // for MyBooksScreen's per-book progress bars — unconditional, not gated
@@ -897,15 +943,24 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
       return;
     }
     let cancelled = false;
-    Promise.all(
-      books.map((book) => contentSourceResult.source.loadBook(book.id)),
+    // `void`: each load catches per book (`loadBookOrBroken`), so this
+    // `Promise.all` cannot reject.
+    void Promise.all(
+      books.map((book) =>
+        loadBookOrBroken(contentSourceResult.source, book.id),
+      ),
     ).then((loaded) => {
       if (cancelled) {
         return;
       }
       setBooksContentMap(
         new Map(
-          loaded.map((bookContent) => [bookContent.topic.id, bookContent]),
+          loaded
+            .filter(
+              (bookContent): bookContent is Content =>
+                bookContent !== undefined,
+            )
+            .map((bookContent) => [bookContent.topic.id, bookContent]),
         ),
       );
     });
@@ -951,7 +1006,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
       screen.screen === "unit-session" ||
       screen.screen === "recall-session";
     const contentPromise = isBookFamilyScreen
-      ? contentSourceResult.source.loadBook(screen.bookId)
+      ? loadBookOrBroken(contentSourceResult.source, screen.bookId)
       : undefined;
 
     // Domain-scoped screens carry their domainId directly; book/unit/task
@@ -979,7 +1034,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
             contentSourceResult.source.loadDomain(domainId),
             Promise.all(
               domainBookIds.map((id) =>
-                contentSourceResult.source.loadBook(id),
+                loadBookOrBroken(contentSourceResult.source, id),
               ),
             ),
             userEntryStore.getEntries(domainId),
@@ -989,13 +1044,22 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
       return;
     }
     let cancelled = false;
-    Promise.all([contentPromise, domainPromise]).then(
+    // `void`: each load catches per book (`loadBookOrBroken`), so this
+    // `Promise.all` cannot reject.
+    void Promise.all([contentPromise, domainPromise]).then(
       ([loadedContent, loadedDomain]) => {
         if (cancelled) {
           return;
         }
         if (loadedContent !== undefined) {
           setContent(loadedContent);
+        } else if (isBookFamilyScreen) {
+          // The active book failed to load (stale snapshot, spec 0019 §3a):
+          // `content` would otherwise stay whatever it was (or `null`, which
+          // renders a permanent "Loading…" on book-family screens) — send
+          // the learner back to the books list, where the broken card for
+          // this id now shows via `runtimeBrokenBookIds`.
+          setScreen({ screen: "books" });
         }
         if (loadedDomain !== undefined) {
           const [loadedDomainContent, loadedBooksContent, userEntries] =
@@ -1013,7 +1077,12 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
             entries,
             linksByEntryId: symmetricLinks(entries),
           });
-          setDomainBooksContent(loadedBooksContent);
+          setDomainBooksContent(
+            loadedBooksContent.filter(
+              (bookContent): bookContent is Content =>
+                bookContent !== undefined,
+            ),
+          );
         }
       },
     );
@@ -1104,6 +1173,18 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     const hasDownload = update !== null && update.changed.length > 0;
     return (
       <>
+        {/* Spec 0019 §2: appears the first time a progress write actually
+            fails, reusing the update banner's slot/class/role rather than a
+            new component — stays up for the rest of the session. */}
+        {storageWarning && (
+          <div className="update-banner" role="status">
+            <span>
+              Your progress can't be saved — this browser's storage is full or
+              unavailable. You can keep studying, but results won't be
+              remembered.
+            </span>
+          </div>
+        )}
         {/* `isOffline()` re-checked at render, not just when the update was
             found: turning offline mode on afterwards must retract the banner,
             since accepting it would only fail at the first fetch. */}

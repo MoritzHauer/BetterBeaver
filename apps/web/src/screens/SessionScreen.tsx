@@ -26,6 +26,7 @@ import { getAssetUrl } from "../content/bundled";
 import { getNoteMarkdown } from "../content/source";
 import { SpeakerButton } from "../tts";
 import { playCorrect, playFanfare, playWrong } from "../sounds";
+import { noteStorageUnwritable } from "../storage-health";
 import { FeedbackWidget } from "../components/FeedbackWidget";
 import { BookWatermark } from "../components/BookWatermark";
 
@@ -1056,33 +1057,61 @@ export function SessionScreen({
     }));
   }
 
+  // Every interaction component's answer/grade handler funnels through one
+  // of these three (spec 0019 §3b) — wrapping here, once, covers all nine
+  // `pick`/`grade`/`handleSubmit`/`submit`/`resolvePair` call sites at once.
+  // The guard wraps the ENTIRE body, not just the `onGrade` await: a
+  // blocked-storage throw out of `noteAnswered` -> `onTaskAnswered`/
+  // `onAllAnswered` -> `markTaskAttempted`, or out of `playCorrect`/
+  // `playWrong` (both synchronous `localStorage` reads), would otherwise
+  // escape before `onGrade` ever runs and trap the learner exactly like an
+  // unguarded `onGrade` rejection would (owner decision 4: the learner is
+  // never trapped). Swallowing here, rather than in the two `grade`
+  // functions that call `advance()` after, means every caller — including
+  // the five `pick`/`handleSubmit`/`submit`/`resolvePair` sites that never
+  // call `advance()` themselves — still runs its own follow-up.
   async function applyAuto(unitId: string, correct: boolean) {
-    noteAnswered();
-    tallyAuto([correct]);
-    if (correct) {
-      playCorrect();
-    } else {
-      playWrong();
+    try {
+      noteAnswered();
+      tallyAuto([correct]);
+      if (correct) {
+        playCorrect();
+      } else {
+        playWrong();
+      }
+      await onGrade(unitId, recognizeQuality(correct));
+    } catch {
+      noteStorageUnwritable();
     }
-    await onGrade(unitId, recognizeQuality(correct));
   }
 
   async function applySelf(unitId: string, grade: SelfGrade) {
-    noteAnswered();
-    setSummary((s) => ({
-      ...s,
-      recallCounts: { ...s.recallCounts, [grade]: s.recallCounts[grade] + 1 },
-    }));
-    await onGrade(unitId, recallQuality(grade));
+    try {
+      noteAnswered();
+      setSummary((s) => ({
+        ...s,
+        recallCounts: {
+          ...s.recallCounts,
+          [grade]: s.recallCounts[grade] + 1,
+        },
+      }));
+      await onGrade(unitId, recallQuality(grade));
+    } catch {
+      noteStorageUnwritable();
+    }
   }
 
   async function applyMatchingOutcomes(outcomes: QuestionOutcome[]) {
-    noteAnswered();
-    tallyAuto(
-      outcomes.map(([, quality]) => quality === recognizeQuality(true)),
-    );
-    for (const [unitId, quality] of outcomes) {
-      await onGrade(unitId, quality);
+    try {
+      noteAnswered();
+      tallyAuto(
+        outcomes.map(([, quality]) => quality === recognizeQuality(true)),
+      );
+      for (const [unitId, quality] of outcomes) {
+        await onGrade(unitId, quality);
+      }
+    } catch {
+      noteStorageUnwritable();
     }
   }
 

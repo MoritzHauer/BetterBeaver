@@ -43,6 +43,7 @@ import {
   archiveInMembership,
   restoreInMembership,
 } from "./myBooks";
+import { isStorageUnwritable } from "../storage-health";
 import { isOffline } from "../offline";
 
 export type { ContentUpdate } from "@betterbeaver/engine";
@@ -56,7 +57,7 @@ export type { ContentUpdate } from "@betterbeaver/engine";
  */
 export const SKIP_COVER_KEY = "bb.skipCover";
 
-/** Reload after a membership/content change, keeping the user on My Books. */
+/** Reload, keeping the user on My Books rather than the welcome cover. */
 function reloadToMyBooks(): void {
   try {
     sessionStorage.setItem(SKIP_COVER_KEY, "1");
@@ -65,6 +66,24 @@ function reloadToMyBooks(): void {
     // reload still has to happen; the user just sees the cover on the way back.
   }
   window.location.reload();
+}
+
+/**
+ * Reload after a **membership** change — skipped when storage is unwritable,
+ * because `writeIds` then swallowed the change: there is nothing to reload
+ * for, and the reload would throw away the storage notice, which lives in a
+ * module flag precisely because storage is what's broken and can't carry it
+ * across a navigation. Staying put leaves the library as it truly is, with
+ * the banner saying why.
+ *
+ * `acceptUpdate` deliberately calls `reloadToMyBooks` directly instead: its
+ * documents *did* land in IndexedDB, and only a reload starts serving them.
+ */
+function reloadAfterMembershipChange(): void {
+  if (isStorageUnwritable()) {
+    return;
+  }
+  reloadToMyBooks();
 }
 
 export interface ContentInit {
@@ -574,6 +593,10 @@ export async function initContentSource(): Promise<ContentInit> {
 
       if (toCommit.length > 0) {
         await putCachedDocuments(toCommit);
+        // Not `reloadAfterMembershipChange`: these documents *did* land in
+        // IndexedDB, and the running app keeps serving the old in-memory
+        // source until a reload — so this one happens even when a write
+        // elsewhere has already failed.
         reloadToMyBooks();
       }
 
@@ -637,7 +660,7 @@ export async function initContentSource(): Promise<ContentInit> {
 
       await putCachedDocuments(newDocs);
       addToMyBooks(bookId);
-      reloadToMyBooks();
+      reloadAfterMembershipChange();
     },
 
     async createPrivateBook(title: string): Promise<void> {
@@ -679,7 +702,7 @@ export async function initContentSource(): Promise<ContentInit> {
       };
       await putPrivateBook({ id: bookId, book, domain, assets: {} });
       addToMyBooks(bookId);
-      reloadToMyBooks();
+      reloadAfterMembershipChange();
     },
 
     async importPrivateBook(
@@ -728,7 +751,7 @@ export async function initContentSource(): Promise<ContentInit> {
 
       await putPrivateBook({ id: bookId, book, domain, assets });
       addToMyBooks(bookId);
-      reloadToMyBooks();
+      reloadAfterMembershipChange();
     },
 
     async removeBook(bookId: string): Promise<void> {
@@ -765,17 +788,17 @@ export async function initContentSource(): Promise<ContentInit> {
         }
         await deleteCachedDocuments(toDelete);
       }
-      reloadToMyBooks();
+      reloadAfterMembershipChange();
     },
 
     archiveBook(bookId: string): void {
       archiveInMembership(bookId);
-      reloadToMyBooks();
+      reloadAfterMembershipChange();
     },
 
     restoreBook(bookId: string): void {
       restoreInMembership(bookId);
-      reloadToMyBooks();
+      reloadAfterMembershipChange();
     },
   };
 }

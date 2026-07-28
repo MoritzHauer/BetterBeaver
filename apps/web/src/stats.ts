@@ -37,6 +37,17 @@ export interface LearnerStats {
   wordsSaved: number;
 }
 
+/** `Object.keys(localStorage)`, but blocked storage (`SecurityError`) degrades
+ * to `[]` instead of throwing — same "absent, not a crash" treatment as
+ * `readJson`. */
+function storageKeys(): string[] {
+  try {
+    return Object.keys(localStorage);
+  } catch {
+    return [];
+  }
+}
+
 async function gatherWordsSaved(domainIds: string[]): Promise<number> {
   const store = createLocalStorageVocabListStore();
   let total = 0;
@@ -61,7 +72,7 @@ export async function gatherStats(now: Date): Promise<LearnerStats> {
     }
   }
 
-  const itemsInReview = Object.keys(localStorage).filter((k) =>
+  const itemsInReview = storageKeys().filter((k) =>
     k.startsWith(ITEM_STATE_PREFIX),
   ).length;
 

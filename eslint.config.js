@@ -32,19 +32,17 @@ export default tseslint.config(
       // on an async `save` is the normal idiom and the rule fires on all 9
       // SessionScreen grade buttons. Exempted as accepted React practice —
       // but note the promise there is the arrow's *return value*, not a
-      // statement, so no-floating-promises does NOT cover it: a rejection in
-      // those handlers is genuinely unguarded. Listed in STATUS.md item 8
-      // alongside the effect-level sites.
+      // statement, so no-floating-promises does NOT cover it. Spec 0019 §3b
+      // fixed the then-current handlers by guarding `SessionScreen`'s three
+      // `apply*` funnels (`applyAuto`/`applySelf`/`applyMatchingOutcomes`),
+      // which every one of the nine funnels through. A newly added async
+      // attribute handler that awaits something *other* than `apply*` is
+      // still unguarded by lint — a known, accepted hole, not an oversight.
       "@typescript-eslint/no-misused-promises": [
         "error",
         { checksVoidReturn: { attributes: false } },
       ],
-      // Real, and not yet fixed: 10 `asyncRead().then(setState)` effects with
-      // no rejection handler, so an IndexedDB failure leaves the UI silently
-      // stuck. Same family as the boot-loop crash in design.md. Warn rather
-      // than error because each fix needs its own error-surfacing decision —
-      // tracked in STATUS.md's handoff backlog, not left to rot here.
-      "@typescript-eslint/no-floating-promises": "warn",
+      "@typescript-eslint/no-floating-promises": "error",
     },
   },
   {

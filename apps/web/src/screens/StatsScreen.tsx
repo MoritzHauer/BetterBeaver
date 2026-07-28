@@ -26,7 +26,10 @@ export function StatsScreen({
   const [creator, setCreator] = useState<CreatorStats | null>(null);
 
   useEffect(() => {
-    gatherStats(new Date()).then(setStats);
+    // Cannot reject: every read `gatherStats` does is `readJson`- or
+    // `storageKeys()`-backed, both of which degrade to absent/empty rather
+    // than throwing (spec 0019 §1).
+    void gatherStats(new Date()).then(setStats);
   }, []);
 
   // Separate effect/state: the creator card is a live backend read and must

@@ -57,7 +57,9 @@ export function PrivateEditScreen({
   assetsRef.current = assets;
 
   useEffect(() => {
-    readPrivateBook(bookId).then((record) => {
+    // Cannot reject: `private-store.ts`'s `readPrivateBook` is try/catch ->
+    // `undefined`.
+    void readPrivateBook(bookId).then((record) => {
       if (record === undefined) {
         setLoadError("this private book no longer exists on this device");
         return;

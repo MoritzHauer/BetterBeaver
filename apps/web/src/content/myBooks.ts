@@ -11,15 +11,19 @@
  * path in `content/source.ts` exactly once.
  */
 
+import { noteStorageUnwritable } from "../storage-health";
+
 const MYBOOKS_KEY = "bb.mybooks";
 const ARCHIVED_KEY = "bb.mybooks.archived";
 
 function readIds(key: string): string[] {
-  const raw = localStorage.getItem(key);
-  if (raw === null) {
-    return [];
-  }
+  // `getItem` inside the try, like `progress/local-storage.ts`'s `readJson`
+  // (spec 0019 §1): blocked storage is "absent", not a crash.
   try {
+    const raw = localStorage.getItem(key);
+    if (raw === null) {
+      return [];
+    }
     const parsed: unknown = JSON.parse(raw);
     return Array.isArray(parsed)
       ? parsed.filter((id): id is string => typeof id === "string")
@@ -30,12 +34,31 @@ function readIds(key: string): string[] {
 }
 
 function writeIds(key: string, ids: string[]): void {
-  localStorage.setItem(key, JSON.stringify(ids));
+  try {
+    localStorage.setItem(key, JSON.stringify(ids));
+  } catch {
+    // Unwritable storage must not brick boot: `initMembership` runs inside
+    // `initContentSource()`, whose promise `main.tsx` awaits before its only
+    // `createRoot(...).render(...)` — an escaping throw left a blank page
+    // with no error screen. Membership then lives for this session only,
+    // and the learner is told: Add/Archive/Remove/Restore all land here, so
+    // one report covers every membership write, including the boot one that
+    // happens before React mounts.
+    noteStorageUnwritable();
+  }
 }
 
 /** True before the membership key has ever been written — the first-run signal (decisions 9/12). */
 export function isFirstRun(): boolean {
-  return localStorage.getItem(MYBOOKS_KEY) === null;
+  try {
+    return localStorage.getItem(MYBOOKS_KEY) === null;
+  } catch {
+    // Can't tell — answer "not first run", the non-destructive side. Saying
+    // `true` would run `initContentSource`'s seed-and-purge path against a
+    // membership list that `writeIds` just failed to persist, and
+    // `purgeUnmembered` would drop every cached document as unmembered.
+    return false;
+  }
 }
 
 export function readMyBooks(): string[] {

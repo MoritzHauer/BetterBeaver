@@ -80,7 +80,9 @@ export function BookScreen({
 
   useEffect(() => {
     let cancelled = false;
-    dueUnits(content, store, new Date()).then((due) => {
+    // Cannot reject: `dueUnits` only ever awaits `readJson`-backed reads,
+    // which degrade to absent rather than throwing (spec 0019 §1).
+    void dueUnits(content, store, new Date()).then((due) => {
       if (cancelled) {
         return;
       }

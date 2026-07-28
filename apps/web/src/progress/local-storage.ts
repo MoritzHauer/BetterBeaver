@@ -10,14 +10,13 @@ const ATTEMPTED_KEY = "bb.attempted";
 const STREAK_PREFIX = "bb.streak.";
 export const REPS_KEY = "bb.reps";
 
-/** Parses JSON from `localStorage`, treating a corrupt/missing value as absent. */
+/** Parses JSON from `localStorage`, treating a corrupt/missing value — or a
+ * blocked `localStorage` itself (`SecurityError`, e.g. private-browsing
+ * storage restrictions) — as absent. */
 export function readJson<T>(key: string): T | null {
-  const raw = localStorage.getItem(key);
-  if (raw === null) {
-    return null;
-  }
   try {
-    return JSON.parse(raw) as T;
+    const raw = localStorage.getItem(key);
+    return raw === null ? null : (JSON.parse(raw) as T);
   } catch {
     return null;
   }
