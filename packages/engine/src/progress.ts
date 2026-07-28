@@ -1,4 +1,4 @@
-import type { Lesson, Unit } from "@betterbeaver/schema";
+import type { Content, Lesson, Unit } from "@betterbeaver/schema";
 import type { Quality, SrsState } from "@betterbeaver/srs";
 import { isDue, schedule } from "@betterbeaver/srs";
 import type { SchedulingUnit } from "./units.js";
@@ -64,6 +64,39 @@ export function isLessonUnlocked(
     return true;
   }
   return isLessonComplete(gate, units, attemptedTaskIds);
+}
+
+/** The unit the learner should continue with: the first unit, in reading
+ * order, that isn't complete. Reading order is `topic.lessonIds`, then each
+ * lesson's `unitIds` — the same order BookScreen and LessonScreen render, so
+ * "next" always means what the learner sees next. Dangling ids are skipped
+ * (valid content has none; a stale cache during an update window must not
+ * crash). `null` when every unit of the Book is complete.
+ *
+ * Locks are deliberately not consulted: the caller navigates straight to
+ * UnitScreen, which has no lock gate of its own — the skip-ahead confirm
+ * lives on the Lesson/Book *cards*. For all authored content the first
+ * incomplete unit is unlocked anyway, since every earlier unit is complete. */
+export function nextUnit(
+  content: Content,
+  attemptedTaskIds: ReadonlySet<string>,
+): { lessonId: string; unitId: string } | null {
+  for (const lessonId of content.topic.lessonIds) {
+    const lesson = content.lessons.find((l) => l.id === lessonId);
+    if (lesson === undefined) {
+      continue;
+    }
+    for (const unitId of lesson.unitIds) {
+      const unit = content.units.find((u) => u.id === unitId);
+      if (unit === undefined) {
+        continue;
+      }
+      if (!isUnitComplete(unit, attemptedTaskIds)) {
+        return { lessonId, unitId };
+      }
+    }
+  }
+  return null;
 }
 
 /**

@@ -1,11 +1,12 @@
 import { describe, it, expect } from "vitest";
-import type { Item, Lesson, Unit } from "@betterbeaver/schema";
+import type { Content, Item, Lesson, Unit } from "@betterbeaver/schema";
 import type { SrsState } from "@betterbeaver/srs";
 import {
   isUnitComplete,
   isUnitUnlocked,
   isLessonComplete,
   isLessonUnlocked,
+  nextUnit,
   reviewQueue,
   applyGrade,
 } from "./progress.js";
@@ -30,6 +31,29 @@ function makeLesson(overrides: Partial<Lesson> & Pick<Lesson, "id">): Lesson {
     goal: "Goal",
     unitIds: [],
     ...overrides,
+  };
+}
+
+function makeContent(args: {
+  lessonIds: string[];
+  lessons: Lesson[];
+  units: Unit[];
+}): Content {
+  return {
+    topic: {
+      id: "t-topic",
+      code: "t",
+      title: "Topic",
+      description: "",
+      lessonIds: args.lessonIds,
+      domainId: "t-domain",
+    },
+    lessons: args.lessons,
+    units: args.units,
+    items: [],
+    tasks: [],
+    resources: [],
+    notes: [],
   };
 }
 
@@ -131,6 +155,107 @@ describe("isLessonUnlocked", () => {
       unlocksAfterLessonId: "t-lesson-missing",
     });
     expect(isLessonUnlocked(orphan, lessons, units, new Set())).toBe(true);
+  });
+});
+
+describe("nextUnit", () => {
+  const unitA1 = makeUnit({ id: "t-unit-a1", taskIds: ["t-task-a1"] });
+  const unitA2 = makeUnit({ id: "t-unit-a2", taskIds: ["t-task-a2"] });
+  const lessonA = makeLesson({
+    id: "t-lesson-a",
+    unitIds: [unitA1.id, unitA2.id],
+  });
+  const unitB1 = makeUnit({ id: "t-unit-b1", taskIds: ["t-task-b1"] });
+  const lessonB = makeLesson({ id: "t-lesson-b", unitIds: [unitB1.id] });
+
+  const content = makeContent({
+    lessonIds: [lessonA.id, lessonB.id],
+    lessons: [lessonA, lessonB],
+    units: [unitA1, unitA2, unitB1],
+  });
+
+  it("nothing attempted -> the first unit of the first lesson", () => {
+    expect(nextUnit(content, new Set())).toEqual({
+      lessonId: lessonA.id,
+      unitId: unitA1.id,
+    });
+  });
+
+  it("first unit complete -> the second unit", () => {
+    expect(nextUnit(content, new Set(["t-task-a1"]))).toEqual({
+      lessonId: lessonA.id,
+      unitId: unitA2.id,
+    });
+  });
+
+  it("half-attempted unit (some but not all taskIds) -> that same unit, not the next one", () => {
+    const half = makeUnit({
+      id: "t-unit-half",
+      taskIds: ["t-task-h1", "t-task-h2"],
+    });
+    const lessonHalf = makeLesson({
+      id: "t-lesson-half",
+      unitIds: [half.id, unitA1.id],
+    });
+    const halfContent = makeContent({
+      lessonIds: [lessonHalf.id],
+      lessons: [lessonHalf],
+      units: [half, unitA1],
+    });
+    expect(nextUnit(halfContent, new Set(["t-task-h1"]))).toEqual({
+      lessonId: lessonHalf.id,
+      unitId: half.id,
+    });
+  });
+
+  it("last unit of lesson 1 complete -> the first unit of lesson 2 (crosses the boundary)", () => {
+    expect(nextUnit(content, new Set(["t-task-a1", "t-task-a2"]))).toEqual({
+      lessonId: lessonB.id,
+      unitId: unitB1.id,
+    });
+  });
+
+  it("skip-ahead shape: lesson 1 incomplete, lesson 2 fully complete -> points back into lesson 1", () => {
+    expect(nextUnit(content, new Set(["t-task-b1"]))).toEqual({
+      lessonId: lessonA.id,
+      unitId: unitA1.id,
+    });
+  });
+
+  it("every unit complete -> null", () => {
+    expect(
+      nextUnit(content, new Set(["t-task-a1", "t-task-a2", "t-task-b1"])),
+    ).toBeNull();
+  });
+
+  it("skips a dangling lesson id and a dangling unit id instead of throwing", () => {
+    const danglingLesson = makeLesson({
+      id: "t-lesson-dangling",
+      unitIds: ["t-unit-missing", unitB1.id],
+    });
+    const danglingContent = makeContent({
+      lessonIds: ["t-lesson-missing", danglingLesson.id],
+      lessons: [danglingLesson],
+      units: [unitB1],
+    });
+    expect(nextUnit(danglingContent, new Set())).toEqual({
+      lessonId: danglingLesson.id,
+      unitId: unitB1.id,
+    });
+  });
+
+  it("reading order follows topic.lessonIds / lesson.unitIds, not array order in content.lessons / content.units", () => {
+    // Array order is reversed from the reading order given by lessonIds /
+    // unitIds, to prove the resolver walks id order, not array order.
+    const reorderedContent = makeContent({
+      lessonIds: [lessonA.id, lessonB.id],
+      lessons: [lessonB, lessonA],
+      units: [unitB1, unitA2, unitA1],
+    });
+    expect(nextUnit(reorderedContent, new Set())).toEqual({
+      lessonId: lessonA.id,
+      unitId: unitA1.id,
+    });
   });
 });
 

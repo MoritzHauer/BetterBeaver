@@ -425,6 +425,22 @@ section.card {
 .book-actions .review-btn:active:not(:disabled) {
   background: var(--review-pressed);
 }
+.book-actions .play-btn {
+  background: var(--primary);
+  color: var(--on-primary);
+}
+.book-actions .play-btn:active:not(:disabled) {
+  background: var(--primary-pressed);
+}
+
+/* Horizontal space the .book-actions cluster occupies, measured from the
+ * title row's own right edge. Measured in-browser at three chips, not
+ * derived: the row spans 153.5px and sits 4px past the title row's right
+ * edge, so the gap to close is 149.5px. Grow this if a fourth chip is ever
+ * added — .book-actions is absolutely positioned, so nothing computes it. */
+:root {
+  --book-chip-zone: 9.5rem;
+}
 
 .book-title-row {
   display: flex;
@@ -432,6 +448,20 @@ section.card {
   gap: 0.4rem;
   /* Reserves the chips' height — see .book-actions above. */
   min-height: var(--book-chip-row);
+  /* ...and their width. Without this the title runs *under* the absolutely
+   * positioned chips: at three chips the collision threshold moved from
+   * ~356px to ~400px viewport, i.e. into the 360/375/390 mainstream band
+   * (measured 2026-07-28: 23.7px of occlusion at 375px). A long title now
+   * wraps instead, which the card already has room for. */
+  padding-right: var(--book-chip-zone);
+}
+/* A flex item's `min-width: auto` floors it at min-content — one long word
+ * ("BetterBeaver") then overflows the reserved zone anyway on a 320px
+ * phone, which is the pre-0020 overlap this row already had. Let the word
+ * break instead. */
+.book-title-row > strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .book-icon {
   font-size: 1.5rem;

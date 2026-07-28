@@ -22,8 +22,10 @@ import {
   buildTaskSession,
   buildUnitSession,
   dueDomainUnits,
+  dueUnits,
   isLessonComplete,
   itemIdFromUnitId,
+  nextUnit,
   noteUnitId,
   recordGrade,
   symmetricLinks,
@@ -62,6 +64,7 @@ import { EditScreen, type EditTarget } from "./screens/EditScreen";
 import { PrivacyScreen } from "./screens/PrivacyScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { StatsScreen } from "./screens/StatsScreen";
+import { LessonSummaryScreen } from "./screens/LessonSummaryScreen";
 import { currentUser, getSupabase, listMyDocuments } from "./backend/supabase";
 
 type Screen =
@@ -94,6 +97,9 @@ type Screen =
       unitId: string; // the linking unit, for onDone back-nav
       recallUnitId: string; // the linked unit whose tasks are sampled
     }
+  // Lesson summary (plan 0020 §5): shown after the unit session that
+  // completed the lesson. Derived tiles only — nothing is persisted for it.
+  | { screen: "lesson-summary"; bookId: string; lessonId: string }
   // Review, Vocabulary, and ad-hoc study are domain-scoped (plan 0006): the
   // review queue, lists, and streak all key on the domain now, not the book.
   | { screen: "review"; domainId: string }
@@ -251,6 +257,7 @@ function UnitSession({
   isAuthor,
   onOpenEdit,
   onDone,
+  nextAction,
 }: {
   content: Content;
   unit: Unit;
@@ -265,6 +272,10 @@ function UnitSession({
   /** Opens `EditScreen` at the given deep-link target. */
   onOpenEdit: (docId: string, target: EditTarget) => void;
   onDone: () => void;
+  /** Plan 0020 §4: forwarded straight through to `SessionScreen` — only the
+   * caller (the `unit-session` branch) knows whether this unit finishes its
+   * lesson. */
+  nextAction?: { label: string; onClick: () => void };
 }) {
   const domainId = content.topic.domainId;
   const pairs = useMemo(
@@ -320,6 +331,7 @@ function UnitSession({
       onGrade={handleGrade}
       onTaskAnswered={(taskId) => void progressStore.markTaskAttempted(taskId)}
       onFinished={onDone}
+      nextAction={nextAction}
       onExit={onDone}
       loadStreak={() => progressStore.getStreak(domainId)}
     />
@@ -873,6 +885,37 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     setScreen({ screen: "book", bookId });
   }
 
+  // Play (plan 0020 §2): due > 0 → Daily Review, else the next incomplete
+  // unit, else nothing to do (the Book is finished — land on BookScreen,
+  // which renders the trophy state). No stored "first tap today" flag: due
+  // dates are day-granular UTC, so finishing today's review empties the
+  // queue and every later tap lands on a unit.
+  async function playBook(bookId: string): Promise<void> {
+    const bookContent = booksContentMap.get(bookId);
+    if (bookContent === undefined) {
+      goToBook(bookId);
+      return;
+    }
+    // Book-scoped, matching BookScreen's own badge call (which likewise
+    // omits the pinned set) — keep the two identical.
+    const due = await dueUnits(bookContent, progressStore, new Date());
+    if (due.length > 0) {
+      setScreen({ screen: "review", domainId: bookContent.topic.domainId });
+      return;
+    }
+    const next = nextUnit(bookContent, attemptedTaskIds);
+    if (next !== null) {
+      setScreen({
+        screen: "unit",
+        bookId,
+        lessonId: next.lessonId,
+        unitId: next.unitId,
+      });
+    } else {
+      goToBook(bookId);
+    }
+  }
+
   // Mobile back button / edge-swipe fix: without any history.pushState calls
   // the browser has nothing to pop, so a hardware/gesture back exits the app
   // entirely instead of moving up a level. `backActionRef` always holds the
@@ -1004,7 +1047,8 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
       screen.screen === "unit" ||
       screen.screen === "task" ||
       screen.screen === "unit-session" ||
-      screen.screen === "recall-session";
+      screen.screen === "recall-session" ||
+      screen.screen === "lesson-summary";
     const contentPromise = isBookFamilyScreen
       ? loadBookOrBroken(contentSourceResult.source, screen.bookId)
       : undefined;
@@ -1224,6 +1268,9 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           onSelectBook={(bookId) => goToBook(bookId)}
           onVocabulary={(domainId) => setScreen({ screen: "vocab", domainId })}
           onReview={(domainId) => setScreen({ screen: "review", domainId })}
+          // Cannot reject: `playBook` only awaits `dueUnits`, whose reads are
+          // `readJson`-backed and degrade to absent (spec 0019 §1).
+          onPlay={(bookId) => void playBook(bookId)}
           onArchive={contentInit.archiveBook}
           onRestore={contentInit.restoreBook}
           onRemove={contentInit.removeBook}
@@ -1277,7 +1324,8 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     screen.screen === "unit" ||
     screen.screen === "task" ||
     screen.screen === "unit-session" ||
-    screen.screen === "recall-session"
+    screen.screen === "recall-session" ||
+    screen.screen === "lesson-summary"
   ) {
     // domainContent is gated here too (not just content): unit notes and
     // task-session post-answer reveals need the domain's merged entry pool
@@ -1317,6 +1365,8 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           onVocabulary={() =>
             setScreen({ screen: "vocab", domainId: content.topic.domainId })
           }
+          // Cannot reject — see the My Books call site.
+          onPlay={() => void playBook(screen.bookId)}
           onEdit={
             isAuthor || isPrivateBook(screen.bookId)
               ? () =>
@@ -1459,6 +1509,71 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
         });
       };
       backActionRef.current = onDone;
+      const lesson = content.lessons.find((l) => l.id === screen.lessonId);
+      // Plan 0020 §4: does finishing THIS unit finish the lesson? Every
+      // OTHER unit's completion is already accurate in `attemptedTaskIds`
+      // (state) — this session only ever marks this unit's own tasks — so
+      // unioning this unit's taskIds in lets the existing isLessonComplete
+      // answer synchronously, before the summary even renders. No store
+      // read needed for the label; `onNext` below still does its own read
+      // for the actual navigation.
+      // ponytail: assumes every task in `unit` yields >=1 question, so the
+      // session's onTaskAnswered really does cover all of unit.taskIds by
+      // the time the summary shows. A unit with a zero-question task would
+      // never satisfy isUnitComplete via this flow at all — same ceiling
+      // `onNext`'s fresh read hits, not one this label computation adds.
+      const finishesLesson =
+        lesson !== undefined &&
+        isLessonComplete(
+          lesson,
+          content.units,
+          new Set([...attemptedTaskIds, ...unit.taskIds]),
+        );
+      // Plan 0020 §4: resolve the next step from the POST-session attempted
+      // set. `attemptedTaskIds` (state) is stale here by exactly this
+      // session's own markTaskAttempted calls, and reloadAttemptedTaskIds()
+      // can't be awaited (fire-and-forget) — read the store directly.
+      const onNext = async () => {
+        const ids = new Set(await progressStore.getAttemptedTaskIds());
+        setAttemptedTaskIds(ids);
+        if (
+          lesson !== undefined &&
+          isLessonComplete(lesson, content.units, ids)
+        ) {
+          setScreen({
+            screen: "lesson-summary",
+            bookId: screen.bookId,
+            lessonId: screen.lessonId,
+          });
+          return;
+        }
+        // Two branches, and they're total (plan 0020 §4): an incomplete
+        // lesson always contains an incomplete unit, so `next` is null here
+        // only defensively.
+        const next = nextUnit(content, ids);
+        // Never send the learner back into the unit they just finished. That
+        // happens when `finishesLesson` (optimistic, computed from
+        // attemptedTaskIds ∪ unit.taskIds) and this fresh read disagree —
+        // a task that yields zero questions never gets marked attempted, and
+        // a blocked-storage write is swallowed by design (spec 0019). The
+        // button then reads "Lesson complete" and the tap would land right
+        // back where it started, with no explanation. The lesson screen is
+        // the honest destination: it shows which unit is still open.
+        if (next === null || next.unitId === screen.unitId) {
+          setScreen({
+            screen: "lesson",
+            bookId: screen.bookId,
+            lessonId: screen.lessonId,
+          });
+          return;
+        }
+        setScreen({
+          screen: "unit",
+          bookId: screen.bookId,
+          lessonId: next.lessonId,
+          unitId: next.unitId,
+        });
+      };
       return (
         <UnitSession
           content={content}
@@ -1474,6 +1589,32 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
             setScreen({ screen: "edit", docId, target })
           }
           onDone={onDone}
+          nextAction={{
+            label: finishesLesson ? "Lesson complete" : "Next unit",
+            onClick: () => void onNext(),
+          }}
+        />
+      );
+    }
+
+    if (screen.screen === "lesson-summary") {
+      const onBack = () => goToBook(screen.bookId);
+      backActionRef.current = onBack;
+      return (
+        <LessonSummaryScreen
+          content={content}
+          lessonId={screen.lessonId}
+          attemptedTaskIds={attemptedTaskIds}
+          store={progressStore}
+          onNext={(target) =>
+            setScreen({
+              screen: "unit",
+              bookId: screen.bookId,
+              lessonId: target.lessonId,
+              unitId: target.unitId,
+            })
+          }
+          onBack={onBack}
         />
       );
     }

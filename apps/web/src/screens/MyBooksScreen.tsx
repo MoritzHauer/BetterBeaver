@@ -22,6 +22,7 @@ export function MyBooksScreen({
   onSelectBook,
   onVocabulary,
   onReview,
+  onPlay,
   onArchive,
   onRestore,
   onRemove,
@@ -55,6 +56,9 @@ export function MyBooksScreen({
    * flat (no more domain-header row to hang these off of). */
   onVocabulary: (domainId: string) => void;
   onReview: (domainId: string) => void;
+  /** Resolves what to study next and navigates there (plan 0020 §2): due
+   * review, else the next incomplete unit, else the Book's trophy state. */
+  onPlay: (bookId: string) => void;
   onArchive: (bookId: string) => void;
   onRestore: (bookId: string) => void;
   onRemove: (bookId: string) => Promise<void>;
@@ -218,6 +222,17 @@ export function MyBooksScreen({
                 >
                   <img
                     src={`${import.meta.env.BASE_URL}art/icons/repeat.png`}
+                    alt=""
+                  />
+                </button>
+                <button
+                  type="button"
+                  className="plain icon-button play-btn"
+                  onClick={() => onPlay(book.id)}
+                  aria-label="Continue"
+                >
+                  <img
+                    src={`${import.meta.env.BASE_URL}art/icons/play.png`}
                     alt=""
                   />
                 </button>

@@ -7,6 +7,7 @@ import {
   isLessonUnlocked,
   isUnitComplete,
   isUnitUnlocked,
+  nextUnit,
 } from "@betterbeaver/engine";
 import { LockableProgress } from "../components/ProgressBar";
 import { FeedbackWidget } from "../components/FeedbackWidget";
@@ -53,6 +54,7 @@ export function BookScreen({
   epoch,
   onSelectLesson,
   onPracticeTask,
+  onPlay,
   onReview,
   onVocabulary,
   onEdit,
@@ -66,6 +68,9 @@ export function BookScreen({
   epoch: number;
   onSelectLesson: (lessonId: string) => void;
   onPracticeTask: (target: PracticeTarget) => void;
+  /** Play (plan 0020 §2): due > 0 → Daily Review, else the next incomplete
+   * unit, else nothing (the trophy state below handles that in-place). */
+  onPlay: () => void;
   onReview: () => void;
   onVocabulary: () => void;
   /** Authors only (plan 0012): opens this book's document in the editor. */
@@ -97,6 +102,25 @@ export function BookScreen({
       cancelled = true;
     };
   }, [content, store, epoch]);
+
+  // Play card state (plan 0020 §2, table in spec 0020-1 §4): resolved here
+  // rather than threaded down as a prop — BookScreen already has `content`
+  // and `attemptedTaskIds`, so this is the fewer-props option.
+  const nextUp = nextUnit(content, attemptedTaskIds);
+  const nextUnitTitle =
+    nextUp !== null
+      ? (content.units.find((u) => u.id === nextUp.unitId)?.title ?? null)
+      : null;
+  const bookComplete = dueCount === 0 && nextUp === null;
+  const playDisabled = dueCount === null || bookComplete;
+  const playSubtitle =
+    dueCount === null
+      ? "Loading…"
+      : dueCount > 0
+        ? `${dueCount} due for review`
+        : bookComplete
+          ? "Nothing left to study"
+          : nextUnitTitle;
 
   // Book-level Practice shuffles across the opened lessons' opened units
   // (plan 0008, pinned scope).
@@ -154,6 +178,17 @@ export function BookScreen({
         contentId={content.topic.id}
       />
       <ul className="card-list">
+        <li className={"card" + (playDisabled ? "" : " primary")}>
+          <button onClick={onPlay} disabled={playDisabled}>
+            <img
+              className="topic-glyph"
+              src={`${import.meta.env.BASE_URL}art/icons/${bookComplete ? "trophy" : "play"}.png`}
+              alt=""
+            />
+            <strong>{bookComplete ? "Book complete" : "Continue"}</strong>
+            <p className="status">{playSubtitle}</p>
+          </button>
+        </li>
         <li className={`card review${dueCount !== 0 ? " primary" : ""}`}>
           <button onClick={onReview} disabled={dueCount === 0}>
             <strong>Daily Review</strong>

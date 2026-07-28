@@ -844,10 +844,12 @@ function SummaryPanel({
   summary,
   loadStreak,
   onFinished,
+  nextAction,
 }: {
   summary: SessionSummary;
   loadStreak?: () => Promise<Streak | null>;
   onFinished: (summary: SessionSummary) => void;
+  nextAction?: { label: string; onClick: () => void };
 }) {
   const [streak, setStreak] = useState<Streak | null>(null);
 
@@ -917,9 +919,19 @@ function SummaryPanel({
         ) : null}
       </div>
       <ActionBar>
+        {nextAction !== undefined ? (
+          <button className="primary" autoFocus onClick={nextAction.onClick}>
+            <img
+              className="icon-glyph"
+              src={`${import.meta.env.BASE_URL}art/icons/play.png`}
+              alt=""
+            />{" "}
+            {nextAction.label}
+          </button>
+        ) : null}
         <button
-          className="primary"
-          autoFocus
+          className={nextAction !== undefined ? "plain" : "primary"}
+          autoFocus={nextAction === undefined}
           onClick={() => onFinished(summary)}
         >
           Done
@@ -961,6 +973,7 @@ export function SessionScreen({
   onAllAnswered,
   onTaskAnswered,
   onFinished,
+  nextAction,
   onExit,
   loadStreak,
 }: {
@@ -994,6 +1007,11 @@ export function SessionScreen({
    * `taskIds` is passed. */
   onTaskAnswered?: (taskId: string) => void;
   onFinished: (summary: SessionSummary) => void;
+  /** Plan 0020 §4: an optional forward step shown as the summary's primary
+   * button. Only the pooled unit-practice session passes this — every other
+   * session type (review, ad-hoc, recall, single-task) keeps a bare `Done`,
+   * because "next unit" is not what follows them. */
+  nextAction?: { label: string; onClick: () => void };
   onExit: () => void;
   /** Fetches the current streak for the summary panel (plan 0003). */
   loadStreak?: () => Promise<Streak | null>;
@@ -1185,6 +1203,7 @@ export function SessionScreen({
           summary={summary}
           loadStreak={loadStreak}
           onFinished={onFinished}
+          nextAction={nextAction}
         />
       ) : question === undefined ? null : (
         <div key={index} className="question">
