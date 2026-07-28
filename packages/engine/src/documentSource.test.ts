@@ -189,12 +189,12 @@ function makeBook(opts: {
       tasks: [task],
       resources: [resource],
       notes: [],
-    } as unknown as BookDocument,
+    },
     domainDoc: {
       domain,
       entries: [],
       families: [],
-    } as unknown as DomainDocument,
+    },
   };
 }
 

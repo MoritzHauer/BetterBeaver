@@ -1,11 +1,11 @@
 /**
  * Pure, DOM-free helpers behind `EntityPicker` (spec 0018 §2): building a
  * pool's display options, searching/filtering them, and grouping them. Kept
- * separate from EditScreen.tsx so this logic is unit-testable without React.
+ * separate from the editor modules so this logic is unit-testable without React.
  */
 import { noteTitle } from "../content/noteTitle";
 
-/** A loosely-typed entity, matching EditScreen.tsx's own `Entity` — mid-edit
+/** A loosely-typed entity, matching `edit/types.ts`'s own `Entity` — mid-edit
  * content is untrusted/possibly-invalid on purpose (see that file's header
  * comment), so these helpers never assume a validated shape. */
 type Loose = { id: string } & Record<string, unknown>;

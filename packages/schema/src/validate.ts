@@ -101,7 +101,7 @@ function idLabel(raw: unknown, index: number, arrayName: string): string {
     typeof raw === "object" &&
     raw !== null &&
     "id" in raw &&
-    typeof (raw as { id: unknown }).id === "string"
+    typeof raw.id === "string"
   ) {
     return (raw as { id: string }).id;
   }

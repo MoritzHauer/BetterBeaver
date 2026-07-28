@@ -83,7 +83,7 @@ export async function listMyDocuments(): Promise<AuthorDocSummary[]> {
   if (error) {
     throw new Error(error.message);
   }
-  return data as AuthorDocSummary[];
+  return data;
 }
 
 export async function loadDocument(id: string): Promise<AuthorDoc> {
@@ -99,7 +99,7 @@ export async function loadDocument(id: string): Promise<AuthorDoc> {
   if (error) {
     throw new Error(error.message);
   }
-  return data as AuthorDoc;
+  return data;
 }
 
 export async function saveDraft(
@@ -171,7 +171,7 @@ export async function listCatalogSummaries(): Promise<CatalogSummary[]> {
   if (error) {
     throw new Error(error.message);
   }
-  return data as CatalogSummary[];
+  return data;
 }
 
 /** One catalog row with its full published document — the propose-mode
@@ -191,7 +191,7 @@ export async function loadCatalogEntry(
   if (error) {
     throw new Error(error.message);
   }
-  return data as CatalogEntry | null;
+  return data;
 }
 
 export interface Proposal {

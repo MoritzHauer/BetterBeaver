@@ -76,7 +76,7 @@ function slugifyTitle(title: string, fallbackId: string): string {
 }
 
 // Raw (pre-validation) field readers — same "each file keeps its own tiny
-// copy" convention as content/source.ts's and EditScreen.tsx's rawDomainId.
+// copy" convention as content/source.ts's and edit/types.ts's rawDomainId.
 function rawTitle(book: BookDocument): string {
   return typeof (book.topic as { title?: unknown }).title === "string"
     ? (book.topic as { title: string }).title

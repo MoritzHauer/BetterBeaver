@@ -1,5 +1,7 @@
 # Spec 0018: Auto-generated ids and reference pickers in the editor
 
+> **Landed, and its line citations are stale.** `EditScreen.tsx` was split into `apps/web/src/screens/edit/` on 2026-07-28 (see [design.md](../design.md) — the delegation context-budget row). Every `:NNNN` below refers to the pre-split monolith: `AddEntityForm`/`EntityPicker`/`ITEM_FIELDS` are now in `edit/fields.tsx`, `NewItemForm` and the `onAdd` call sites in `edit/BookEditor.tsx`. Kept as written for the record.
+
 No plan doc — an owner-decided editor fix, direction pinned by a 2-question grilling (2026-07-27). Removes hand-typed entity ids from `EditScreen` entirely: ids become generated, and every id _reference_ becomes a picker over real entities.
 
 ## The problem

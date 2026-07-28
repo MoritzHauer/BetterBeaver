@@ -81,10 +81,7 @@ function walk(
     !Array.isArray(before) &&
     !Array.isArray(after);
   if (bothObjects) {
-    const keys = new Set([
-      ...Object.keys(before as Record<string, unknown>),
-      ...Object.keys(after as Record<string, unknown>),
-    ]);
+    const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
     for (const key of [...keys].sort()) {
       walk(
         (before as Record<string, unknown>)[key],

@@ -46,7 +46,7 @@ export function upsertEntity(
 ): BookDocument {
   return {
     ...doc,
-    [collection]: upsertById(doc[collection], entity as Entity),
+    [collection]: upsertById(doc[collection], entity),
   };
 }
 
@@ -128,7 +128,7 @@ export function upsertDomainEntry(
   doc: DomainDocument,
   entry: { id: string } & Record<string, unknown>,
 ): DomainDocument {
-  return { ...doc, entries: upsertById(doc.entries, entry as Entity) };
+  return { ...doc, entries: upsertById(doc.entries, entry) };
 }
 
 /**
@@ -170,7 +170,7 @@ export function upsertFamily(
   doc: DomainDocument,
   family: { id: string } & Record<string, unknown>,
 ): DomainDocument {
-  return { ...doc, families: upsertById(doc.families, family as Entity) };
+  return { ...doc, families: upsertById(doc.families, family) };
 }
 
 export function removeFamily(doc: DomainDocument, id: string): DomainDocument {

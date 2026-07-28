@@ -7,16 +7,19 @@
     "node": ">=22"
   },
   "scripts": {
-    "check": "corepack pnpm run format:check && corepack pnpm run lint && corepack pnpm run typecheck && corepack pnpm run test",
+    "check": "corepack pnpm run format:check && corepack pnpm run lint && corepack pnpm run lint:types-fire && corepack pnpm run lint:cycles && corepack pnpm run typecheck && corepack pnpm run test",
     "format:check": "prettier --check .",
     "lint": "eslint .",
     "typecheck": "corepack pnpm -r run typecheck",
     "test": "vitest run",
-    "dev": "corepack pnpm --filter @betterbeaver/web dev"
+    "dev": "corepack pnpm --filter @betterbeaver/web dev",
+    "lint:cycles": "madge --circular --extensions ts,tsx --ts-config apps/web/tsconfig.json apps/web/src packages/*/src",
+    "lint:types-fire": "bash scripts/lint-types-fire.sh"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "eslint": "^10.6.0",
+    "madge": "^8.0.0",
     "prettier": "^3.9.4",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.62.1",
