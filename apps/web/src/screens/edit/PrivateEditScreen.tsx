@@ -42,7 +42,15 @@ export function PrivateEditScreen({
   const [domain, setDomain] = useState<DomainDocument | null>(null);
   const [assets, setAssets] = useState<Record<string, Blob>>({});
   const [view, setView] = useState<View>(() => initialView(target));
-  const [editingDomain, setEditingDomain] = useState(false);
+  // An entry target only makes sense against the Domain side of this Book
+  // (`initialView` turns it into `{v:"entry"}`, which only `DomainEditor`
+  // renders), so a deep link to one opens there rather than on the Book
+  // root with an invisible view selected. The session ✎ is the caller that
+  // produces these: a private Book's lexeme question routes here, since a
+  // private Book's Domain has no document of its own to open.
+  const [editingDomain, setEditingDomain] = useState(
+    target?.entryId !== undefined,
+  );
   const [editingAssets, setEditingAssets] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<"saved" | "saving" | "error">(

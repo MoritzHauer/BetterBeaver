@@ -29,17 +29,39 @@ export function EditScreen({
   target,
   mode = "maintain",
   onBack,
+  onPublished,
 }: {
   docId: string;
   target?: EditTarget;
   mode?: "maintain" | "propose" | "private";
   onBack: () => void;
+  /** Fires once the edit has left this device — published (maintain) or
+   * submitted as a proposal (propose). Routes that opened the editor as a
+   * detour from learning pass a close-and-return here, so the errand ends
+   * by itself; the authoring area passes nothing and stays put. The private
+   * editor never fires it: it has no such moment, every keystroke is
+   * already saved (plan 0017 §3). */
+  onPublished?: () => void;
 }) {
   if (mode === "propose") {
-    return <ProposeEditScreen docId={docId} target={target} onBack={onBack} />;
+    return (
+      <ProposeEditScreen
+        docId={docId}
+        target={target}
+        onBack={onBack}
+        onPublished={onPublished}
+      />
+    );
   }
   if (mode === "private") {
     return <PrivateEditScreen docId={docId} target={target} onBack={onBack} />;
   }
-  return <MaintainEditScreen docId={docId} target={target} onBack={onBack} />;
+  return (
+    <MaintainEditScreen
+      docId={docId}
+      target={target}
+      onBack={onBack}
+      onPublished={onPublished}
+    />
+  );
 }

@@ -32,10 +32,14 @@ export function MaintainEditScreen({
   docId,
   target,
   onBack,
+  onPublished,
 }: {
   docId: string;
   target?: EditTarget;
   onBack: () => void;
+  /** See `EditScreen`: called after a successful publish, for the routes
+   * that want the editor to close itself once the edit is out. */
+  onPublished?: () => void;
 }) {
   const [record, setRecord] = useState<AuthorDoc | null>(null);
   const [working, setWorking] = useState<AnyDoc | null>(null);
@@ -239,6 +243,12 @@ export function MaintainEditScreen({
       localStorage.removeItem(draftKey(docId));
       setSyncState("synced");
       setPublishState({ s: "done" });
+      // Last, and only on success: a caller that closes the editor here
+      // unmounts it, and everything above (including the dirty/draft reset
+      // the unmount flush reads) has to have run first. A failure falls
+      // through to the catch instead and keeps the editor open on its error
+      // list — which is what makes the close itself readable as "it worked".
+      onPublished?.();
     } catch (e) {
       setPublishState({
         s: "errors",
