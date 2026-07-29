@@ -558,11 +558,13 @@ main.session {
   background: var(--bg);
   border-top: 1px solid var(--card-border);
   animation: bar-up 200ms ease;
-  /* Above .book-bg-icon's 1, below .popup-overlay's 10. The watermark used
-   * to sit at z-index -1, where this bar's opaque background hid it for
-   * free; now that it overlays content, the bar has to out-stack it
-   * explicitly — the post-answer grade-button bar grows to ~168px, past the
-   * 9rem the watermark offsets itself by, and bled through without this. */
+  /* Above .book-bg-icon's 1. (Nothing to stay under any more: .sheet is a
+   * `<dialog>` in the top layer, which outranks every z-index on the page.)
+   * The watermark used to sit at z-index -1, where this bar's opaque
+   * background hid it for free; now that it overlays content, the bar has to
+   * out-stack it explicitly — the post-answer grade-button bar grows to
+   * ~168px, past the 9rem the watermark offsets itself by, and bled through
+   * without this. */
   z-index: 2;
 }
 
@@ -654,9 +656,9 @@ input[type="text"] {
   /* Overlays the content rather than sitting behind it (measured: on the
    * card-dense Book and Lesson screens, opaque .card backgrounds hid 88% of
    * it at z-index -1, leaving a clipped sliver in the gutters). 1 clears the
-   * cards and the .action-bar while staying under .popup-overlay's 10.
-   * pointer-events: none keeps it non-interactive; the low opacity keeps
-   * text under it legible. */
+   * cards and sits under the .action-bar's 2; .sheet needs no ordering here,
+   * being a `<dialog>` in the top layer. pointer-events: none keeps it
+   * non-interactive; the low opacity keeps text under it legible. */
   opacity: 0.15;
   z-index: 1;
   pointer-events: none;
@@ -1028,34 +1030,87 @@ main.unit-screen {
   text-underline-offset: 0.15em;
 }
 
-.popup-overlay {
+/* Modal bottom sheet (plan-less dialog pass, 2026-07-29) — the app's only
+ * dialog surface: the entry popup, the skip-ahead confirmations and the
+ * new-Book title all render through `Sheet`. It is a real `<dialog>` opened
+ * with `showModal()`, so Escape, the focus trap, the inert background and the
+ * scrim below are the platform's rather than ours, and the top layer replaces
+ * the z-index:10 the old `.popup-overlay` had to hold against the watermark
+ * and the action bar. `position`/`inset` are stated rather than left to the
+ * UA's `dialog:modal` rule so `margin: auto auto 0` pins the sheet to the
+ * bottom edge identically across engines. */
+.sheet {
   position: fixed;
   inset: 0;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.4);
-  z-index: 10;
-}
-
-.popup-panel {
-  position: relative;
+  margin: auto auto 0;
   width: 100%;
   max-width: 60ch;
   max-height: 80vh;
   overflow-y: auto;
-  padding: 1.5rem 1rem 1rem;
-  border-radius: 1rem 1rem 0 0;
-  background: var(--bg);
+  /* Load-bearing: the padding lives on .sheet-body instead, so a click that
+   * lands on the dialog box itself unambiguously means the backdrop. */
+  padding: 0;
   border: 1px solid var(--card-border);
   border-bottom: none;
+  border-radius: 1rem 1rem 0 0;
+  background: var(--bg);
+  color: var(--fg);
 }
 
-.popup-close {
+.sheet::backdrop {
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.sheet-body {
+  position: relative; /* anchors .sheet-close */
+  padding: 1.5rem 1rem 1rem;
+}
+
+.sheet-close {
   position: absolute;
   top: 0.5rem;
   right: 0.5rem;
   min-width: 44px;
+}
+
+/* Confirmation and prompt contents: a centred column. The entry popup opts
+ * out by not using this class — its definition/example/chip stack reads as
+ * left-aligned running text. */
+.sheet-prompt {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  text-align: center;
+}
+
+.sheet-prompt h2,
+.sheet-prompt p {
+  margin: 0;
+}
+
+.sheet-prompt .field {
+  margin: 0;
+  text-align: left;
+}
+
+.sheet-actions {
+  display: flex;
+  gap: 0.6rem;
+  margin-top: 0.25rem;
+}
+
+.sheet-actions button {
+  flex: 1;
+}
+
+/* The app's global `button:disabled` only changes the cursor, which is
+ * nothing at all on touch — so a disabled Create would look identical to a
+ * live one and tapping it would do nothing, exactly the silent no-op the
+ * sheet replaced `window.prompt` to be rid of. Scoped here rather than
+ * fixed globally: every other disabled button in the app has the same gap,
+ * and widening that is a call for a UI pass, not this change. */
+.sheet-actions button:disabled {
+  opacity: 0.45;
 }
 
 /* Start screen (plan 0009): welcome cover in the reference composition —

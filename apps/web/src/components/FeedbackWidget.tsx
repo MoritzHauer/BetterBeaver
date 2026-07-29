@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { createPortal } from "react-dom";
 import {
   castVote,
   getMyVote,
@@ -8,6 +7,7 @@ import {
   type ReportCategory,
 } from "../backend/feedback";
 import { getSupabase } from "../backend/supabase";
+import { Sheet } from "./Sheet";
 
 const CATEGORIES: { value: ReportCategory; label: string }[] = [
   { value: "error", label: "Error" },
@@ -130,17 +130,20 @@ function ReportPopup({
     }
   }
 
-  return createPortal(
-    <div className="popup-overlay" onClick={onClose}>
-      <div
-        className="popup-panel"
-        role="dialog"
-        aria-modal="true"
-        onClick={(event) => event.stopPropagation()}
-      >
+  return (
+    // The accessible name tracks the heading below, rather than naming the
+    // widget: announcing "Feedback" over a panel headed "Report" is a
+    // mismatch a screen reader has no way to reconcile.
+    <Sheet
+      label={
+        sent ? "Thanks" : category === "feedback" ? "Give feedback" : "Report"
+      }
+      onDismiss={onClose}
+    >
+      <>
         <button
           type="button"
-          className="plain popup-close"
+          className="plain sheet-close"
           aria-label="Close"
           onClick={onClose}
         >
@@ -192,8 +195,7 @@ function ReportPopup({
             </div>
           </>
         )}
-      </div>
-    </div>,
-    document.body,
+      </>
+    </Sheet>
   );
 }

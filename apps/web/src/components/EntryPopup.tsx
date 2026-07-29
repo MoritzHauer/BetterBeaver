@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { createPortal } from "react-dom";
 import type { Item } from "@betterbeaver/schema";
 import { itemDisplayText, recognizePrompt } from "@betterbeaver/schema";
 import { resolveToken } from "@betterbeaver/engine";
 import { getLexiconAssetUrl } from "../content/bundled";
 import { saveWordToSavedList } from "../progress/vocab-lists";
 import { SpeakerButton } from "../tts";
+import { Sheet } from "./Sheet";
 import { AddWordForm } from "./AddWordForm";
 import type { TapLookup } from "./TappableText";
 
@@ -113,23 +113,16 @@ export function EntryPopup({
       ? (entry.payload.components ?? [])
       : [];
 
-  // Rendered via a portal to `document.body` (not inline where this
-  // component is mounted): pinned tap-to-lookup surfaces place `TappableText`
-  // inside inline/paragraph elements (`<p>`, `<strong>`) that can't legally
-  // contain this overlay's block content, and `.popup-overlay` is a
-  // `position: fixed` full-viewport modal anyway, so it belongs at the
-  // document root regardless of call site.
-  return createPortal(
-    <div className="popup-overlay" onClick={onClose}>
-      <div
-        className="popup-panel"
-        role="dialog"
-        aria-modal="true"
-        onClick={(event) => event.stopPropagation()}
-      >
+  // `Sheet` owns the `<dialog>`, the portal to `document.body` and the
+  // dismissal behaviours (Escape, backdrop click) this popup used to lack
+  // entirely. The close button stays: on touch there is no Escape key, and
+  // the backdrop is easy to miss.
+  return (
+    <Sheet label={displayToken} onDismiss={onClose}>
+      <>
         <button
           type="button"
-          className="plain popup-close"
+          className="plain sheet-close"
           aria-label="Close"
           onClick={onClose}
         >
@@ -226,8 +219,7 @@ export function EntryPopup({
             </button>
           </>
         )}
-      </div>
-    </div>,
-    document.body,
+      </>
+    </Sheet>
   );
 }

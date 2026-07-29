@@ -9,6 +9,7 @@ import {
   isUnitUnlocked,
   nextUnit,
 } from "@betterbeaver/engine";
+import { ConfirmSheet } from "../components/Sheet";
 import { LockableProgress } from "../components/ProgressBar";
 import { FeedbackWidget } from "../components/FeedbackWidget";
 import { ChatThread } from "../components/ChatThread";
@@ -82,6 +83,7 @@ export function BookScreen({
   );
   const [dueCount, setDueCount] = useState<number | null>(null);
   const [streak, setStreak] = useState<Streak | null>(null);
+  const [pendingLessonId, setPendingLessonId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -124,6 +126,17 @@ export function BookScreen({
     .flatMap((lesson) =>
       lessonPracticeTargets(lesson, content, attemptedTaskIds),
     );
+
+  // The lesson awaiting a skip-ahead confirmation, and the one gating it. A
+  // pending lesson always has a gate — `isLessonUnlocked` returns true when
+  // `unlocksAfterLessonId` is absent or dangling, so an unlocked lesson never
+  // gets here — but the name is resolved defensively all the same.
+  const pendingLesson =
+    pendingLessonId !== null ? lessonById.get(pendingLessonId) : undefined;
+  const blockingLesson =
+    pendingLesson?.unlocksAfterLessonId !== undefined
+      ? lessonById.get(pendingLesson.unlocksAfterLessonId)
+      : undefined;
 
   return (
     <main>
@@ -243,18 +256,13 @@ export function BookScreen({
           return (
             <li key={lesson.id} className={`card${unlocked ? "" : " locked"}`}>
               <button
-                onClick={() => {
+                onClick={() =>
                   // Skip-ahead is allowed behind a confirmation (plan 0008
                   // point 15) — a locked lesson is clickable, not blocked.
-                  if (
-                    unlocked ||
-                    window.confirm(
-                      "Are you sure you want to skip the previous lesson?",
-                    )
-                  ) {
-                    onSelectLesson(lesson.id);
-                  }
-                }}
+                  unlocked
+                    ? onSelectLesson(lesson.id)
+                    : setPendingLessonId(lesson.id)
+                }
               >
                 <strong>
                   {unlocked ? "" : "\u{1F512} "}
@@ -275,6 +283,24 @@ export function BookScreen({
       {/* ponytail: chat deactivated per owner call, not removed — code
        * stays intact for later; flip this back to re-enable. */}
       {CHAT_ENABLED && <ChatThread docId={`topic:${content.topic.id}`} />}
+      {pendingLesson !== undefined && (
+        <ConfirmSheet
+          icon="lock_key"
+          title="Skip ahead?"
+          body={
+            blockingLesson !== undefined
+              ? `You haven’t finished “${blockingLesson.title}” yet. You can come back to it any time.`
+              : "You haven’t finished the lesson before this one yet. You can come back to it any time."
+          }
+          cancelLabel="Not yet"
+          confirmLabel="Start anyway"
+          onCancel={() => setPendingLessonId(null)}
+          onConfirm={() => {
+            setPendingLessonId(null);
+            onSelectLesson(pendingLesson.id);
+          }}
+        />
+      )}
     </main>
   );
 }

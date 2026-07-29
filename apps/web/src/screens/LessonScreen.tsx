@@ -1,5 +1,7 @@
+import { useState } from "react";
 import type { Content } from "@betterbeaver/schema";
 import { isUnitComplete, isUnitUnlocked } from "@betterbeaver/engine";
+import { ConfirmSheet } from "../components/Sheet";
 import { LockableProgress } from "../components/ProgressBar";
 import { FeedbackWidget } from "../components/FeedbackWidget";
 import { BookWatermark } from "../components/BookWatermark";
@@ -29,6 +31,10 @@ export function LessonScreen({
   onEdit?: () => void;
   onBack: () => void;
 }) {
+  // Ahead of the unknown-lesson early return below: hooks cannot be
+  // conditional.
+  const [pendingUnitId, setPendingUnitId] = useState<string | null>(null);
+
   const lesson = content.lessons.find((l) => l.id === lessonId);
   if (lesson === undefined) {
     return (
@@ -53,6 +59,15 @@ export function LessonScreen({
   // Lesson-level Practice shuffles across this lesson's opened units (plan
   // 0008, pinned scope).
   const practicePool = lessonPracticeTargets(lesson, content, attemptedTaskIds);
+
+  // The unit awaiting a skip-ahead confirmation, and the one gating it. A
+  // pending unit always has a gate — `isUnitUnlocked` returns true when
+  // `unlocksAfterUnitId` is absent or dangling, so an unlocked unit never
+  // gets here — but the name is resolved defensively all the same.
+  const pendingUnit = units.find((u) => u.id === pendingUnitId);
+  const blockingUnit = units.find(
+    (u) => u.id === pendingUnit?.unlocksAfterUnitId,
+  );
 
   return (
     <main>
@@ -109,17 +124,11 @@ export function LessonScreen({
           return (
             <li key={unit.id} className={`card${unlocked ? "" : " locked"}`}>
               <button
-                onClick={() => {
-                  // Skip-ahead behind a confirmation (plan 0008 point 15).
-                  if (
-                    unlocked ||
-                    window.confirm(
-                      "Are you sure you want to skip the previous unit?",
-                    )
-                  ) {
-                    onSelectUnit(unit.id);
-                  }
-                }}
+                onClick={() =>
+                  // Skip-ahead behind a confirmation (plan 0008 point 15) —
+                  // a locked unit is clickable, not blocked.
+                  unlocked ? onSelectUnit(unit.id) : setPendingUnitId(unit.id)
+                }
               >
                 <strong>
                   {unlocked ? "" : "\u{1F512} "}
@@ -137,6 +146,24 @@ export function LessonScreen({
           );
         })}
       </ul>
+      {pendingUnit !== undefined && (
+        <ConfirmSheet
+          icon="lock_key"
+          title="Skip ahead?"
+          body={
+            blockingUnit !== undefined
+              ? `You haven’t finished “${blockingUnit.title}” yet. You can come back to it any time.`
+              : "You haven’t finished the unit before this one yet. You can come back to it any time."
+          }
+          cancelLabel="Not yet"
+          confirmLabel="Start anyway"
+          onCancel={() => setPendingUnitId(null)}
+          onConfirm={() => {
+            setPendingUnitId(null);
+            onSelectUnit(pendingUnit.id);
+          }}
+        />
+      )}
     </main>
   );
 }

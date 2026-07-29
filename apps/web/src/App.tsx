@@ -35,6 +35,7 @@ import type { Question } from "@betterbeaver/engine";
 import type { Quality } from "@betterbeaver/srs";
 import { recallQuality } from "@betterbeaver/srs";
 import type { TapLookup } from "./components/TappableText";
+import { NewBookSheet } from "./components/Sheet";
 import type { ContentInit, ContentUpdate } from "./content/source";
 import { SKIP_COVER_KEY } from "./content/source";
 import { resolvedLinksByEntryId } from "./content/links";
@@ -879,6 +880,10 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   // Bumped whenever a task's pinned state is toggled (plan 0008), so
   // UnitSession re-reads the pin store without requiring a navigation.
   const [pinEpoch, setPinEpoch] = useState(0);
+  // Whether the new-Book title sheet is open. Lives here, not in
+  // MyBooksScreen, because `createPrivateBook` does — the screen only ever
+  // asked for the title and handed it straight back.
+  const [namingBook, setNamingBook] = useState(false);
   // The current book's domain's pinned scheduling-unit ids, re-read whenever
   // pinEpoch bumps (plan 0008); only ever consumed by UnitSession (plan
   // 0010: pin moved from UnitScreen's task list into the pooled practice
@@ -1401,13 +1406,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
               ? () => setScreen({ screen: "library" })
               : undefined
           }
-          onCreateBook={() => {
-            const title = window.prompt("Title for your new Book:");
-            if (title === null || title.trim() === "") {
-              return;
-            }
-            void contentInit.createPrivateBook(title.trim());
-          }}
+          onCreateBook={() => setNamingBook(true)}
           onAuthor={
             getSupabase() !== null
               ? () => setScreen({ screen: "author" })
@@ -1416,6 +1415,17 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           onOpenStats={() => setScreen({ screen: "stats" })}
           onOpenSettings={() => setScreen({ screen: "settings" })}
         />
+        {namingBook && (
+          <NewBookSheet
+            onCancel={() => setNamingBook(false)}
+            onCreate={(title) => {
+              setNamingBook(false);
+              // Already trimmed and non-blank: the sheet's Create button is
+              // disabled until it is.
+              void contentInit.createPrivateBook(title);
+            }}
+          />
+        )}
       </>
     );
   }
