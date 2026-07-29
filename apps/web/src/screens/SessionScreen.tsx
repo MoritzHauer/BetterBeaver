@@ -994,10 +994,13 @@ export function SessionScreen({
   taskIds?: (string | undefined)[];
   pinnedUnitIds?: ReadonlySet<string>;
   onTogglePin?: (unitIds: string[]) => void;
-  /** Author-only Edit affordance: opens `EditScreen` at the current
-   * question's item/entry/task. Hidden on `NoteQuestion` (no resolvable
-   * target) but otherwise independent of `taskIds` — unlike Pin, it renders
-   * in `TaskSession`/`ReviewSession` too, not just pooled unit sessions. */
+  /** Edit affordance for whoever may edit this content (a maintainer, a
+   * proposer, or a private Book's owner): opens `EditScreen` at the current
+   * question's item/entry/task, layered over this session rather than
+   * navigating away, so closing it resumes right here. Hidden on
+   * `NoteQuestion` (no resolvable target) but otherwise independent of
+   * `taskIds` — unlike Pin, it renders in `TaskSession`/`ReviewSession` too,
+   * not just pooled unit sessions. */
   onEdit?: (index: number) => void;
   onGrade: (unitId: string, quality: Quality) => Promise<void>;
   onAllAnswered?: () => void;

@@ -28,10 +28,14 @@ export function ProposeEditScreen({
   docId,
   target,
   onBack,
+  onPublished,
 }: {
   docId: string;
   target?: EditTarget;
   onBack: () => void;
+  /** See `EditScreen`: called after the proposal is submitted — this path's
+   * equivalent of publishing, and the same end of the errand. */
+  onPublished?: () => void;
 }) {
   const [entry, setEntry] = useState<CatalogEntry | null>(null);
   const [working, setWorking] = useState<AnyDoc | null>(null);
@@ -280,6 +284,9 @@ export function ProposeEditScreen({
       localStorage.removeItem(proposalKey(docId));
       dirtyRef.current = false;
       setProposeState({ s: "done" });
+      // Last, and only on success — same ordering rule as the maintainer
+      // path's publish: the caller may unmount the editor from here.
+      onPublished?.();
     } catch (e) {
       setProposeState({
         s: "error",

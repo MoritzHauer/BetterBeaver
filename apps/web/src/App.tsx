@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { ReactElement } from "react";
 import type {
   BookDocument,
   Content,
@@ -174,7 +175,7 @@ function TaskSession({
   content,
   lookup,
   task,
-  isAuthor,
+  canEdit,
   onOpenEdit,
   onDone,
 }: {
@@ -183,9 +184,10 @@ function TaskSession({
    * surfaces (SessionScreen's pinned rules). */
   lookup: TapLookup;
   task: Task;
-  /** Whether the signed-in user can edit this content (plan 0012); gates
-   * the session screen's author-only Edit button. */
-  isAuthor: boolean;
+  /** Whether this content is editable from here (plan 0012 for a signed-in
+   * author, plan 0017 §3 for a private Book, which has no account behind it
+   * at all); gates the session screen's Edit button. */
+  canEdit: boolean;
   /** Opens `EditScreen` at the given deep-link target. */
   onOpenEdit: (docId: string, target: EditTarget) => void;
   onDone: () => void;
@@ -201,7 +203,7 @@ function TaskSession({
     await recordGrade(progressStore, unitId, quality, new Date(), domainId);
   }
 
-  const onEdit = isAuthor
+  const onEdit = canEdit
     ? (index: number) => {
         const question = questions[index];
         if (question === undefined) {
@@ -254,7 +256,7 @@ function UnitSession({
   lookup,
   pinnedUnitIds,
   onTogglePin,
-  isAuthor,
+  canEdit,
   onOpenEdit,
   onDone,
   nextAction,
@@ -266,9 +268,10 @@ function UnitSession({
   lookup: TapLookup;
   pinnedUnitIds: ReadonlySet<string>;
   onTogglePin: (unitIds: string[]) => void;
-  /** Whether the signed-in user can edit this content (plan 0012); gates
-   * the session screen's author-only Edit button. */
-  isAuthor: boolean;
+  /** Whether this content is editable from here (plan 0012 for a signed-in
+   * author, plan 0017 §3 for a private Book, which has no account behind it
+   * at all); gates the session screen's Edit button. */
+  canEdit: boolean;
   /** Opens `EditScreen` at the given deep-link target. */
   onOpenEdit: (docId: string, target: EditTarget) => void;
   onDone: () => void;
@@ -290,7 +293,7 @@ function UnitSession({
     await recordGrade(progressStore, unitId, quality, new Date(), domainId);
   }
 
-  const onEdit = isAuthor
+  const onEdit = canEdit
     ? (index: number) => {
         const question = questions[index];
         if (question === undefined) {
@@ -390,7 +393,7 @@ function ReviewSession({
   booksContent,
   store,
   lookup,
-  isAuthor,
+  canEdit,
   onOpenEdit,
   onDone,
 }: {
@@ -400,9 +403,10 @@ function ReviewSession({
   store: ProgressStore;
   /** Tap-to-lookup dependencies (plan 0006 step 4), for post-answer reveal surfaces. */
   lookup: TapLookup;
-  /** Whether the signed-in user can edit this content (plan 0012); gates
-   * the session screen's author-only Edit button. */
-  isAuthor: boolean;
+  /** Whether this content is editable from here (plan 0012 for a signed-in
+   * author, plan 0017 §3 for a private Book, which has no account behind it
+   * at all); gates the session screen's Edit button. */
+  canEdit: boolean;
   /** Opens `EditScreen` at the given deep-link target. */
   onOpenEdit: (docId: string, target: EditTarget) => void;
   onDone: () => void;
@@ -498,7 +502,7 @@ function ReviewSession({
   // per-question book resolution instead — out of scope for this step.
   const bookId = booksContent[0]?.topic.id ?? domainId;
 
-  const onEdit = isAuthor
+  const onEdit = canEdit
     ? (index: number) => {
         const question: Question | undefined = questions[index];
         // Matching never occurs in ReviewSession (review questions are
@@ -643,6 +647,22 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   }
 
   const [screen, setScreen] = useState<Screen>({ screen: "books" });
+  // The ✎ Edit button *inside* a practice session opens the editor over the
+  // running session instead of navigating to `screen: "edit"`: the session
+  // subtree stays mounted (hidden — see `withSessionEdit`), so closing the
+  // editor drops the author back on the very question they were on, with
+  // the session's shuffle and answers intact. Navigating away and back
+  // would rebuild it from question one, which is the opposite of "fix the
+  // typo and carry on". `null` = no editor open over the session.
+  const [sessionEdit, setSessionEdit] = useState<{
+    docId: string;
+    target: EditTarget;
+    mode?: "maintain" | "propose" | "private";
+  } | null>(null);
+  // Any screen change ends the session the editor was layered over (the
+  // book-load failure path below can force one on its own), so the overlay
+  // must not survive it.
+  useEffect(() => setSessionEdit(null), [screen]);
   // Holds whatever handler the currently rendered screen would run on its
   // own back button (null at the root, where back should exit normally).
   const backActionRef = useRef<(() => void) | null>(null);
@@ -883,6 +903,92 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   function goToBook(bookId: string) {
     setBookEpoch((epoch) => epoch + 1);
     setScreen({ screen: "book", bookId });
+  }
+
+  /** Which editor a document opens in when the route doesn't pin one (plan
+   * 0012 §5): a document the signed-in user maintains is edited directly,
+   * anything else goes in through a proposal. Resolved here rather than at
+   * each call site so every route into the editor agrees. */
+  function editModeFor(docId: string): "maintain" | "propose" {
+    return maintainedDocIds?.has(docId) === false ? "propose" : "maintain";
+  }
+
+  /** The added private Book that owns `docId` — either its own Book document
+   * or the Domain it exclusively owns (plan 0017 decision 2) — if any.
+   * Neither document exists on the server, so both have to be routed to the
+   * private editor, which holds the pair. */
+  function privateBookForDoc(docId: string): string | undefined {
+    const id = contentIdOf(docId);
+    if (isPrivateBook(id)) {
+      return id;
+    }
+    const owner = books.find((book) => book.domainId === id);
+    return owner !== undefined && isPrivateBook(owner.id)
+      ? owner.id
+      : undefined;
+  }
+
+  /** Opens the session ✎'s editor over the running session. The three
+   * session wrappers resolve their own targets (a book item, a domain
+   * entry, a whole task) but not which editor holds them — unlike the
+   * book/lesson/unit ✎ buttons, they have no private-Book branch of their
+   * own, so a private Book's target is re-pointed at its Book document
+   * here. */
+  function openSessionEdit(docId: string, target: EditTarget) {
+    const privateBookId = privateBookForDoc(docId);
+    setSessionEdit(
+      privateBookId !== undefined
+        ? { docId: documentId("topic", privateBookId), target, mode: "private" }
+        : { docId, target },
+    );
+  }
+
+  /** Re-runs the update check after the author publishes. The learner-facing
+   * content source is built from the document cache at boot and only a
+   * reload swaps it (`content/source.ts`), so a just-published edit does not
+   * appear in the running session — this is what turns it into an update
+   * offer on My Books rather than leaving the author to wonder why their
+   * text didn't change. Deliberately never auto-accepts, even with
+   * auto-update on: accepting reloads the page, and the author is
+   * mid-session. */
+  function recheckForUpdate(): void {
+    // Cannot reject: `checkForUpdate` catches its own fetch failures.
+    void contentInit.checkForUpdate().then(setUpdate);
+  }
+
+  /** Renders a session with the ✎ editor layered over it while one is open.
+   * The session is hidden, NOT unmounted — that is the whole point (see
+   * `sessionEdit`): React keeps its state, so closing the editor resumes
+   * exactly where the author left off. */
+  function withSessionEdit(session: ReactElement): ReactElement {
+    const close = () => setSessionEdit(null);
+    if (sessionEdit !== null) {
+      // Hardware back closes the editor and leaves the session running,
+      // rather than exiting the session underneath it.
+      backActionRef.current = close;
+    }
+    // The wrapper is unconditional, and so is the session's position inside
+    // it: returning the bare session while no editor is open would put a
+    // different element type at this position, and React would unmount and
+    // rebuild the session on every open and close — the exact thing this
+    // whole arrangement exists to avoid.
+    return (
+      <>
+        <div hidden={sessionEdit !== null}>{session}</div>
+        {sessionEdit !== null && (
+          <EditScreen
+            docId={sessionEdit.docId}
+            target={sessionEdit.target}
+            mode={sessionEdit.mode ?? editModeFor(sessionEdit.docId)}
+            onBack={close}
+            onPublished={() => {
+              close();
+              recheckForUpdate();
+            }}
+          />
+        )}
+      </>
+    );
   }
 
   // Play (plan 0020 §2): due > 0 → Daily Review, else the next incomplete
@@ -1165,16 +1271,24 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
       <EditScreen
         docId={screen.docId}
         target={screen.target}
-        // Resolved here rather than at each call site so every route into
-        // the editor — learner ✎ buttons, question screen, deep links —
-        // picks the right mode; an explicit `mode` still wins.
-        mode={
-          screen.mode ??
-          (maintainedDocIds?.has(screen.docId) === false
-            ? "propose"
-            : "maintain")
-        }
+        // An explicit `mode` still wins; otherwise `editModeFor` decides,
+        // the same way every other route into the editor does.
+        mode={screen.mode ?? editModeFor(screen.docId)}
         onBack={onBack}
+        // Only for the routes that pin a `back` — every learner ✎ button
+        // and the settings import. Publishing ends that errand, so the
+        // editor closes itself and hands the user back where they came
+        // from. Entered from the authoring area instead (no `back`), it
+        // stays open: that is a workspace, and its publish confirmation is
+        // the feedback there.
+        onPublished={
+          screen.back !== undefined
+            ? () => {
+                onBack();
+                recheckForUpdate();
+              }
+            : undefined
+        }
       />
     );
   }
@@ -1574,7 +1688,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           unitId: next.unitId,
         });
       };
-      return (
+      return withSessionEdit(
         <UnitSession
           content={content}
           unit={unit}
@@ -1584,16 +1698,14 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
             togglePinnedUnits(content.topic.domainId, unitIds);
             setPinEpoch((epoch) => epoch + 1);
           }}
-          isAuthor={isAuthor}
-          onOpenEdit={(docId, target) =>
-            setScreen({ screen: "edit", docId, target })
-          }
+          canEdit={isAuthor || isPrivateBook(screen.bookId)}
+          onOpenEdit={openSessionEdit}
           onDone={onDone}
           nextAction={{
             label: finishesLesson ? "Lesson complete" : "Next unit",
             onClick: () => void onNext(),
           }}
-        />
+        />,
       );
     }
 
@@ -1667,17 +1779,15 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
       });
     };
     backActionRef.current = onTaskDone;
-    return (
+    return withSessionEdit(
       <TaskSession
         content={content}
         lookup={lookup}
         task={task}
-        isAuthor={isAuthor}
-        onOpenEdit={(docId, target) =>
-          setScreen({ screen: "edit", docId, target })
-        }
+        canEdit={isAuthor || isPrivateBook(screen.bookId)}
+        onOpenEdit={openSessionEdit}
         onDone={onTaskDone}
-      />
+      />,
     );
   }
 
@@ -1734,17 +1844,23 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
 
   const onReviewDone = () => setScreen({ screen: "books" });
   backActionRef.current = onReviewDone;
-  return (
+  return withSessionEdit(
     <ReviewSession
       domainContent={domainContent}
       booksContent={domainBooksContent}
       store={progressStore}
       lookup={lookup}
-      isAuthor={isAuthor}
-      onOpenEdit={(docId, target) =>
-        setScreen({ screen: "edit", docId, target })
+      // A private Book owns its Domain exclusively (plan 0017 decision 2),
+      // so a review over that Domain pools only that Book's items — the ✎
+      // is ungated for it exactly as it is on the Book/Lesson/Unit screens.
+      canEdit={
+        isAuthor ||
+        domainBooksContent.some((bookContent) =>
+          isPrivateBook(bookContent.topic.id),
+        )
       }
+      onOpenEdit={openSessionEdit}
       onDone={onReviewDone}
-    />
+    />,
   );
 }
