@@ -24,8 +24,9 @@ const CONCEPT_CHUNK_SIZE = 6;
 const EXAMPLE_CHUNK_SIZE = 4;
 
 /** Swipe gesture threshold, in px (plan 0010: plain touchstart/touchend
- * delta check, no swipe library). */
-const SWIPE_THRESHOLD = 40;
+ * delta check, no swipe library). Exported so `SessionScreen`'s back-swipe
+ * out of the unit's practice session feels the same as the trail's. */
+export const SWIPE_THRESHOLD = 40;
 
 type PageKind = "overview" | "theory" | "vocabulary" | "concepts" | "examples";
 
@@ -190,6 +191,7 @@ export function UnitScreen({
   isNotePinned,
   onEdit,
   onBack,
+  startAtEnd,
 }: {
   content: Content;
   unitId: string;
@@ -210,6 +212,9 @@ export function UnitScreen({
    * currently shown theory note, when the Theory page is open. */
   onEdit?: (target?: { noteStem?: string }) => void;
   onBack: () => void;
+  /** Opens on the last content page instead of the Overview — how the
+   * practice session's back-swipe returns you to where you left the trail. */
+  startAtEnd?: boolean;
 }) {
   // Which shipped lexicon entry's popup is open, if any (kind-partitioned
   // restructure's Vocabulary table): opened by id directly, same
@@ -219,7 +224,10 @@ export function UnitScreen({
 
   // Trail page index, plus each section's own sub-pager index (plan 0010
   // design section 4: no shared pagination abstraction — one useState each).
-  const [page, setPage] = useState(0);
+  // `startAtEnd` seeds an out-of-range sentinel rather than a real index:
+  // which pages exist isn't known until `pages` is built further down, and
+  // everything below reads the clamped `pageIndex` anyway.
+  const [page, setPage] = useState(startAtEnd ? Number.MAX_SAFE_INTEGER : 0);
   const [conceptPage, setConceptPage] = useState(0);
   const [examplePage, setExamplePage] = useState(0);
 
@@ -296,20 +304,23 @@ export function UnitScreen({
     ...(concepts.length > 0 ? (["concepts"] as const) : []),
     ...(examples.length > 0 ? (["examples"] as const) : []),
   ];
-  const currentPage = pages[Math.min(page, pages.length - 1)];
+  // Never read `page` directly below: it may still hold `startAtEnd`'s
+  // sentinel, which no arithmetic would ever walk back into range.
+  const pageIndex = Math.min(page, pages.length - 1);
+  const currentPage = pages[pageIndex];
+  const atLastPage = pageIndex === pages.length - 1;
 
   function goPrev() {
-    setPage((p) => Math.max(0, p - 1));
+    setPage(Math.max(0, pageIndex - 1));
   }
   function goNext() {
     // Practice is the trail's last dot (owner request): advancing past the
-    // final page starts the unit's tasks instead of going nowhere. Read
-    // outside the updater — StrictMode double-invokes those.
-    if (page >= pages.length - 1) {
+    // final page starts the unit's tasks instead of going nowhere.
+    if (atLastPage) {
       onPractice();
       return;
     }
-    setPage((p) => p + 1);
+    setPage(pageIndex + 1);
   }
 
   useEffect(() => {
@@ -389,7 +400,7 @@ export function UnitScreen({
             <button
               key={pageKind}
               type="button"
-              className={`dot${index === page ? " active" : ""}`}
+              className={`dot${index === pageIndex ? " active" : ""}`}
               aria-label={`Page ${index + 1} of ${pages.length}`}
               onClick={() => setPage(index)}
             />
@@ -611,13 +622,18 @@ export function UnitScreen({
         </>
       ) : null}
 
+      {/* One bar, two jobs (owner request): it walks the trail forward until
+          the last content page, where it becomes the Practice launcher —
+          `goNext` already treats "past the end" as Practice. */}
       <div className="action-bar unit-practice-bar">
         <div className="action-bar-inner unit-practice-bar-inner">
-          <button className="unit-practice-button" onClick={onPractice}>
-            <span>Practice</span>
-            <span className="unit-practice-count">
-              {countUnitQuestions(unit, content)}
-            </span>
+          <button className="unit-practice-button" onClick={goNext}>
+            <span>{atLastPage ? "Practice" : "Next"}</span>
+            {atLastPage && (
+              <span className="unit-practice-count">
+                {countUnitQuestions(unit, content)}
+              </span>
+            )}
           </button>
         </div>
       </div>

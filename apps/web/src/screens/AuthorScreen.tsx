@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import {
   currentUser,
+  getSupabase,
   listCatalogSummaries,
   listMyDocuments,
   listMyProposals,
@@ -14,21 +15,28 @@ import {
 } from "../backend/supabase";
 
 /**
- * Author entry point (plan 0012 step 2, extended by §5): magic-link sign-in,
- * the list of documents the account maintains, every other published
- * document as a "suggest edits" entry point, and the account's own
- * proposals. Reachable only when the backend is configured; learners never
- * need this screen.
+ * Author entry point (plan 0012 step 2, extended by §5): creating a private
+ * Book, magic-link sign-in, the list of documents the account maintains,
+ * every other published document as a "suggest edits" entry point, and the
+ * account's own proposals. Reachable from the home footer whether or not the
+ * backend is configured — creating a private Book (plan 0017 §3) needs no
+ * account, so only the signed-in half hides when there is no backend.
  */
 export function AuthorScreen({
+  onCreateBook,
   onOpenDocument,
   onPrivacy,
   onBack,
 }: {
+  /** Starts the private-Book naming flow, which lives on the home screen. */
+  onCreateBook: () => void;
   onOpenDocument: (docId: string, mode?: "maintain" | "propose") => void;
   onPrivacy: () => void;
   onBack: () => void;
 }) {
+  // Null when unconfigured OR when offline mode is on, so this also retracts
+  // the sign-in form the moment the learner goes offline.
+  const backendReady = getSupabase() !== null;
   const [user, setUser] = useState<User | null | "loading">("loading");
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
@@ -88,9 +96,34 @@ export function AuthorScreen({
 
       {error !== null && <p className="error-text">{error}</p>}
 
-      {user === "loading" && <p>Loading…</p>}
+      <ul className="card-list">
+        <li className="card primary">
+          <button onClick={onCreateBook}>
+            <strong>
+              <img
+                className="card-art"
+                src={`${import.meta.env.BASE_URL}art/icons/beaver_desk.png`}
+                alt=""
+              />{" "}
+              Create a Book
+            </strong>
+            <p className="status">
+              Write your own — stays on this device, no account needed
+            </p>
+          </button>
+        </li>
+      </ul>
 
-      {user === null && !sent && (
+      {!backendReady && (
+        <p className="card">
+          Signing in to maintain or suggest edits on published content needs a
+          connection — turn offline mode off to reach it.
+        </p>
+      )}
+
+      {backendReady && user === "loading" && <p>Loading…</p>}
+
+      {backendReady && user === null && !sent && (
         <form onSubmit={(e) => void handleSignIn(e)} className="card">
           <p>
             Sign in to edit content. Learners don't need an account — this is

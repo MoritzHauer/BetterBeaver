@@ -11,8 +11,8 @@ import { exportPrivateBook } from "../content/private-transfer";
  * Broken added Books (failed validation, or missing cached documents) get a
  * card here too, offering Remove instead of study/Vocabulary/Review.
  * Archived Books collapse into a section at the bottom with Restore/Remove.
- * The Library is the only way in — reachable via the prominent entry card,
- * hidden when unconfigured.
+ * The Library is the only way in — reachable via the footer link, hidden
+ * when unconfigured.
  */
 export function MyBooksScreen({
   books,
@@ -29,7 +29,6 @@ export function MyBooksScreen({
   onRemove,
   onEdit,
   onLibrary,
-  onCreateBook,
   onAuthor,
   onOpenStats,
   onOpenSettings,
@@ -68,11 +67,10 @@ export function MyBooksScreen({
   onEdit?: (bookId: string) => void;
   /** The Library entry point; absent when the backend isn't configured (plan 0015 decision 15). */
   onLibrary?: () => void;
-  /** Creates a private Book (plan 0017 §3) — unlike Library/Author, needs no
-   * backend, so its card is always shown, offline included. */
-  onCreateBook?: () => void;
-  /** Author entry (plan 0012); absent when the backend isn't configured. */
-  onAuthor?: () => void;
+  /** Author entry (plan 0012). Always shown: it is also the way to create a
+   * private Book, which needs no backend (plan 0017 §3) — `AuthorScreen`
+   * itself degrades when the backend is missing or offline mode is on. */
+  onAuthor: () => void;
   onOpenStats: () => void;
   onOpenSettings: () => void;
 }) {
@@ -132,36 +130,6 @@ export function MyBooksScreen({
         </div>
       </header>
       <ul className="card-list">
-        {onLibrary !== undefined && (
-          <li className="card primary">
-            <button onClick={onLibrary}>
-              <strong>
-                <img
-                  className="card-art"
-                  src={`${import.meta.env.BASE_URL}art/icons/beaver_bookshelf.png`}
-                  alt=""
-                />{" "}
-                Library
-              </strong>
-              <p className="status">Browse and add Books</p>
-            </button>
-          </li>
-        )}
-        <li className="card primary">
-          <button onClick={onCreateBook}>
-            <strong>
-              <img
-                className="card-art"
-                src={`${import.meta.env.BASE_URL}art/icons/beaver_desk.png`}
-                alt=""
-              />{" "}
-              Create a Book
-            </strong>
-            <p className="status">
-              Write your own — stays on this device, no account needed
-            </p>
-          </button>
-        </li>
         {books.map((book) => {
           const progress = bookProgress.get(book.id) ?? {
             completed: 0,
@@ -347,18 +315,31 @@ export function MyBooksScreen({
         </details>
       )}
 
-      {onAuthor !== undefined && (
-        <p className="author-entry">
-          <button className="plain" onClick={onAuthor}>
+      {/* Owner request: the two entry points are small icon links pinned to
+          the bottom corners, not cards competing with the Books above them.
+          Creating a Book now lives behind Edit content. */}
+      <nav className="home-footer">
+        {onLibrary !== undefined ? (
+          <button className="plain" onClick={onLibrary}>
             <img
               className="icon-glyph"
-              src={`${import.meta.env.BASE_URL}art/icons/edit.png`}
+              src={`${import.meta.env.BASE_URL}art/icons/beaver_bookshelf.png`}
               alt=""
             />{" "}
-            Edit content
+            Library
           </button>
-        </p>
-      )}
+        ) : (
+          <span />
+        )}
+        <button className="plain" onClick={onAuthor}>
+          <img
+            className="icon-glyph"
+            src={`${import.meta.env.BASE_URL}art/icons/edit.png`}
+            alt=""
+          />{" "}
+          Edit content
+        </button>
+      </nav>
     </main>
   );
 }

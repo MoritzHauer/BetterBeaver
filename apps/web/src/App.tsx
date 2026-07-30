@@ -74,7 +74,15 @@ type Screen =
   | { screen: "book"; bookId: string }
   // The lesson level sits between book and unit (plan 0008).
   | { screen: "lesson"; bookId: string; lessonId: string }
-  | { screen: "unit"; bookId: string; lessonId: string; unitId: string }
+  | {
+      screen: "unit";
+      bookId: string;
+      lessonId: string;
+      unitId: string;
+      /** Open the trail on its last content page rather than the Overview —
+       * set only by the practice session's back-swipe. */
+      atEnd?: boolean;
+    }
   | {
       screen: "task";
       bookId: string;
@@ -260,6 +268,7 @@ function UnitSession({
   canEdit,
   onOpenEdit,
   onDone,
+  onSwipeBack,
   nextAction,
 }: {
   content: Content;
@@ -276,6 +285,9 @@ function UnitSession({
   /** Opens `EditScreen` at the given deep-link target. */
   onOpenEdit: (docId: string, target: EditTarget) => void;
   onDone: () => void;
+  /** Exit back to the unit's last content page (owner request); forwarded to
+   * `SessionScreen`'s back-swipe. */
+  onSwipeBack: () => void;
   /** Plan 0020 §4: forwarded straight through to `SessionScreen` — only the
    * caller (the `unit-session` branch) knows whether this unit finishes its
    * lesson. */
@@ -337,6 +349,7 @@ function UnitSession({
       onFinished={onDone}
       nextAction={nextAction}
       onExit={onDone}
+      onSwipeBack={onSwipeBack}
       loadStreak={() => progressStore.getStreak(domainId)}
     />
   );
@@ -1260,6 +1273,12 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     backActionRef.current = onBack;
     return (
       <AuthorScreen
+        // The naming sheet lives on the home screen (it is where the new
+        // Book then appears), so this hops back there and opens it.
+        onCreateBook={() => {
+          setScreen({ screen: "books" });
+          setNamingBook(true);
+        }}
         onOpenDocument={(docId, mode) =>
           setScreen({ screen: "edit", docId, mode })
         }
@@ -1406,12 +1425,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
               ? () => setScreen({ screen: "library" })
               : undefined
           }
-          onCreateBook={() => setNamingBook(true)}
-          onAuthor={
-            getSupabase() !== null
-              ? () => setScreen({ screen: "author" })
-              : undefined
-          }
+          onAuthor={() => setScreen({ screen: "author" })}
           onOpenStats={() => setScreen({ screen: "stats" })}
           onOpenSettings={() => setScreen({ screen: "settings" })}
         />
@@ -1610,6 +1624,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
               : undefined
           }
           onBack={onBack}
+          startAtEnd={screen.atEnd}
         />
       );
     }
@@ -1633,6 +1648,18 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
         });
       };
       backActionRef.current = onDone;
+      // Same exit as `onDone`, but lands on the trail's last content page —
+      // the one the learner swiped forward from (owner request).
+      const onSwipeBack = () => {
+        reloadAttemptedTaskIds();
+        setScreen({
+          screen: "unit",
+          bookId: screen.bookId,
+          lessonId: screen.lessonId,
+          unitId: screen.unitId,
+          atEnd: true,
+        });
+      };
       const lesson = content.lessons.find((l) => l.id === screen.lessonId);
       // Plan 0020 §4: does finishing THIS unit finish the lesson? Every
       // OTHER unit's completion is already accurate in `attemptedTaskIds`
@@ -1711,6 +1738,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           canEdit={isAuthor || isPrivateBook(screen.bookId)}
           onOpenEdit={openSessionEdit}
           onDone={onDone}
+          onSwipeBack={onSwipeBack}
           nextAction={{
             label: finishesLesson ? "Lesson complete" : "Next unit",
             onClick: () => void onNext(),
