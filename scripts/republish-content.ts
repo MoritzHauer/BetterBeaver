@@ -11,10 +11,21 @@
 // later publish hits the RPC's optimistic version check ("reload") — the
 // designed conflict path.
 //
-// Run `corepack pnpm check` FIRST — it validates the content/ tree; this
-// script pushes it verbatim. New documents are inserted unlisted (an admin
-// lists them via set_listed after review).
+// VALIDATE FIRST — this script pushes the tree verbatim. For the repo's
+// `content/`, `corepack pnpm check` covers it; for a scratch tree pulled by
+// `pull-book.ts`, run the same check against it:
 //
+//   BB_CONTENT_DIR=<dir> corepack pnpm exec vitest run \
+//     packages/schema/src/content.test.ts
+//
+// That validates each document; it cannot run `validateContentSet` (item
+// ids unique across ALL Books) from a partial tree, so a duplicate item id
+// against a Book outside the scratch dir still slips through.
+//
+// New documents are inserted unlisted (an admin lists them via set_listed
+// after review).
+//
+//   [BB_CONTENT_DIR=<dir>] \
 //   SUPABASE_URL=https://<ref>.supabase.co \
 //   SUPABASE_SERVICE_ROLE_KEY=... \
 //   node scripts/republish-content.ts

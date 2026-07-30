@@ -16,7 +16,20 @@ import type {
   BookDocumentNote,
 } from "../packages/schema/src/documents.ts";
 
-export const CONTENT_DIR = new URL("../content", import.meta.url).pathname;
+/**
+ * The tree to read/write. `BB_CONTENT_DIR` points at a scratch tree instead
+ * (see `pull-book.ts`) — the repo's `content/` is a frozen seed that must
+ * only ever hold the onboarding Book (plan 0015 decision 10).
+ */
+export const CONTENT_DIR =
+  process.env.BB_CONTENT_DIR ?? new URL("../content", import.meta.url).pathname;
+
+/**
+ * Written at the tree root by `pull-book.ts`, read by `propose-book.ts`:
+ * `{ "<doc id>": <published_version at pull time> }`. A file, not a
+ * directory, so everything that walks this tree ignores it.
+ */
+export const BASE_VERSIONS_FILE = "base-versions.json";
 
 function readJson(path: string): unknown {
   return JSON.parse(readFileSync(path, "utf-8"));

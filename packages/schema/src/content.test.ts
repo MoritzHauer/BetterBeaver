@@ -5,7 +5,11 @@ import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { validateContent } from "./validate.js";
 
-const CONTENT_DIR = fileURLToPath(new URL("../../../content", import.meta.url));
+// `BB_CONTENT_DIR` re-points this at a scratch tree, which is how a Book
+// pulled by `scripts/pull-book.ts` gets validated before republishing.
+const CONTENT_DIR =
+  process.env.BB_CONTENT_DIR ??
+  fileURLToPath(new URL("../../../content", import.meta.url));
 
 function readJson(path: string): unknown {
   return JSON.parse(readFileSync(path, "utf-8"));
