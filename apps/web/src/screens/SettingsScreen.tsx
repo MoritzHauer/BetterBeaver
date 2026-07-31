@@ -32,7 +32,11 @@ export function SettingsScreen({
 }: {
   onBack: () => void;
   onSignIn: () => void;
-  onImportBook: (docId: string) => void;
+  /** Hands the parsed documents to the app, which stores each one under the
+   * key its own editor reads — a maintained document becomes a draft, an
+   * unmaintained one becomes a proposal — and opens the first. The mode
+   * lives there because only `App` knows what this account maintains. */
+  onImportBook: (entries: { id: string; doc: unknown }[]) => Promise<void>;
   /** Validates + commits an imported private Book (spec 0017-5 §3 rules
    * 3+5) — the cross-Book validation and replace-existing dry run need live
    * membership state, which lives in `content/source.ts`. */
@@ -172,9 +176,9 @@ export function SettingsScreen({
           `not a BetterBeaver ${kind === "topic" ? "book" : "domain"} export file`,
         );
       }
-      for (const entry of entries as unknown[]) {
+      const checked = (entries as unknown[]).map((entry) => {
         // Light structural check only — full schema validation happens at
-        // publish time in the editor, not here.
+        // publish/propose time in the editor, not here.
         const e = entry as { id?: unknown; doc?: unknown };
         if (
           typeof e?.id !== "string" ||
@@ -185,9 +189,9 @@ export function SettingsScreen({
             `not a BetterBeaver ${kind === "topic" ? "book" : "domain"} export file`,
           );
         }
-        localStorage.setItem(`bb.author.draft.${e.id}`, JSON.stringify(e.doc));
-      }
-      onImportBook((entries[0] as { id: string }).id);
+        return { id: e.id, doc: e.doc };
+      });
+      await onImportBook(checked);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Import failed");
     }
