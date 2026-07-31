@@ -7,16 +7,12 @@
       hide themselves. Not covered: the service worker's own app-shell refresh
       (`registerType: "autoUpdate"`), which would need `prompt` registration.
 - First chapter with more info / comparison to english
-- references between chapters and do you remember quiz
 - short history facts within or between chapters
 - [x] as non maintainer amendment proposal — landed 2026-07-26 via
       docs/specs/0012-proposal-flow.md. Still needs a two-account browser pass
       (spec's Verification section).
-- creating private book
-  - no syncing but ex/import possible
 
 - Matching task: should there be a max error click?
-- to link a
 
 # small changes
 
@@ -46,11 +42,12 @@
 ## ideas
 
 - language material recommendation / skill
-- Tasks are still grouped by type in a unit. Why?
+- improve editor flow
 - configurable learning setting
   - how many tasks get into the repeat section from prev units?
   - how many tasks getting as default in a unit
   - maybe just get into next unit if last 10 task hit 75% accurancy?
   - think of other ideas
+- make learning methods with more algo logic, eg how many tasks, num repetitions, what to review.
 - matching task: differentiate between fixed set of items for one question and pool for multiple ones.
 - TTS — Kyrgyz voice doesn't work (no matching local browser voice); real fix is a bigger session, deliberately not covered now.
