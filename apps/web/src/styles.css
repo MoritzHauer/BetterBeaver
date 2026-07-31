@@ -326,6 +326,12 @@ section.card {
   margin: 1.5rem 0;
 }
 
+/* A note table can be wider than a phone (a two-column dialogue of long
+ * Kyrgyz sentences); scroll it instead of blowing out the page. */
+.note-table {
+  overflow-x: auto;
+}
+
 .usage-note {
   font-style: italic;
 }
@@ -1028,6 +1034,9 @@ main.unit-screen {
 .tappable-kyrgyz {
   display: inline;
   min-height: 0;
+  /* A button centres its own text; a multi-word span that wraps inside a
+   * narrow note table cell must stay left-aligned with the prose. */
+  text-align: inherit;
   padding: 0 0.1rem;
   border: none;
   border-radius: 0.25rem;

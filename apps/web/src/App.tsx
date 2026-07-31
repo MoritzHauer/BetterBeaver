@@ -67,7 +67,18 @@ import { PrivacyScreen } from "./screens/PrivacyScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { StatsScreen } from "./screens/StatsScreen";
 import { LessonSummaryScreen } from "./screens/LessonSummaryScreen";
-import { currentUser, getSupabase, listMyDocuments } from "./backend/supabase";
+import {
+  currentUser,
+  getSupabase,
+  listMyDocuments,
+  loadCatalogEntry,
+} from "./backend/supabase";
+import {
+  type AnyDoc,
+  draftKey,
+  proposalKey,
+  type StoredProposal,
+} from "./screens/edit/types";
 
 type Screen =
   | { screen: "books" }
@@ -125,7 +136,8 @@ type Screen =
   // the learner screen the Edit button was tapped on (default: author list).
   // `mode` (plan 0012 §5): "propose" for a non-maintainer suggesting edits.
   // Leave it unset and the edit branch derives it from `maintainedDocIds`;
-  // set it only to pin a route (AuthorScreen's two lists, settings import).
+  // set it only to pin a route (AuthorScreen's two lists, which already know
+  // which list the row came from).
   // "private" (plan 0017 §3): the Book being viewed has no account behind
   // it at all — always pinned explicitly by the ✎ call sites, never left
   // for the maintainedDocIds fallback to guess at.
@@ -931,6 +943,58 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     return maintainedDocIds?.has(docId) === false ? "propose" : "maintain";
   }
 
+  /**
+   * Settings → "Import book/domain…": stores each imported document under
+   * the key the editor it will open actually reads, then opens the first.
+   *
+   * The import used to write `bb.author.draft.*` and pin maintain mode for
+   * everyone, so a non-maintainer landed in `MaintainEditScreen`, whose
+   * `loadDocument` is a `.single()` over a table RLS shows them no rows of
+   * — surfacing as a bare "Cannot coerce the result to a single JSON
+   * object". Routing through `editModeFor` is what makes "import a file and
+   * submit it as a proposal" reachable at all.
+   *
+   * A proposal's working copy carries the published version it is based on
+   * (`StoredProposal`), which the file cannot know — hence the catalog read
+   * per proposed document. An unpublished or unlisted document has no base
+   * to propose against; that throws back to the Settings error line.
+   */
+  async function importDocuments(
+    entries: { id: string; doc: unknown }[],
+  ): Promise<void> {
+    for (const { id, doc } of entries) {
+      if (editModeFor(id) === "maintain") {
+        localStorage.setItem(draftKey(id), JSON.stringify(doc));
+        continue;
+      }
+      const published = await loadCatalogEntry(id);
+      if (published === null) {
+        throw new Error(
+          `${id} is not published yet — there is nothing to propose an edit against`,
+        );
+      }
+      localStorage.setItem(
+        proposalKey(id),
+        JSON.stringify({
+          baseVersion: published.published_version,
+          // Unvalidated, exactly as the draft key above has always been:
+          // the file got a shape check only, and `validateForPublish` runs
+          // in the editor before anything leaves the device.
+          doc: doc as AnyDoc,
+        } satisfies StoredProposal),
+      );
+    }
+    const first = entries[0];
+    if (first !== undefined) {
+      setScreen({
+        screen: "edit",
+        docId: first.id,
+        mode: editModeFor(first.id),
+        back: { screen: "settings" },
+      });
+    }
+  }
+
   /** The added private Book that owns `docId` — either its own Book document
    * or the Domain it exclusively owns (plan 0017 decision 2) — if any.
    * Neither document exists on the server, so both have to be routed to the
@@ -1329,16 +1393,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
       <SettingsScreen
         onBack={onBack}
         onSignIn={() => setScreen({ screen: "author" })}
-        onImportBook={(docId) =>
-          // Import writes a maintain-mode local draft (`bb.author.draft.*`),
-          // so this route is pinned — propose mode would ignore it.
-          setScreen({
-            screen: "edit",
-            docId,
-            mode: "maintain",
-            back: { screen: "settings" },
-          })
-        }
+        onImportBook={importDocuments}
         importPrivateBook={contentInit.importPrivateBook}
       />
     );
