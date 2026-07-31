@@ -7,6 +7,12 @@ import {
 } from "@betterbeaver/schema";
 import { validateForPublish } from "../../backend/publishCheck";
 import {
+  type RemoteAsset,
+  deleteAsset,
+  listDocumentAssets,
+  uploadAsset,
+} from "../../backend/storage";
+import {
   type AuthorDoc,
   type Proposal,
   listOpenProposals,
@@ -15,12 +21,18 @@ import {
   saveDraft,
 } from "../../backend/supabase";
 import { FeedbackPanel } from "../../components/FeedbackPanel";
+import {
+  AssetsManager,
+  assetReferences,
+  type AssetView,
+} from "./AssetsManager";
 import { BookEditor } from "./BookEditor";
 import { DomainEditor } from "./DomainEditor";
 import { ProposalReview } from "./ProposalReview";
 import {
   type AnyDoc,
   type EditTarget,
+  type Entity,
   type View,
   draftKey,
   initialView,
@@ -64,6 +76,10 @@ export function MaintainEditScreen({
   // pickers merge book items with these. Best-effort — a fetch failure just
   // leaves the Vocabulary side of the picker empty, it never blocks editing.
   const [domainEntries, setDomainEntries] = useState<unknown[]>([]);
+  // This document's Storage assets (spec 0012-C §4). Same best-effort
+  // fallback as `openProposals`/`domainEntries` above — a listing failure
+  // just leaves the Assets section empty rather than blocking the editor.
+  const [assetList, setAssetList] = useState<RemoteAsset[]>([]);
   const dirtyRef = useRef(false);
   const workingRef = useRef<AnyDoc | null>(null);
   workingRef.current = working;
@@ -72,6 +88,11 @@ export function MaintainEditScreen({
     listOpenProposals(docId).then(setOpenProposals, () => setOpenProposals([]));
   };
   useEffect(refreshProposals, [docId]);
+
+  const refreshAssets = () => {
+    listDocumentAssets(docId).then(setAssetList, () => setAssetList([]));
+  };
+  useEffect(refreshAssets, [docId]);
 
   // `domainId` is metadata the book form never edits (BookEditor's own
   // EntityForm specs don't include it), so it's stable after the initial
@@ -204,6 +225,64 @@ export function MaintainEditScreen({
         <button onClick={onBack}>Back</button>
       </main>
     );
+  }
+
+  // The stem prefix `uploadAsset` generates from (spec 0012-C §1's
+  // `${bookCode}-${crypto.randomUUID()}` rule) — the same `topic.code` /
+  // `domain.code` field `BookEditor`/`DomainEditor` already read off the
+  // currently-edited (draft) document.
+  const assetCode =
+    record.kind === "topic"
+      ? typeof ((working as BookDocument).topic as Entity).code === "string"
+        ? (((working as BookDocument).topic as Entity).code as string)
+        : ""
+      : typeof ((working as DomainDocument).domain as Entity).code === "string"
+        ? (((working as DomainDocument).domain as Entity).code as string)
+        : "";
+
+  // `assetReferences` wants both a `BookDocument` and a `DomainDocument`
+  // shape, but this screen edits exactly one document at a time (spec
+  // 0012-C §4) — the published document goes in its own slot, and the other
+  // slot is an empty stand-in that can never itself contribute a reference.
+  // When `record.published` is null, the (possibly-topic) slot falls back to
+  // the same empty stand-in, so "nothing published" naturally means
+  // "nothing found" with no separate branch needed.
+  const publishedBook: BookDocument =
+    record.kind === "topic"
+      ? ((record.published as BookDocument | null) ??
+        ({ items: [] } as unknown as BookDocument))
+      : ({ items: [] } as unknown as BookDocument);
+  const publishedDomain: DomainDocument =
+    record.kind === "domain"
+      ? ((record.published as DomainDocument | null) ??
+        ({ entries: [] } as unknown as DomainDocument))
+      : ({ entries: [] } as unknown as DomainDocument);
+
+  const deleteBlockedBy = (stem: string) =>
+    assetReferences(publishedBook, publishedDomain, stem);
+
+  const assetViews: AssetView[] = assetList.map((asset) => ({
+    stem: asset.stem,
+    name: asset.name,
+    kind: asset.kind === "img" ? "image" : "audio",
+    // `list()`'s `metadata.size` isn't guaranteed present (spec 0012-B §3);
+    // `AssetView.size` is non-optional, so an unreported size just shows as
+    // 0 B rather than losing the card.
+    size: asset.size ?? 0,
+    url: asset.url,
+  }));
+
+  async function handleAssetAdd(file: File) {
+    await uploadAsset(docId, assetCode, file);
+    refreshAssets();
+  }
+
+  async function handleAssetDelete(stem: string) {
+    const asset = assetList.find((a) => a.stem === stem);
+    if (asset !== undefined) {
+      await deleteAsset(asset.path);
+    }
+    refreshAssets();
   }
 
   const change = (next: AnyDoc) => {
@@ -394,6 +473,25 @@ export function MaintainEditScreen({
             </ul>
           </section>
         )}
+      {view.v === "root" && !readOnly && (
+        // Gated like the file's other four mutation surfaces (publish,
+        // discard-draft, sync, change): `readOnly` means this build's
+        // CONTENT_SCHEMA_VERSION is behind the document's, so uploads/
+        // deletes would hit live Storage for a document shape this client
+        // has just declared it can't safely reason about — and the delete
+        // guard's correctness depends on `assetReferences` understanding
+        // the published document's shape, which a schema skew puts in
+        // doubt too (spec 0012-C §4, amended).
+        <AssetsManager
+          book={publishedBook}
+          domain={publishedDomain}
+          bookId={docId}
+          assets={assetViews}
+          onAdd={handleAssetAdd}
+          onDelete={handleAssetDelete}
+          deleteBlockedBy={deleteBlockedBy}
+        />
+      )}
       {reviewingProposal !== undefined ? (
         reviewingProposal === null ? (
           <p className="error-text">

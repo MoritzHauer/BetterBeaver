@@ -1,14 +1,19 @@
 import type { DomainDocument, BookDocument } from "@betterbeaver/schema";
 import type { AssetStems } from "@betterbeaver/engine";
 import { getPrivateAssetUrl, privateAssetStems } from "./private-assets";
+import {
+  getRemoteAssetUrl,
+  remoteAssetStems,
+  remoteDomainIdForBook,
+} from "./remote-assets";
 
 /**
  * Bundled book/lexicon content — and, since plan 0017 §4, the app's asset
  * resolution point. `getAssetUrl`/`getLexiconAssetUrl` used to be purely
- * build-time lookups into the globs below; now they also consult the
- * runtime private-Book overlay (`private-assets.ts`) first, so a private
- * Book's assets resolve through the exact same calls the screens already
- * make.
+ * build-time lookups into the globs below; now they also consult two
+ * runtime overlays first: private Books (`private-assets.ts`, plan 0017 §4)
+ * and remote Books (`remote-assets.ts`, spec 0012-A), so those Books' assets
+ * resolve through the exact same calls the screens already make.
  */
 
 // Eager globs so every bundled book is statically included and available
@@ -253,12 +258,22 @@ export function getAssetUrl(
   if (privateUrl !== undefined) {
     return privateUrl;
   }
+  const remoteUrl = getRemoteAssetUrl(bookDir, kind, stem);
+  if (remoteUrl !== undefined) {
+    return remoteUrl;
+  }
   const byDir = kind === "audio" ? audioUrlsByDir : imageUrlsByDir;
   const direct = byDir.get(bookDir)?.get(stem);
   if (direct !== undefined) {
     return direct;
   }
-  const domainId = domainIdByBookId.get(bookDir);
+  // `domainIdByBookId` is built only from bundled content (the eager glob
+  // above), so a Library-fetched Book (every Book except `demo`) is absent
+  // from it — fall back to the remote overlay's own book -> domain map
+  // (spec 0012-B §5) so a remote Book's lexicon-asset references still
+  // resolve.
+  const domainId =
+    domainIdByBookId.get(bookDir) ?? remoteDomainIdForBook(bookDir);
   return domainId !== undefined
     ? getLexiconAssetUrl(domainId, kind, stem)
     : undefined;
@@ -278,34 +293,48 @@ export function getLexiconAssetUrl(
   if (privateUrl !== undefined) {
     return privateUrl;
   }
+  const remoteUrl = getRemoteAssetUrl(domainId, kind, stem);
+  if (remoteUrl !== undefined) {
+    return remoteUrl;
+  }
   const byDir =
     kind === "audio" ? lexiconAudioUrlsByDir : lexiconImageUrlsByDir;
   return byDir.get(domainId)?.get(stem);
 }
 
-/** Bundled stems merged with any registered private-Book stems. */
-export function allAssetStems(): AssetStems {
-  const merge = (
-    a: Map<string, string[]>,
-    b: Map<string, string[]>,
-  ): Map<string, string[]> => {
-    const merged = new Map(a);
-    for (const [id, stems] of b) {
-      // A key present in both is impossible today (private ids are UUIDs),
-      // but concatenate rather than overwrite so a future collision doesn't
-      // silently drop one side's stems.
-      merged.set(id, [...(merged.get(id) ?? []), ...stems]);
-    }
-    return merged;
-  };
-  const bundled = bundledAssetStems();
-  const priv = privateAssetStems();
+function mergeStemMap(
+  a: Map<string, string[]>,
+  b: Map<string, string[]>,
+): Map<string, string[]> {
+  const merged = new Map(a);
+  for (const [id, stems] of b) {
+    // A key present in both is impossible today (private ids are UUIDs),
+    // but concatenate rather than overwrite so a future collision doesn't
+    // silently drop one side's stems.
+    merged.set(id, [...(merged.get(id) ?? []), ...stems]);
+  }
+  return merged;
+}
+
+/** Concatenates two `AssetStems` (never overwrites — see `mergeStemMap`).
+ * Exported so other stem inventories (the accept dry-run and publish
+ * validation, spec 0012-B §6) can widen a base inventory with a fresh
+ * Storage listing the same way `allAssetStems()` widens the bundled one. */
+export function mergeAssetStems(a: AssetStems, b: AssetStems): AssetStems {
   return {
-    audioByBook: merge(bundled.audioByBook, priv.audioByBook),
-    imageByBook: merge(bundled.imageByBook, priv.imageByBook),
-    audioByDomain: merge(bundled.audioByDomain, priv.audioByDomain),
-    imageByDomain: merge(bundled.imageByDomain, priv.imageByDomain),
+    audioByBook: mergeStemMap(a.audioByBook, b.audioByBook),
+    imageByBook: mergeStemMap(a.imageByBook, b.imageByBook),
+    audioByDomain: mergeStemMap(a.audioByDomain, b.audioByDomain),
+    imageByDomain: mergeStemMap(a.imageByDomain, b.imageByDomain),
   };
+}
+
+/** Bundled stems merged with any registered private-Book and remote-Book stems. */
+export function allAssetStems(): AssetStems {
+  return mergeAssetStems(
+    mergeAssetStems(bundledAssetStems(), privateAssetStems()),
+    remoteAssetStems(),
+  );
 }
 
 /**

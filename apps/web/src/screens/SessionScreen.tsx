@@ -29,6 +29,7 @@ import { playCorrect, playFanfare, playWrong } from "../sounds";
 import { noteStorageUnwritable } from "../storage-health";
 import { FeedbackWidget } from "../components/FeedbackWidget";
 import { BookWatermark } from "../components/BookWatermark";
+import { SWIPE_THRESHOLD } from "./UnitScreen";
 
 /** Tally of results across a session; only the fields for the task type(s)
  * actually encountered end up non-zero. Every auto-graded kind (recognize,
@@ -975,6 +976,7 @@ export function SessionScreen({
   onFinished,
   nextAction,
   onExit,
+  onSwipeBack,
   loadStreak,
 }: {
   title: string;
@@ -1016,6 +1018,12 @@ export function SessionScreen({
    * because "next unit" is not what follows them. */
   nextAction?: { label: string; onClick: () => void };
   onExit: () => void;
+  /** Back-swipe target, in the same direction the Unit trail's `goPrev` uses
+   * (owner request): only the unit-practice session passes it, to land back
+   * on the trail's last content page. Ignored on the summary panel — leaving
+   * there must go through Done/`nextAction`, which is what advances the
+   * lesson. */
+  onSwipeBack?: () => void;
   /** Fetches the current streak for the summary panel (plan 0003). */
   loadStreak?: () => Promise<Streak | null>;
 }) {
@@ -1023,6 +1031,7 @@ export function SessionScreen({
   const [summary, setSummary] = useState<SessionSummary>(emptySummary);
   const [done, setDone] = useState(false);
   const answeredCount = useRef(0);
+  const touchStartX = useRef<number | null>(null);
 
   // Per-task question totals (plan 0010), recomputed only when `taskIds`
   // changes: how many questions belong to each distinct task id, so
@@ -1136,6 +1145,21 @@ export function SessionScreen({
     }
   }
 
+  function handleTouchStart(event: React.TouchEvent) {
+    touchStartX.current = event.touches[0]?.clientX ?? null;
+  }
+  function handleTouchEnd(event: React.TouchEvent) {
+    const startX = touchStartX.current;
+    touchStartX.current = null;
+    if (startX === null || done) {
+      return;
+    }
+    const endX = event.changedTouches[0]?.clientX ?? startX;
+    if (endX - startX > SWIPE_THRESHOLD) {
+      onSwipeBack?.();
+    }
+  }
+
   const currentTaskId = taskIds?.[index];
   const currentUnitIds =
     currentTaskId !== undefined && question !== undefined
@@ -1146,7 +1170,11 @@ export function SessionScreen({
     currentUnitIds.every((id) => pinnedUnitIds?.has(id));
 
   return (
-    <main className="session">
+    <main
+      className="session"
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+    >
       <BookWatermark bookId={bookId} />
       <header className="session-header">
         <button className="plain exit" aria-label="Exit" onClick={onExit}>

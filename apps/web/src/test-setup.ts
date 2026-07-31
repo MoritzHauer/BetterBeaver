@@ -27,3 +27,11 @@ HTMLDialogElement.prototype.close ??= function (
   }
   this.dispatchEvent(new Event("close"));
 };
+
+// jsdom doesn't implement the Blob URL registry (`URL.createObjectURL`/
+// `revokeObjectURL` are undefined). The asset overlays only need a distinct,
+// revocable string per blob — not a resolvable blob: URL — so a counter is
+// enough for tests.
+let objectUrlCounter = 0;
+URL.createObjectURL ??= () => `blob:mock-${++objectUrlCounter}`;
+URL.revokeObjectURL ??= () => {};

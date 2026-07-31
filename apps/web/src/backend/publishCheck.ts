@@ -5,7 +5,12 @@ import {
   type BookDocument,
 } from "@betterbeaver/schema";
 import { createDocumentContentSource } from "@betterbeaver/engine";
-import { bundledAssetStems } from "../content/bundled";
+import { bundledAssetStems, mergeAssetStems } from "../content/bundled";
+import {
+  listDocumentAssets,
+  assetStemsFromListing,
+  type RemoteAsset,
+} from "./storage";
 import { getSupabase } from "./supabase";
 
 /**
@@ -56,16 +61,39 @@ export async function validateForPublish(
   } else {
     domains.set(contentIdOf(docId), draft as DomainDocument);
   }
+
+  // Storage listing for every document in the assembled set (spec 0012-B
+  // §6) — never publish blind against an unknown asset inventory. The
+  // draft's own id is included even when it wasn't already in the
+  // published catalog (a not-yet-published document).
+  const assembledDocIds = new Set(
+    (data as { id: string }[]).map((row) => row.id),
+  );
+  assembledDocIds.add(docId);
+  let listingEntries: { documentId: string; assets: RemoteAsset[] }[];
+  try {
+    listingEntries = await Promise.all(
+      [...assembledDocIds].map(async (id) => ({
+        documentId: id,
+        assets: await listDocumentAssets(id),
+      })),
+    );
+  } catch (err) {
+    return [
+      `could not check the published assets: ${err instanceof Error ? err.message : String(err)}`,
+    ];
+  }
+  const assetStems = mergeAssetStems(
+    bundledAssetStems(),
+    assetStemsFromListing(listingEntries),
+  );
+
   // createDocumentContentSource no longer throws (plan 0015 decision 11a):
   // per-Book failures land in `broken` instead. Publish-time validation
   // still wants an all-or-nothing verdict, so any broken Book — the draft
   // itself or, on a cross-Book collision, an existing published Book —
   // fails the publish.
-  const built = createDocumentContentSource(
-    books,
-    domains,
-    bundledAssetStems(),
-  );
+  const built = createDocumentContentSource(books, domains, assetStems);
   return built.broken.flatMap((b) =>
     b.errors.map((error) => `${b.bookId}: ${error}`),
   );
