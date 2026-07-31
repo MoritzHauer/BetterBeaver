@@ -5,13 +5,22 @@ import {
   contentIdOf,
 } from "@betterbeaver/schema";
 import { createDocumentContentSource } from "@betterbeaver/engine";
-import { privateAssetStems } from "../../content/private-assets";
-import { putPrivateBook, readPrivateBook } from "../../content/private-store";
-import { AssetsManager } from "./AssetsManager";
+import {
+  privateAssetStems,
+  registerPrivateAssets,
+} from "../../content/private-assets";
+import { newPrivateId } from "../../content/private-ids";
+import {
+  putPrivateBook,
+  readPrivateBook,
+  readPrivateBooks,
+} from "../../content/private-store";
+import { AssetsManager, assetKind, type AssetView } from "./AssetsManager";
 import { BookEditor } from "./BookEditor";
 import { DomainEditor } from "./DomainEditor";
 import {
   type EditTarget,
+  type Entity,
   type View,
   initialView,
   rawPrivateDomainId,
@@ -63,6 +72,29 @@ export function PrivateEditScreen({
   bookRef.current = book;
   domainRef.current = domain;
   assetsRef.current = assets;
+  const [previewUrls, setPreviewUrls] = useState<Map<string, string>>(
+    new Map(),
+  );
+
+  // One object URL per current stem, for the Assets manager (moved here from
+  // `AssetsManager` by spec 0012-C §3, which no longer holds blobs at all).
+  // The cleanup revokes exactly what this run's setup created, and runs both
+  // on the next `assets` change and on unmount (plan 0017 §4: "Revoke those
+  // URLs on unmount") — a plain effect+cleanup pair rather than manual
+  // prev/next diffing, so it stays correct under StrictMode's double-invoke
+  // too.
+  useEffect(() => {
+    const urls = new Map<string, string>();
+    for (const [stem, blob] of Object.entries(assets)) {
+      urls.set(stem, URL.createObjectURL(blob));
+    }
+    setPreviewUrls(urls);
+    return () => {
+      for (const url of urls.values()) {
+        URL.revokeObjectURL(url);
+      }
+    };
+  }, [assets]);
 
   useEffect(() => {
     // Cannot reject: `private-store.ts`'s `readPrivateBook` is try/catch ->
@@ -175,9 +207,10 @@ export function PrivateEditScreen({
     );
     return built.broken.find((b) => b.bookId === bookId)?.errors ?? [];
     // `assets` isn't read directly here, but adding/deleting one re-runs
-    // `registerPrivateAssets` (./AssetsManager) before notifying this
-    // component, so it's the signal this memo needs to re-check dangling
-    // audioRef/imageRef against the fresh overlay in `privateAssetStems()`.
+    // `registerPrivateAssets` (below, in `writeThrough`) before this
+    // component's own state updates, so it's the signal this memo needs to
+    // re-check dangling audioRef/imageRef against the fresh overlay in
+    // `privateAssetStems()`.
   }, [book, domain, bookId, assets]);
 
   if (loadError !== null) {
@@ -191,6 +224,69 @@ export function PrivateEditScreen({
   if (book === null || domain === null) {
     return <main>Loading…</main>;
   }
+  // Rebound to plain (never-null) consts: a nested function declaration
+  // below closes over these, and TS narrowing from the guard above doesn't
+  // reach into a nested function body — only a const whose own type was
+  // already narrowed at assignment does.
+  const currentBook: BookDocument = book;
+  const currentDomain: DomainDocument = domain;
+
+  const bookCode =
+    typeof (currentBook.topic as Entity).code === "string"
+      ? ((currentBook.topic as Entity).code as string)
+      : "";
+
+  /** Persists the full record, then re-registers the runtime overlay
+   * (`content/private-assets.ts`) before updating this component's own
+   * `assets` state — an asset added or removed mid-session is otherwise
+   * invisible to `registerPrivateAssets` until reload (plan 0017 §4 point
+   * 3). Ordered before `setAssets` so the dangling-ref check above
+   * re-renders against the fresh overlay, not the stale one. Moved here
+   * (from `AssetsManager`) by spec 0012-C §3: the manager now only ever
+   * sees a plain `onAdd`/`onDelete` pair. */
+  async function writeThrough(nextAssets: Record<string, Blob>) {
+    await putPrivateBook({
+      id: bookId,
+      book: currentBook,
+      domain: currentDomain,
+      assets: nextAssets,
+    });
+    registerPrivateAssets(await readPrivateBooks());
+    setAssets(nextAssets);
+  }
+
+  async function handleAssetAdd(file: File) {
+    // Never the filename (plan 0017 §4 point 2): filenames contain spaces
+    // and other characters `slugPattern` rejects, so the stem is always
+    // generated, never derived from what the author picked.
+    const stem = `${bookCode}-${newPrivateId()}`;
+    await writeThrough({ ...assets, [stem]: file });
+  }
+
+  async function handleAssetDelete(stem: string) {
+    const next = { ...assets };
+    delete next[stem];
+    await writeThrough(next);
+  }
+
+  // `AssetView[]` built from the blobs + this render's object URLs (spec
+  // 0012-C §3). Every stem is always included, matching the old per-card
+  // rendering exactly: the card (name, size, stem field, delete button) used
+  // to render unconditionally, gating only the `<img>`/`<audio>` element on
+  // `previewUrls.get(stem)` being ready. Filtering the *whole card* out
+  // until the URL is ready would be a real behaviour change (a Book with
+  // assets briefly reads "No assets yet." on entry/after an add) — so an
+  // unready stem instead gets `url: ""`, and `AssetsManager` gates the media
+  // element on that, same as before.
+  const assetViews: AssetView[] = Object.entries(assets).map(
+    ([stem, blob]) => ({
+      stem,
+      name: blob instanceof File ? blob.name : stem,
+      kind: assetKind(blob),
+      size: blob.size,
+      url: previewUrls.get(stem) ?? "",
+    }),
+  );
 
   function goUp() {
     if (view.v !== "root") {
@@ -265,8 +361,9 @@ export function PrivateEditScreen({
           book={book}
           domain={domain}
           bookId={bookId}
-          assets={assets}
-          onAssetsChange={setAssets}
+          assets={assetViews}
+          onAdd={handleAssetAdd}
+          onDelete={handleAssetDelete}
         />
       ) : editingDomain ? (
         <DomainEditor

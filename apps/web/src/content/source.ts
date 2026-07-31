@@ -8,6 +8,7 @@ import {
 import {
   createDocumentContentSource,
   planUpdate,
+  type AssetStems,
   type CatalogRow,
   type ContentSource,
   type ContentUpdate,
@@ -18,6 +19,7 @@ import {
   bundledAssetStems,
   bundledDomainDocuments,
   bundledBookDocuments,
+  mergeAssetStems,
 } from "./bundled";
 import {
   readCachedDocuments,
@@ -32,7 +34,16 @@ import {
   type PrivateBookRecord,
 } from "./private-store";
 import { newPrivateId } from "./private-ids";
-import { registerPrivateAssets } from "./private-assets";
+import { registerPrivateAssets, privateAssetStems } from "./private-assets";
+import { registerRemoteAssets } from "./remote-assets";
+import {
+  listDocumentAssets,
+  downloadRemoteAsset,
+  canReuseBlob,
+  previousAssetMeta,
+  assetStemsFromListing,
+  type RemoteAsset,
+} from "../backend/storage";
 import {
   isFirstRun,
   readMyBooks,
@@ -277,11 +288,21 @@ async function purgeUnmembered(
  * seed in memory instead of ever appearing missing. A `bookId` present in
  * `privateById` (plan 0017 §4) resolves straight from that record instead —
  * no cache lookup, never reported missing.
+ *
+ * `extraStems` (spec 0012-B §4b) widens `allAssetStems()` for this one call
+ * only — `addBook`'s dry run needs its not-yet-registered new Book's freshly
+ * listed Storage assets included, since nothing has downloaded (and so
+ * registered) them yet. Every other caller omits it and is unaffected.
+ *
+ * Exported for `source.test.ts`'s direct `extraStems` coverage — every
+ * other caller reaches it only through `addBook`/`acceptUpdate`, which need
+ * a full IndexedDB + network stack to exercise.
  */
-function buildMembers(
+export function buildMembers(
   cachedById: Map<string, CachedDocument>,
   bookIds: string[],
   privateById: Map<string, PrivateBookRecord>,
+  extraStems?: AssetStems,
 ): { built: DocumentContentSource; missing: string[] } {
   const books = new Map<string, BookDocument>();
   const domains = new Map<string, DomainDocument>();
@@ -319,7 +340,11 @@ function buildMembers(
       }
     }
   }
-  const built = createDocumentContentSource(books, domains, allAssetStems());
+  const stems =
+    extraStems === undefined
+      ? allAssetStems()
+      : mergeAssetStems(allAssetStems(), extraStems);
+  const built = createDocumentContentSource(books, domains, stems);
   return { built, missing };
 }
 
@@ -405,6 +430,7 @@ export async function initContentSource(): Promise<ContentInit> {
 
   const privateRecords = await readPrivateBooks();
   registerPrivateAssets(privateRecords);
+  registerRemoteAssets(cached);
   const privateById = new Map(privateRecords.map((rec) => [rec.id, rec]));
 
   const { built, missing } = buildMembers(cachedById, added, privateById);
@@ -518,6 +544,24 @@ export async function initContentSource(): Promise<ContentInit> {
       // it the one blamed — the Book whose update actually introduced the
       // collision, not an untouched bystander (decision 11a: "existing
       // content untouched").
+      //
+      // Storage listings are fetched at most once per document id per
+      // accept (spec 0012-B §3/§6): the validation loop below needs one to
+      // widen the dry run's stem inventory, and the download loop right
+      // after needs the very same listing to decide what to fetch — this
+      // cache is how "reuse the listing" actually happens rather than just
+      // being a comment.
+      const listingsByDocId = new Map<string, RemoteAsset[]>();
+      async function listing(docId: string): Promise<RemoteAsset[]> {
+        const cached = listingsByDocId.get(docId);
+        if (cached !== undefined) {
+          return cached;
+        }
+        const fetched = await listDocumentAssets(docId);
+        listingsByDocId.set(docId, fetched);
+        return fetched;
+      }
+
       const failedAffected: string[] = [];
       const errorsByFailedBook = new Map<string, string[]>();
       for (const bookId of affected) {
@@ -525,9 +569,50 @@ export async function initContentSource(): Promise<ContentInit> {
         if (newDoc === undefined) {
           continue; // already broken-missing — not this accept's concern
         }
+        const newDomainId = rawDomainId(newDoc);
+
+        // Only this Book's *changed* documents get a fresh Storage listing
+        // (spec 0012-B §6: "the stems just listed for the documents in
+        // that dry run") — the rest of the member set's stems come from
+        // bundled/private only, same as before this spec; their own
+        // already-registered remote stems are last boot's state, not this
+        // accept's concern, and a stale mismatch here only weakens this
+        // discarded dry run's cross-Book check, never causes a false
+        // rejection (the real source rebuilds from `allAssetStems()` at
+        // next boot).
+        const changedDocIds = [
+          ...(downloaded.has(documentId("topic", bookId))
+            ? [documentId("topic", bookId)]
+            : []),
+          ...(newDomainId !== "" &&
+          downloaded.has(documentId("domain", newDomainId))
+            ? [documentId("domain", newDomainId)]
+            : []),
+        ];
+        const listingEntries: { documentId: string; assets: RemoteAsset[] }[] =
+          [];
+        let listingFailed = false;
+        for (const docId of changedDocIds) {
+          try {
+            listingEntries.push({
+              documentId: docId,
+              assets: await listing(docId),
+            });
+          } catch {
+            listingFailed = true;
+            break;
+          }
+        }
+        if (listingFailed) {
+          failedAffected.push(bookId);
+          errorsByFailedBook.set(bookId, [
+            "could not check this book's assets — try again later",
+          ]);
+          continue;
+        }
+
         const books = new Map<string, BookDocument>();
         const domains = new Map<string, DomainDocument>();
-        const newDomainId = rawDomainId(newDoc);
         if (newDomainId !== "") {
           const newDomainDoc = effectiveDomainDoc(newDomainId);
           if (newDomainDoc !== undefined) {
@@ -555,15 +640,85 @@ export async function initContentSource(): Promise<ContentInit> {
           }
         }
         books.set(bookId, newDoc); // last — see comment above
+        const dryRunStems = mergeAssetStems(
+          mergeAssetStems(bundledAssetStems(), privateAssetStems()),
+          assetStemsFromListing(listingEntries),
+        );
         const dryRunX = createDocumentContentSource(
           books,
           domains,
-          bundledAssetStems(),
+          dryRunStems,
         );
         const ownFailure = dryRunX.broken.find((b) => b.bookId === bookId);
         if (ownFailure !== undefined) {
           failedAffected.push(bookId);
           errorsByFailedBook.set(bookId, ownFailure.errors);
+        }
+      }
+
+      // Download blobs for every Book that passed validation (spec
+      // 0012-B §3), one Storage listing per distinct document id — not per
+      // Book, because a changed domain doc can back several member Books
+      // at once — reusing the very listing the validation loop above
+      // already fetched. A download failure fails only the Book(s) that
+      // document belongs to, routed into the same `failedAffected` list a
+      // validation failure uses, so one Book's bad asset never blocks
+      // another Book's update.
+      const docsToDownload = new Map<string, string[]>(); // docId -> referencing book ids
+      for (const bookId of affected) {
+        if (failedAffected.includes(bookId)) {
+          continue;
+        }
+        const newDoc = effectiveTopicDoc(bookId);
+        if (newDoc === undefined) {
+          continue; // already broken-missing — not this accept's concern
+        }
+        const newDomainId = rawDomainId(newDoc);
+        const topicDocId = documentId("topic", bookId);
+        if (downloaded.has(topicDocId)) {
+          docsToDownload.set(topicDocId, [
+            ...(docsToDownload.get(topicDocId) ?? []),
+            bookId,
+          ]);
+        }
+        if (newDomainId !== "") {
+          const domainDocId = documentId("domain", newDomainId);
+          if (downloaded.has(domainDocId)) {
+            docsToDownload.set(domainDocId, [
+              ...(docsToDownload.get(domainDocId) ?? []),
+              bookId,
+            ]);
+          }
+        }
+      }
+
+      const downloadedAssetsByDocId = new Map<string, Record<string, Blob>>();
+      for (const [docId, referencingBooks] of docsToDownload) {
+        try {
+          const entries = await listing(docId);
+          const previousBlobs = cachedById.get(docId)?.assets;
+          const assets: Record<string, Blob> = {};
+          for (const asset of entries) {
+            const previousBlob = previousBlobs?.[asset.stem];
+            const reuse = canReuseBlob(
+              { size: asset.size, lastModified: asset.lastModified },
+              previousAssetMeta(previousBlob),
+            );
+            assets[asset.stem] =
+              reuse && previousBlob !== undefined
+                ? previousBlob
+                : await downloadRemoteAsset(asset);
+          }
+          downloadedAssetsByDocId.set(docId, assets);
+        } catch {
+          for (const bookId of referencingBooks) {
+            if (!failedAffected.includes(bookId)) {
+              failedAffected.push(bookId);
+              errorsByFailedBook.set(bookId, [
+                "could not download this book's assets — try again later",
+              ]);
+            }
+          }
         }
       }
 
@@ -588,7 +743,12 @@ export async function initContentSource(): Promise<ContentInit> {
             continue;
           }
         }
-        toCommit.push(toCachedDocument(row));
+        const cachedDoc = toCachedDocument(row);
+        const assets = downloadedAssetsByDocId.get(row.id);
+        if (assets !== undefined) {
+          cachedDoc.assets = assets;
+        }
+        toCommit.push(cachedDoc);
       }
 
       if (toCommit.length > 0) {
@@ -623,6 +783,13 @@ export async function initContentSource(): Promise<ContentInit> {
       } catch {
         rows = undefined;
       }
+      // Whether `rows` actually came off the catalog (true "online, both
+      // documents found") vs. falling back to the bundled `demo` seed
+      // below — the asset download pass only runs for the former: the
+      // seed's assets are bundled files, not Storage objects, and this
+      // fallback is `demo`'s offline-Add path (decision 3), which must
+      // keep working with no network at all.
+      const fetchedFromCatalog = rows !== undefined && rows.length === 2;
       if (rows === undefined || rows.length !== 2) {
         if (bookId === "demo") {
           rows = seedCatalogRows();
@@ -637,6 +804,39 @@ export async function initContentSource(): Promise<ContentInit> {
 
       const newDocs = rows.map(toCachedDocument);
 
+      // List (not yet download) the new Book's assets before validating
+      // (spec 0012-B §4b): the dry run below needs these stems, since
+      // nothing has downloaded — and so registered — them yet. Reused for
+      // the actual download further down, so this is the only listing
+      // call. Skipped for the demo-seed fallback: bundled files, not
+      // Storage objects.
+      let listingByDocId: Map<string, RemoteAsset[]> | undefined;
+      if (fetchedFromCatalog) {
+        try {
+          listingByDocId = new Map(
+            await Promise.all(
+              newDocs.map(
+                async (doc) =>
+                  [doc.id, await listDocumentAssets(doc.id)] as const,
+              ),
+            ),
+          );
+        } catch {
+          throw new Error(
+            "could not add this book — check your connection and try again",
+          );
+        }
+      }
+      const extraStems =
+        listingByDocId !== undefined
+          ? assetStemsFromListing(
+              [...listingByDocId].map(([docId, assets]) => ({
+                documentId: docId,
+                assets,
+              })),
+            )
+          : undefined;
+
       // Dry-run against the current added Books, the new Book appended
       // last (decision 11a: earliest wins, so an introduced collision
       // rejects only the new Book — existing content untouched).
@@ -650,12 +850,46 @@ export async function initContentSource(): Promise<ContentInit> {
         dryRunById,
         [...currentAdded.filter((id) => id !== bookId), bookId],
         privateById,
+        extraStems,
       );
       const rejection = dryRun.broken.find((b) => b.bookId === bookId);
       if (rejection !== undefined) {
         throw new Error(
           `can't add this book: ${rejection.errors[0] ?? "content conflict"}`,
         );
+      }
+
+      // Download every asset of both fetched documents, all-or-nothing
+      // (spec 0012-B §3): any download failure leaves the cache untouched
+      // and surfaces through the same message a fetch failure already
+      // uses. `freshCached` (read above) doubles as the carry-forward
+      // source — never happens here in practice (this Book wasn't cached
+      // before), but kept for symmetry with `acceptUpdate`.
+      if (listingByDocId !== undefined) {
+        const freshCachedById = new Map(freshCached.map((d) => [d.id, d]));
+        try {
+          for (const doc of newDocs) {
+            const entries = listingByDocId.get(doc.id) ?? [];
+            const previousBlobs = freshCachedById.get(doc.id)?.assets;
+            const assets: Record<string, Blob> = {};
+            for (const asset of entries) {
+              const previousBlob = previousBlobs?.[asset.stem];
+              const reuse = canReuseBlob(
+                { size: asset.size, lastModified: asset.lastModified },
+                previousAssetMeta(previousBlob),
+              );
+              assets[asset.stem] =
+                reuse && previousBlob !== undefined
+                  ? previousBlob
+                  : await downloadRemoteAsset(asset);
+            }
+            doc.assets = assets;
+          }
+        } catch {
+          throw new Error(
+            "could not add this book — check your connection and try again",
+          );
+        }
       }
 
       await putCachedDocuments(newDocs);

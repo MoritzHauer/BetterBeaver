@@ -1,12 +1,11 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { type BookDocument, type DomainDocument } from "@betterbeaver/schema";
-import { registerPrivateAssets } from "../../content/private-assets";
-import { newPrivateId } from "../../content/private-ids";
-import { putPrivateBook, readPrivateBooks } from "../../content/private-store";
 import { type Entity } from "./types";
 
 /** Kind label for display, from the blob's MIME type — same "image vs.
- * audio" split `content/private-assets.ts`'s runtime overlay uses. */
+ * audio" split `content/private-assets.ts`'s runtime overlay uses. Exported
+ * for `PrivateEditScreen`, which still holds raw blobs and uses this to
+ * build each `AssetView.kind`. */
 export function assetKind(blob: Blob): "audio" | "image" {
   return blob.type.startsWith("image/") ? "image" : "audio";
 }
@@ -70,65 +69,62 @@ export function assetReferences(
   return refs;
 }
 
-/** Asset manager for a private Book (plan 0017 §4): list/add/delete blobs
- * and show each stem as copyable text. Deliberately NOT a per-field file
- * picker — that would mean changing `EntityForm`/`Field`, which the
- * maintainer and propose paths share, for a feature only private Books use.
- * The author copies a stem here and pastes it into an item's
- * audioRef/imageRef field by hand; the stems are the contract between this
- * view and the book/domain forms. */
+/**
+ * One asset as `AssetsManager` renders it — a view model both a private
+ * Book (blob-backed, object URLs) and a maintainer document (Storage-backed,
+ * public URLs) can build, so this component never forks on which mode it's
+ * in (spec 0012-C §2).
+ */
+export interface AssetView {
+  stem: string;
+  name: string; // display name; falls back to `stem`
+  kind: "audio" | "image";
+  size: number;
+  // Object URL (private) or public URL (maintain). Private mode may pass
+  // `""` for the one render tick before its object URL exists yet (right
+  // after mount or after an add) — the card still renders, just without a
+  // preview; see `PrivateEditScreen`'s `assetViews`.
+  url: string;
+}
+
+/** Asset manager for a Book's audio/image assets (plan 0017 §4, widened by
+ * spec 0012-C for maintainer documents): list/add/delete assets and show
+ * each stem as copyable text. Deliberately NOT a per-field file picker —
+ * that would mean changing `EntityForm`/`Field`, which the maintainer and
+ * propose paths share, for a feature only this manager needs. The author
+ * copies a stem here and pastes it into an item's audioRef/imageRef field by
+ * hand; the stems are the contract between this view and the book/domain
+ * forms.
+ *
+ * `onAdd`/`onDelete` own the actual persistence (private: write-through to
+ * IndexedDB + the runtime overlay; maintain: Storage upload/delete + a
+ * listing refresh) — this component only owns the file-size gate, the
+ * delete confirm/block, and the error line. */
 export function AssetsManager({
   book,
   domain,
-  bookId,
   assets,
-  onAssetsChange,
+  onAdd,
+  onDelete,
+  deleteBlockedBy,
 }: {
   book: BookDocument;
   domain: DomainDocument;
   bookId: string;
-  assets: Record<string, Blob>;
-  onAssetsChange: (next: Record<string, Blob>) => void;
+  assets: AssetView[];
+  onAdd: (file: File) => Promise<void>;
+  onDelete: (stem: string) => Promise<void>;
+  /** Present only in maintain mode (spec 0012-C §2/§8): checked before the
+   * confirm, against the *published* document. A non-empty result blocks
+   * the delete outright — under slice B's eager all-or-nothing download, a
+   * deleted-but-published object 404s during another learner's Add and
+   * rolls back that whole Book, and the maintainer never sees it since
+   * their own copy is already cached. Absent in private mode, where no
+   * other device is involved and today's warn-and-allow confirm is correct
+   * as-is. */
+  deleteBlockedBy?: (stem: string) => string[];
 }) {
   const [error, setError] = useState<string | null>(null);
-  const [previewUrls, setPreviewUrls] = useState<Map<string, string>>(
-    new Map(),
-  );
-
-  // One object URL per current stem. The cleanup revokes exactly what this
-  // run's setup created, and runs both on the next `assets` change and on
-  // unmount (plan 0017 §4: "Revoke those URLs on unmount") — a plain
-  // effect+cleanup pair rather than manual prev/next diffing, so it stays
-  // correct under StrictMode's double-invoke too.
-  useEffect(() => {
-    const urls = new Map<string, string>();
-    for (const [stem, blob] of Object.entries(assets)) {
-      urls.set(stem, URL.createObjectURL(blob));
-    }
-    setPreviewUrls(urls);
-    return () => {
-      for (const url of urls.values()) {
-        URL.revokeObjectURL(url);
-      }
-    };
-  }, [assets]);
-
-  const bookCode =
-    typeof (book.topic as Entity).code === "string"
-      ? ((book.topic as Entity).code as string)
-      : "";
-
-  /** Persists the full record, then re-registers the runtime overlay
-   * (`content/private-assets.ts`) before notifying the parent — an asset
-   * added or removed mid-session is otherwise invisible to
-   * `registerPrivateAssets` until reload (plan 0017 §4 point 3). Ordered
-   * before `onAssetsChange` so the dangling-ref check in `PrivateEditScreen`
-   * re-renders against the fresh overlay, not the stale one. */
-  async function writeThrough(nextAssets: Record<string, Blob>) {
-    await putPrivateBook({ id: bookId, book, domain, assets: nextAssets });
-    registerPrivateAssets(await readPrivateBooks());
-    onAssetsChange(nextAssets);
-  }
 
   async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -143,36 +139,53 @@ export function AssetsManager({
       return;
     }
     setError(null);
-    // Never the filename (plan 0017 §4 point 2): filenames contain spaces
-    // and other characters `slugPattern` rejects, so the stem is always
-    // generated, never derived from what the author picked.
-    const stem = `${bookCode}-${newPrivateId()}`;
     try {
-      await writeThrough({ ...assets, [stem]: file });
-    } catch {
-      setError("failed to save the asset — storage may be full");
+      await onAdd(file);
+    } catch (e) {
+      // Maintain mode's `onAdd` (uploadAsset) throws specific, useful
+      // messages — a rejected MIME type, an RLS/network failure (spec
+      // 0012-C §1: "reject … with a clear message"). Private mode's
+      // `onAdd` (an IndexedDB write) throws browser exceptions with no
+      // author-facing wording, so it keeps the generic fallback exactly as
+      // before — `deleteBlockedBy` (present only in maintain mode) is the
+      // existing signal this component already uses to tell the two apart.
+      setError(
+        deleteBlockedBy !== undefined && e instanceof Error
+          ? e.message
+          : "failed to save the asset — storage may be full",
+      );
     }
   }
 
   async function handleDelete(stem: string) {
-    const refs = assetReferences(book, domain, stem);
-    const warning =
-      refs.length > 0
-        ? `Still referenced by: ${refs.join(", ")}. Deleting it will make this Book invalid until those references are fixed.\n\n`
-        : "";
-    if (!window.confirm(`${warning}Delete asset "${stem}"?`)) {
-      return;
+    if (deleteBlockedBy !== undefined) {
+      const blockedBy = deleteBlockedBy(stem);
+      if (blockedBy.length > 0) {
+        setError(
+          `✗ Published content references this: ${blockedBy.join(", ")}. Remove the references and publish first, then delete.`,
+        );
+        return;
+      }
+      if (!window.confirm(`Delete asset "${stem}"?`)) {
+        return;
+      }
+    } else {
+      const refs = assetReferences(book, domain, stem);
+      const warning =
+        refs.length > 0
+          ? `Still referenced by: ${refs.join(", ")}. Deleting it will make this Book invalid until those references are fixed.\n\n`
+          : "";
+      if (!window.confirm(`${warning}Delete asset "${stem}"?`)) {
+        return;
+      }
     }
-    const next = { ...assets };
-    delete next[stem];
+    setError(null);
     try {
-      await writeThrough(next);
+      await onDelete(stem);
     } catch {
       setError("failed to delete the asset — storage may be full");
     }
   }
-
-  const stems = Object.entries(assets);
 
   return (
     <section>
@@ -186,42 +199,39 @@ export function AssetsManager({
           onChange={(e) => void handleFileSelect(e)}
         />
       </label>
-      {stems.length === 0 ? (
+      {assets.length === 0 ? (
         <p className="status">No assets yet.</p>
       ) : (
         <ul className="card-list asset-list">
-          {stems.map(([stem, blob]) => {
-            const url = previewUrls.get(stem);
-            const kind = assetKind(blob);
-            return (
-              <li key={stem} className="card">
-                <p className="status">
-                  {kind} · {formatBytes(blob.size)}
-                </p>
-                {url !== undefined &&
-                  (kind === "image" ? (
-                    <img src={url} alt="" />
-                  ) : (
-                    <audio controls src={url} />
-                  ))}
-                <label className="field">
-                  Stem (copy into an audioRef/imageRef field)
-                  <input
-                    type="text"
-                    readOnly
-                    value={stem}
-                    onFocus={(e) => e.currentTarget.select()}
-                  />
-                </label>
-                <button
-                  className="plain danger"
-                  onClick={() => void handleDelete(stem)}
-                >
-                  Delete
-                </button>
-              </li>
-            );
-          })}
+          {assets.map((asset) => (
+            <li key={asset.stem} className="card">
+              <h3>{asset.name}</h3>
+              <p className="status">
+                {asset.kind} · {formatBytes(asset.size)}
+              </p>
+              {asset.url !== "" &&
+                (asset.kind === "image" ? (
+                  <img src={asset.url} alt="" />
+                ) : (
+                  <audio controls src={asset.url} />
+                ))}
+              <label className="field">
+                Stem (copy into an audioRef/imageRef field)
+                <input
+                  type="text"
+                  readOnly
+                  value={asset.stem}
+                  onFocus={(e) => e.currentTarget.select()}
+                />
+              </label>
+              <button
+                className="plain danger"
+                onClick={() => void handleDelete(asset.stem)}
+              >
+                Delete
+              </button>
+            </li>
+          ))}
         </ul>
       )}
     </section>

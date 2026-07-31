@@ -13,6 +13,8 @@ export interface CachedDocument {
   version: number;
   schemaVersion: number;
   doc: BookDocument | DomainDocument;
+  /** stem -> blob, downloaded at add/accept (spec 0012-B). Absent on records written before this spec: no remote assets. */
+  assets?: Record<string, Blob>;
 }
 
 /** All cached documents; `[]` when the cache is empty or unreadable (a broken cache degrades to the bundled seed, never to a crash). */
