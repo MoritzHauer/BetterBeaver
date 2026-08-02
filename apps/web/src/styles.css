@@ -1398,6 +1398,20 @@ button.danger {
   margin-top: 2rem;
 }
 
+/* Impressum/Datenschutz row (LegalLinks): centred, muted, small — legally
+ * required on every screen, but not part of the app's own navigation. */
+.legal-links {
+  display: flex;
+  justify-content: center;
+  gap: 1.25rem;
+  margin-top: 1.5rem;
+  font-size: 0.85rem;
+}
+
+.legal-links button {
+  color: var(--locked-fg);
+}
+
 /* Home top bar: title on the left, Stats/Settings icon buttons on the right. */
 .home-bar {
   display: flex;
