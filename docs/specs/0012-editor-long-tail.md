@@ -2,6 +2,8 @@
 
 Implements plan 0012 §7's deferrals plus §3/§4's admin UIs. Self-contained per the `/delegate` convention; make no new design choices. Items are independent unless a dependency is stated — land and verify them one at a time.
 
+> **Partly superseded 2026-07-31 by [plan 0021](../plans/0021-in-place-editing.md).** That plan replaces the form-based editor this spec extends, so **§1 and §2 must not be built** — each is struck below with the 0021 section that replaces it. §3 is half absorbed. **Live work here: §4, §5, §6, and §3's autosave retry.** Do not implement a struck item; if a struck item looks necessary, the 0021 section it points at is the design of record.
+
 ## Context (read first)
 
 - `apps/web/src/screens/EditScreen.tsx` (the editor as shipped), `AuthorScreen.tsx`, `apps/web/src/backend/supabase.ts`, `apps/web/src/backend/publishCheck.ts`.
@@ -11,7 +13,9 @@ Implements plan 0012 §7's deferrals plus §3/§4's admin UIs. Self-contained pe
 
 ## Items
 
-### 1. Missing topic-document forms
+### ~~1. Missing topic-document forms~~ — SUPERSEDED
+
+**Do not build.** Every item below lands in plan 0021 on a learner-facing surface instead of a form: Resources and `sourceRef` → [0021 §9](../plans/0021-in-place-editing.md) (Sources page, plus a seeded default resource so a new item is valid on creation); unlock chaining → 0021 §8 (it already has a learner surface — the lock icons); lexeme links → 0021 §6 (the lexicon picker); remaining item/task fields → 0021 §9; asset-backed task types → 0021 §9's constructible-only exercise list, which derives them from `TASK_REQUIRED_ASSET` rather than hand-writing a form per type. Kept below as the record of what was scoped.
 
 - **Resources**: root `TopicEditor` view gains a Resources section — list by `id`, add/edit/delete with fields from `resourceSchema` in `entities.ts` (id, title, url/citation fields as defined there). Deleting a resource still referenced by `sourceRef`s fails at publish (existing validator rule) — no cascade.
 - **Unlock chaining**: unit form gains `unlocksAfterUnitId`, lesson form gains `unlocksAfterLessonId` — plain text fields via the existing `FieldSpec` mechanism, empty = absent (the `setPath` empty-string-deletes rule already handles this).
@@ -19,17 +23,21 @@ Implements plan 0012 §7's deferrals plus §3/§4's admin UIs. Self-contained pe
 - **Lexeme link editing**: in the domain entry form, edit `payload.links` as rows of (entryId, type) with type from the link-type union in `entities.ts`; unknown entry ids surface at publish, not in the form.
 - **Task-type editors for asset-backed types** (listen/dictation/shadowing/minimal-pair/picture): only after `0012-asset-pipeline.md` lands. Fields per type from `entities.ts` (`TASK_REQUIRED_ASSET` names which asset ref each type needs); asset refs are chosen from the document's asset list (a select fed by the asset manifest), not typed free-form.
 
-### 2. Draft preview
+### ~~2. Draft preview~~ — SUPERSEDED
+
+**Do not build.** Replaced by [0021 §10](../plans/0021-in-place-editing.md), which keeps this section's core mechanism (assemble → validate → `DocumentContentSource` → no-op `ProgressStore`) but makes Preview a mode on the learner screens rather than a wrapper reached from a form, adds Diff and a What-changed index alongside it, passes a full attempted-task set so nothing is gated, and threads `listDocumentAssets`'s live stems in — without which an asset uploaded for an unpublished draft reads as dangling. Kept below as the record.
 
 "Preview" button in the editor header. Assemble the draft with the published rest of the catalog exactly as `validateForPublish` does; if validation fails, show the errors (preview of an invalid draft is undefined — the publish panel already renders these messages). If it passes, render the existing learner screens (`TopicScreen`/`UnitScreen` tree) against a `DocumentContentSource` built from that assembled set, inside a read-only "previewing draft — exit" wrapper. No progress writes from preview: pass a no-op `ProgressStore` (in-memory stub), and no task attempts are recorded.
 
-### 3. Editor robustness (small, do together)
+### 3. Editor robustness (small, do together) — PARTLY SUPERSEDED
 
-- **Delete confirms**: every destructive row action (`RowActions` onRemove, "Delete this …" buttons) gets a `window.confirm` naming the id.
-- **Autosave retry**: on failed draft save, retry with backoff (5 s, 30 s, then every 60 s) while dirty; the status line shows "retrying…". A manual "Save now" appears in the error state.
-- **Conflict surfacing**: if `saveDraft` starts failing because the session expired, say so ("signed out — sign in again in the Authoring screen") instead of the generic connection message (detect via `supabase.auth.getSession()` returning no session).
+- ~~**Delete confirms**~~ — superseded: the `RowActions` / "Delete this …" buttons this describes are deleted with the form editor (0021 §12). Destructive actions on the in-place surfaces need their own confirms, designed there.
+- **Autosave retry** — **LIVE.** On failed draft save, retry with backoff (5 s, 30 s, then every 60 s) while dirty; the status line shows "retrying…". A manual "Save now" appears in the error state. Still wanted; it moves from `MaintainEditScreen` to `EditSession` (0021 §8), so build it wherever the autosave currently lives.
+- **Conflict surfacing** — **LIVE.** If `saveDraft` starts failing because the session expired, say so ("signed out — sign in again in the Authoring screen") instead of the generic connection message (detect via `supabase.auth.getSession()` returning no session). Same note: it follows the autosave into `EditSession`.
 
-### 4. In-app topic creation
+### 4. In-app topic creation — LIVE, but amended by 0021 §7
+
+Three changes before building this: **(a)** it must create the Book **and its own lexicon** as a pair, not just the Book — as written, a creator ends up pointing at a domain they cannot create, which is why the last sentence below is now wrong. Verified during 0021's design that this needs no migration: `documents_insert` is `with check (created_by = auth.uid())` with no `kind` restriction, `kind` is in the insert grant, and `documents_creator_maintainer` fires on any insert with `created_by not null`. **(b)** derive the lexicon's `code` from the generated document id, **not** from the user's slug — `validateContentSet` enforces unique domain codes but never checks Book codes, so a slug-derived code can collide where a duplicate Book code would not. **(c)** seed one resource (the Book itself) and default new items' `sourceRef` to it, so the Book's first item is valid on creation.
 
 `AuthorScreen` gains "New topic": form for slug id + title. Inserts a `documents` row: `id = documentId("topic", slug)`, `kind = "topic"`, `schema_version = CONTENT_SCHEMA_VERSION`, `created_by = auth.uid()`, and `draft` = a minimal skeleton `TopicDocument` (topic entity with the given id/title, a fresh `code` equal to the slug, empty lessons/units/items/tasks/resources/notes). The backend trigger makes the creator maintainer; `listed` stays false (grant excludes it). Duplicate id → surface the PK violation as "that id is taken". After creation, open the editor. Domains stay admin-created (dashboard) — no UI.
 
