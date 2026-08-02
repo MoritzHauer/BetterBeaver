@@ -48,7 +48,7 @@ jobs:
       - run: corepack pnpm install --frozen-lockfile
       - run: corepack pnpm --filter @betterbeaver/web build
         env:
-          BASE_PATH: /BetterBeaver/
+          BASE_PATH: /
           # Repo → Settings → Variables (public by design; RLS is the
           # boundary, plan 0012 §4). Unset → the app ships bundled-only.
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}

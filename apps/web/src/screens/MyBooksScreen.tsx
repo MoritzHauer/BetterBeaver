@@ -1,4 +1,5 @@
 import type { BookSummary } from "@betterbeaver/engine";
+import { LegalLinks } from "../components/LegalLinks";
 import { ProgressBar } from "../components/ProgressBar";
 import { showsCoverArt } from "../components/BookWatermark";
 import { readPrivateBook } from "../content/private-store";
@@ -32,6 +33,8 @@ export function MyBooksScreen({
   onAuthor,
   onOpenStats,
   onOpenSettings,
+  onImpressum,
+  onPrivacy,
 }: {
   books: BookSummary[];
   /** Per-book lesson-completion counts (plan 0010), computed in `App.tsx`
@@ -73,6 +76,8 @@ export function MyBooksScreen({
   onAuthor: () => void;
   onOpenStats: () => void;
   onOpenSettings: () => void;
+  onImpressum: () => void;
+  onPrivacy: () => void;
 }) {
   function handleRemove(bookId: string, title: string) {
     // A private Book has nothing to re-download from (spec 0017-5 §5) — the
@@ -340,6 +345,7 @@ export function MyBooksScreen({
           Edit content
         </button>
       </nav>
+      <LegalLinks onImpressum={onImpressum} onPrivacy={onPrivacy} />
     </main>
   );
 }
