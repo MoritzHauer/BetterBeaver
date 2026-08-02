@@ -53,9 +53,10 @@
 - TTS — Kyrgyz voice doesn't work (no matching local browser voice); real fix is a bigger session, deliberately not covered now.
 
 ## isues
+
 - workflow create issue, /prototyping, voting in git issue about prototype screenshots, implementation
 - multiple maintainers per book
 - editor flow on device
-      - when entering the editor mode you stay just on that page but can edit the text fields. Get Buttons for Adding new elements (table/boxes/etc/image). You can configure text style and link words to the lexicon. The user does not have to see any uuids or other windows. 
-      - The local changes can be displayed before proposing / publishing. In this preview window you can toggle between old/new/diff. On diff view the old changed/deleted elements have a light red background and the new changed/added values have a light green background.
-- editor flow via AI 
+  - when entering the editor mode you stay just on that page but can edit the text fields. Get Buttons for Adding new elements (table/boxes/etc/image). You can configure text style and link words to the lexicon. The user does not have to see any uuids or other windows.
+  - The local changes can be displayed before proposing / publishing. In this preview window you can toggle between old/new/diff. On diff view the old changed/deleted elements have a light red background and the new changed/added values have a light green background.
+- editor flow via AI
