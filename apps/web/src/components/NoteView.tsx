@@ -1,7 +1,21 @@
 import { useState } from "react";
-import { type NoteBlock, parseNoteBlocks } from "@betterbeaver/engine";
+import {
+  type CalloutVariant,
+  type NoteBlock,
+  parseNoteBlocks,
+} from "@betterbeaver/engine";
+import { getAssetUrl } from "../content/bundled";
 import type { TapLookup } from "./TappableText";
 import { EntryPopup } from "./EntryPopup";
+
+/** Glyph per callout variant (spec 0021-2 §1b) — every one of these PNGs
+ * already exists in `public/art/icons/`. */
+const CALLOUT_ICON: Record<CalloutVariant, string> = {
+  note: "book_front",
+  tip: "lightbulb",
+  warning: "stop_sign",
+  example: "beaver_pencil",
+};
 
 /** One inline run within a line of note markdown: `**bold**` is purely
  * visual, `*kyrgyz*` is the one tappable+italic unit (the plan 0006
@@ -103,18 +117,23 @@ function InlineRun({
  * Renders a unit note's raw markdown (plan 0006 note-rendering fix): the
  * `# ` line as a plain `<h2>` title, `## ` lines as `<h3>`,
  * blank-line-separated paragraphs, `- ` bullet lists and `| a | b |` tables
- * as `<p>`/`<ul><li>`/`<table>`, and within each, `*kyrgyz*` inline spans
- * as the only tappable content (via a local `EntryPopup`, same
- * one-popup-at-a-time pattern as `TappableText` — not routed through
- * `TappableText` itself, since that re-tokenizes by whitespace, which would
- * wrongly re-split a multi-word starred span).
+ * as `<p>`/`<ul><li>`/`<table>`, `> [!variant] title` callouts as a tinted
+ * `<aside>` and `[img:stem] caption` figures as a `<figure>` (spec 0021-2),
+ * and within each, `*kyrgyz*` inline spans as the only tappable content (via
+ * a local `EntryPopup`, same one-popup-at-a-time pattern as `TappableText` —
+ * not routed through `TappableText` itself, since that re-tokenizes by
+ * whitespace, which would wrongly re-split a multi-word starred span).
  */
 export function NoteView({
   markdown,
   lookup,
+  bookId,
 }: {
   markdown: string;
   lookup: TapLookup;
+  /** The bare Book id `getAssetUrl` expects (never a `topic:`-prefixed
+   * document id) — resolves a figure's `stem` to a URL (spec 0021-2 §2c). */
+  bookId: string;
 }) {
   const [tappedSpan, setTappedSpan] = useState<string | null>(null);
   const { title, blocks } = parseBody(markdown);
@@ -167,6 +186,33 @@ export function NoteView({
                 <InlineRun text={block.text} onTap={setTappedSpan} />
               </p>
             );
+          case "callout":
+            return (
+              <aside key={index} className={`note-callout ${block.variant}`}>
+                <img
+                  className="icon-glyph"
+                  src={`${import.meta.env.BASE_URL}art/icons/${CALLOUT_ICON[block.variant]}.png`}
+                  alt=""
+                />
+                {block.title !== "" && <strong>{block.title}</strong>}
+                <p>
+                  <InlineRun text={block.text} onTap={setTappedSpan} />
+                </p>
+              </aside>
+            );
+          case "figure": {
+            // A stem that doesn't resolve (spec 0021-2 §2c) still renders
+            // the caption — the useful part — rather than `<img src="undefined">`.
+            const url = getAssetUrl(bookId, "img", block.stem);
+            return (
+              <figure key={index} className="note-figure">
+                {url !== undefined && <img src={url} alt={block.caption} />}
+                {block.caption !== "" && (
+                  <figcaption>{block.caption}</figcaption>
+                )}
+              </figure>
+            );
+          }
         }
       })}
       {tappedSpan !== null ? (

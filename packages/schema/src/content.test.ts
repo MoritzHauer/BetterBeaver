@@ -98,6 +98,12 @@ describe("content on disk", () => {
         tasks,
         resources,
         noteStems,
+        // Not derived from the on-disk notes (no bundled note currently uses
+        // `[img:...]`, spec 0021-2 §2d): the extractor lives in
+        // `@betterbeaver/engine`, which this package cannot depend on
+        // without an engine->schema->engine cycle, so this on-disk check
+        // simply doesn't exercise the dangling-note-imageRef class.
+        noteImageRefs: [] as { noteStem: string; stem: string }[],
         audioStems,
         imageStems,
         domain,

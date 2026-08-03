@@ -11,7 +11,7 @@ import {
   setNote,
   upsertEntity,
 } from "@betterbeaver/engine";
-import { NoteEditor } from "../../components/NoteEditor";
+import { NoteEditor, type NoteAsset } from "../../components/NoteEditor";
 import { newEntityId } from "../../content/entity-ids";
 import { noteTitle } from "../../content/noteTitle";
 import { newPrivateId } from "../../content/private-ids";
@@ -39,6 +39,8 @@ export function BookEditor({
   onChange,
   hideCoverArt,
   domainEntries = [],
+  assets,
+  onUploadAsset,
 }: {
   doc: BookDocument;
   view: View;
@@ -55,6 +57,13 @@ export function BookEditor({
    * rule). Default `[]` degrades gracefully — an empty Vocabulary filter —
    * when a shell hasn't (or couldn't) fetch the domain doc. */
   domainEntries?: unknown[];
+  /** Threaded straight through to `NoteEditor`'s `+ image` picker (spec
+   * 0021-2 §2f) — passed as-is per mode: maintain and private each supply
+   * their own asset list/uploader, propose supplies neither (undefined
+   * degrades to `NoteEditor`'s own `assets = []` default, which disables
+   * the picker with a reason). */
+  assets?: NoteAsset[];
+  onUploadAsset?: (file: File) => Promise<void>;
 }) {
   const book = doc.topic as Entity;
   const bookCode = typeof book.code === "string" ? book.code : "";
@@ -199,6 +208,8 @@ export function BookEditor({
         <NoteEditor
           markdown={note.markdown}
           onChange={(markdown) => onChange(setNote(doc, note.stem, markdown))}
+          assets={assets}
+          onUploadAsset={onUploadAsset}
         />
         <button
           className="plain danger"

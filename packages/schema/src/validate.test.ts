@@ -194,6 +194,7 @@ function makeFixture() {
     noteStems: ["intro"],
     audioStems: [] as string[],
     imageStems: [] as string[],
+    noteImageRefs: [] as { noteStem: string; stem: string }[],
     domain,
     entries,
     families,
@@ -664,6 +665,29 @@ describe("validateContent", () => {
     const errors = expectErrors(validateContent(input));
 
     expect(errors.some((e) => e.includes("ky-item-a"))).toBe(true);
+  });
+
+  it("reports a dangling note figure imageRef, naming its note (spec 0021-2 §2d)", () => {
+    const { input } = makeFixture();
+    input.noteImageRefs.push({ noteStem: "intro", stem: "missing-img" });
+
+    const errors = expectErrors(validateContent(input));
+
+    expect(errors).toContain('ky-note-intro: dangling imageRef "missing-img"');
+  });
+
+  it("does not report a note figure imageRef that resolves", () => {
+    const { input } = makeFixture();
+    input.imageStems.push("photo-1");
+    input.noteImageRefs.push({ noteStem: "intro", stem: "photo-1" });
+
+    const result = validateContent(input);
+
+    if ("errors" in result) {
+      throw new Error(
+        `expected valid content, got errors: ${result.errors.join("; ")}`,
+      );
+    }
   });
 
   it("(o) reports a task/kind mismatch (a non-minimal-pair task over a pair item)", () => {

@@ -154,6 +154,7 @@ function NoteCard({
   pinned,
   onPin,
   bookDocId,
+  bookId,
   noteId,
 }: {
   markdown: string;
@@ -161,11 +162,14 @@ function NoteCard({
   pinned: boolean;
   onPin: () => void;
   bookDocId: string;
+  /** The bare Book id (spec 0021-2 §2c) — `getAssetUrl` takes the book
+   * directory, not `bookDocId`'s `topic:`-prefixed document id. */
+  bookId: string;
   noteId: string;
 }) {
   return (
     <section className="note">
-      <NoteView markdown={markdown} lookup={lookup} />
+      <NoteView markdown={markdown} lookup={lookup} bookId={bookId} />
       {/* ponytail: pin is one-way — unpinning means removing SRS state,
           add when someone actually asks for it */}
       <button className="plain" disabled={pinned} onClick={onPin}>
@@ -484,6 +488,7 @@ export function UnitScreen({
                 setPinnedNoteIds(new Set([...pinnedNoteIds, note.noteId]));
               }}
               bookDocId={`topic:${content.topic.id}`}
+              bookId={content.topic.id}
               noteId={note.noteId}
             />
           ))}

@@ -52,6 +52,8 @@ export interface ValidateContentInput {
   /** Two separate stem lists (never cross-checked) so an `imageRef` can never validate against an audio file. */
   audioStems: string[];
   imageStems: string[];
+  /** Figure refs found in note markdown, per note, so a dangling one can name its note. */
+  noteImageRefs: { noteStem: string; stem: string }[];
   /** The book's domain (plan 0006): domain.json, its entries and families, and its asset stems. */
   domain: unknown;
   entries: unknown[];
@@ -638,6 +640,16 @@ export function validateContent(
       item.payload.links !== undefined
     ) {
       errors.push(`${item.id}: "links" is not allowed on a book-owned item`);
+    }
+  }
+
+  // --- dangling note figure refs (spec 0021-2 §2d), against the same
+  // `imageStemSet` item imageRefs check above ---
+  for (const ref of input.noteImageRefs) {
+    if (!imageStemSet.has(ref.stem)) {
+      errors.push(
+        `${book.code}-note-${ref.noteStem}: dangling imageRef "${ref.stem}"`,
+      );
     }
   }
 

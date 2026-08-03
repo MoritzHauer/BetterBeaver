@@ -4,7 +4,7 @@ import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { type NoteBlock, parseNoteBlocks } from "@betterbeaver/engine";
-import { NoteEditor } from "./NoteEditor";
+import { NoteEditor, type NoteAsset } from "./NoteEditor";
 
 // Indirection matters: Vite's dev-server plugin rewrites a literal
 // `new URL("...", import.meta.url)` into an `@fs/...` asset URL, which
@@ -27,7 +27,13 @@ afterEach(() => {
  * so edits actually re-render, while a spy captures every value emitted so
  * assertions can read the final markdown without reaching into React state.
  */
-function renderEditor(initial: string) {
+function renderEditor(
+  initial: string,
+  options: {
+    assets?: NoteAsset[];
+    onUploadAsset?: (file: File) => Promise<void>;
+  } = {},
+) {
   const onChange = vi.fn<(markdown: string) => void>();
   function Harness() {
     const [markdown, setMarkdown] = useState(initial);
@@ -38,6 +44,8 @@ function renderEditor(initial: string) {
           onChange(next);
           setMarkdown(next);
         }}
+        assets={options.assets}
+        onUploadAsset={options.onUploadAsset}
       />
     );
   }
@@ -209,5 +217,88 @@ describe("NoteEditor", () => {
       text: (lastBefore as { text: string }).text,
     });
     expect(after[after.length - 1]!.kind).toBe("heading");
+  });
+});
+
+describe("NoteEditor - callouts and figures (spec 0021-2)", () => {
+  it("changing a callout's variant rewrites only that block", () => {
+    const initial = "# T\n\nIntro.\n\n> [!note]\n> Body.\n\n";
+    const { last } = renderEditor(initial);
+
+    fireEvent.change(screen.getByRole("combobox"), {
+      target: { value: "warning" },
+    });
+
+    expect(last()).toBe("# T\n\nIntro.\n\n> [!warning]\n> Body.\n\n");
+  });
+
+  it("+ image is disabled with assets = []", () => {
+    renderEditor("# T\n\nBody.\n\n");
+
+    const button = screen.getByRole("button", { name: "+ image" });
+
+    expect(button.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("picking an asset inserts a figure block with that stem and an empty caption — never a typed stem", () => {
+    const asset: NoteAsset = {
+      stem: "t-photo-1",
+      name: "Lodge",
+      url: "blob:mock-1",
+    };
+    const { last } = renderEditor("# T\n\nBody.\n\n", { assets: [asset] });
+
+    fireEvent.click(screen.getByRole("button", { name: "+ image" }));
+    fireEvent.click(screen.getByRole("button", { name: "Lodge" }));
+
+    expect(last()).toBe("# T\n\nBody.\n\n[img:t-photo-1]\n\n");
+  });
+
+  it("the toolbar goes inert while a callout title is focused, instead of writing into another block", () => {
+    // Regression test: a callout's title `<input>` registers no
+    // `FocusTarget`, so without an explicit reset the toolbar stayed enabled
+    // and spliced its markers into whichever block was focused *before* —
+    // silently corrupting a block the author is not looking at.
+    const initial = "# T\n\nIntro paragraph.\n\n> [!note] MyTitle\n> Body.\n\n";
+    const { onChange } = renderEditor(initial);
+
+    const paragraph = screen
+      .getAllByRole("textbox")
+      .find(
+        (el) =>
+          el.tagName === "TEXTAREA" &&
+          (el as HTMLTextAreaElement).value === "Intro paragraph.",
+      ) as HTMLTextAreaElement;
+    fireEvent.focus(paragraph);
+    paragraph.setSelectionRange(0, 5);
+
+    fireEvent.focus(screen.getByPlaceholderText("Title (optional)"));
+
+    const bold = screen.getByRole("button", { name: "B" });
+    expect(bold.hasAttribute("disabled")).toBe(true);
+
+    fireEvent.click(bold);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("the toolbar goes inert while a figure caption is focused", () => {
+    const initial = "# T\n\nIntro paragraph.\n\n[img:a-1] MyCaption\n\n";
+    const { onChange } = renderEditor(initial, {
+      assets: [{ stem: "a-1", name: "Photo", url: "blob:mock-1" }],
+    });
+
+    const paragraph = screen
+      .getAllByRole("textbox")
+      .find((el) => el.tagName === "TEXTAREA") as HTMLTextAreaElement;
+    fireEvent.focus(paragraph);
+    paragraph.setSelectionRange(0, 5);
+
+    fireEvent.focus(screen.getByPlaceholderText("Caption (optional)"));
+
+    const bold = screen.getByRole("button", { name: "B" });
+    expect(bold.hasAttribute("disabled")).toBe(true);
+
+    fireEvent.click(bold);
+    expect(onChange).not.toHaveBeenCalled();
   });
 });

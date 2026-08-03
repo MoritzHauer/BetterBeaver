@@ -258,6 +258,7 @@ function NoteReview({
   markdown,
   fallbackStem,
   lookup,
+  bookId,
   unitId,
   applySelf,
   advance,
@@ -265,6 +266,10 @@ function NoteReview({
   markdown: string | undefined;
   fallbackStem: string;
   lookup: TapLookup;
+  /** The bare Book id (spec 0021-2 §2c), for a figure's `getAssetUrl` call —
+   * not to be confused with `AudioPlayer`/`ImageDisplay`'s own `bookId` prop
+   * above, a different component's copy of the same value. */
+  bookId: string;
   unitId: string;
   applySelf: (unitId: string, grade: SelfGrade) => Promise<void>;
   advance: () => void;
@@ -283,7 +288,7 @@ function NoteReview({
   return (
     <div>
       {markdown !== undefined ? (
-        <NoteView markdown={markdown} lookup={lookup} />
+        <NoteView markdown={markdown} lookup={lookup} bookId={bookId} />
       ) : (
         <p className="prompt">{fallbackStem}</p>
       )}
@@ -827,6 +832,7 @@ function renderInteraction(
           markdown={getNoteMarkdown(bookId, question.stem)}
           fallbackStem={question.stem}
           lookup={lookup}
+          bookId={bookId}
           unitId={question.unitId}
           applySelf={applySelf}
           advance={advance}

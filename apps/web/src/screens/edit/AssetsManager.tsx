@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { type BookDocument, type DomainDocument } from "@betterbeaver/schema";
+import { noteImageStems } from "@betterbeaver/engine";
+import { noteTitle } from "../../content/noteTitle";
 import { type Entity } from "./types";
 
 /** Kind label for display, from the blob's MIME type — same "image vs.
@@ -29,9 +31,14 @@ export function formatBytes(bytes: number): string {
 export const MAX_ASSET_BYTES = 10 * 1024 * 1024;
 
 /** Item/entry ids (book items and domain entries) whose audioRef/imageRef —
- * including a pair item's nested a/b sides — points at `stem`, so the Assets
- * manager's delete confirm can name what a deletion would break (plan
- * 0017 §4: "the author should hear that before it happens, not after"). */
+ * including a pair item's nested a/b sides — points at `stem`, plus a note's
+ * title for each note whose markdown figures (`[img:stem]`, spec 0021-2 §2e)
+ * use it, so the Assets manager's delete confirm can name what a deletion
+ * would break (plan 0017 §4: "the author should hear that before it happens,
+ * not after"). Notes return a human title where item/entry matches return
+ * raw ids — accepted as-is (item ids have been UUIDs since spec 0018 and
+ * are already unhelpful here; fixing that generally is slice 10's
+ * error-deep-linking work, not this one). */
 export function assetReferences(
   book: BookDocument,
   domain: DomainDocument,
@@ -65,6 +72,11 @@ export function assetReferences(
   }
   for (const entry of domain.entries as Entity[]) {
     check(entry);
+  }
+  for (const note of book.notes) {
+    if (noteImageStems(note.markdown).includes(stem)) {
+      refs.push(noteTitle(note.markdown, note.stem));
+    }
   }
   return refs;
 }

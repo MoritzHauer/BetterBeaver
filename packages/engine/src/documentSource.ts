@@ -8,6 +8,7 @@ import {
 } from "@betterbeaver/schema";
 import { symmetricLinks } from "./domain.js";
 import type { DomainContent } from "./domain.js";
+import { noteImageStems } from "./noteBlocks.js";
 import {
   ContentValidationError,
   type ContentSource,
@@ -202,6 +203,12 @@ export function createDocumentContentSource(
       noteStems: doc.notes.map((note) => note.stem),
       audioStems: assets.audioByBook.get(key) ?? [],
       imageStems: assets.imageByBook.get(key) ?? [],
+      noteImageRefs: doc.notes.flatMap((note) =>
+        noteImageStems(note.markdown).map((stem) => ({
+          noteStem: note.stem,
+          stem,
+        })),
+      ),
       domain: domainDoc?.domain,
       entries: domainDoc?.entries ?? [],
       families: domainDoc?.families ?? [],

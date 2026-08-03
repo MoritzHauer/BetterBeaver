@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
   type NoteBlock,
+  noteImageStems,
   normalizeSeparators,
   parseNoteBlocks,
   renderNoteBlock,
@@ -65,6 +66,16 @@ describe("parseNoteBlocks / serializeNoteBlocks round-trip", () => {
 
   it("round-trips an empty string", () => {
     roundTrips("");
+  });
+
+  it("round-trips a callout whose body wraps across lines and one with no title", () => {
+    roundTrips(
+      "# T\n\n> [!tip] Handy\n> line one\n> line two\n\n> quoted line\n\n",
+    );
+  });
+
+  it("round-trips figures with and without a caption", () => {
+    roundTrips("# T\n\n[img:dx-3f9a2c4b] A caption.\n\n[img:ab-000001]\n\n");
   });
 });
 
@@ -218,14 +229,18 @@ describe("move regression (a real note, not a fixture ending in \\n\\n)", () => 
         ? b.items.join("|")
         : b.kind === "table"
           ? JSON.stringify(b.rows)
-          : b.text,
+          : b.kind === "figure"
+            ? `${b.stem}|${b.caption}`
+            : b.text,
     );
     const originalTexts = blocks.map((b) =>
       b.kind === "list"
         ? b.items.join("|")
         : b.kind === "table"
           ? JSON.stringify(b.rows)
-          : b.text,
+          : b.kind === "figure"
+            ? `${b.stem}|${b.caption}`
+            : b.text,
     );
     expect(new Set(reparsedTexts)).toEqual(new Set(originalTexts));
   });
@@ -281,5 +296,191 @@ describe("renderNoteBlock", () => {
         raw: "",
       }),
     ).toBe("| a | b |\n| --- | --- |\n| c | d |\n\n");
+    expect(
+      renderNoteBlock({
+        kind: "callout",
+        variant: "tip",
+        title: "Handy",
+        text: "Body.",
+        raw: "",
+      }),
+    ).toBe("> [!tip] Handy\n> Body.\n\n");
+    expect(
+      renderNoteBlock({
+        kind: "callout",
+        variant: "note",
+        title: "",
+        text: "Body.",
+        raw: "",
+      }),
+    ).toBe("> [!note]\n> Body.\n\n");
+    expect(
+      renderNoteBlock({
+        kind: "figure",
+        stem: "dx-3f9a2c4b",
+        caption: "A caption.",
+        raw: "",
+      }),
+    ).toBe("[img:dx-3f9a2c4b] A caption.\n\n");
+    expect(
+      renderNoteBlock({
+        kind: "figure",
+        stem: "dx-3f9a2c4b",
+        caption: "",
+        raw: "",
+      }),
+    ).toBe("[img:dx-3f9a2c4b]\n\n");
+  });
+});
+
+describe("callouts (spec 0021-2 §1)", () => {
+  it("parses variant, title, and a multi-line wrapped body", () => {
+    const md = "# T\n\n> [!tip] Handy\n> line one\n> line two\n\n";
+    const callout = parseNoteBlocks(md).find((b) => b.kind === "callout");
+
+    expect(callout).toEqual({
+      kind: "callout",
+      variant: "tip",
+      title: "Handy",
+      text: "line one line two",
+      raw: "> [!tip] Handy\n> line one\n> line two\n\n",
+    });
+  });
+
+  it("an unrecognised variant (rule 4) parses as `note`, the tag rendering literally as body text", () => {
+    const callout = parseNoteBlocks("# T\n\n> [!danger] x\n\n").find(
+      (b) => b.kind === "callout",
+    );
+
+    expect(callout).toMatchObject({
+      variant: "note",
+      title: "",
+      text: "[!danger] x",
+    });
+  });
+
+  it("a bare `> quoted line` (no tag) parses as a `note` callout with an empty title", () => {
+    const callout = parseNoteBlocks("# T\n\n> quoted line\n\n").find(
+      (b) => b.kind === "callout",
+    );
+
+    expect(callout).toMatchObject({
+      variant: "note",
+      title: "",
+      text: "quoted line",
+    });
+  });
+
+  it("interrupts an open paragraph without a blank line, like `## `/`|`/`- `", () => {
+    const md =
+      "# T\n\nSome paragraph text.\n> [!warning] Watch out\n> Body.\n\n";
+    const blocks = parseNoteBlocks(md);
+
+    expect(blocks.map((b) => b.kind)).toEqual([
+      "title",
+      "paragraph",
+      "callout",
+    ]);
+    expect(blocks[1]).toMatchObject({
+      kind: "paragraph",
+      text: "Some paragraph text.",
+    });
+    expect(blocks[2]).toMatchObject({ kind: "callout", variant: "warning" });
+  });
+});
+
+describe("figures (spec 0021-2 §2)", () => {
+  it("parses a figure with a caption", () => {
+    const figure = parseNoteBlocks(
+      "# T\n\n[img:dx-3f9a2c4b] A beaver lodge.\n\n",
+    ).find((b) => b.kind === "figure");
+
+    expect(figure).toEqual({
+      kind: "figure",
+      stem: "dx-3f9a2c4b",
+      caption: "A beaver lodge.",
+      raw: "[img:dx-3f9a2c4b] A beaver lodge.\n\n",
+    });
+  });
+
+  it("parses a figure with no caption", () => {
+    const figure = parseNoteBlocks("# T\n\n[img:dx-3f9a2c4b]\n\n").find(
+      (b) => b.kind === "figure",
+    );
+
+    expect(figure).toMatchObject({ stem: "dx-3f9a2c4b", caption: "" });
+  });
+
+  it("does not treat a mid-sentence `[img:...]` as a figure (blocks only)", () => {
+    const blocks = parseNoteBlocks(
+      "# T\n\nLook at [img:dx-3f9a2c4b] here.\n\n",
+    );
+
+    expect(blocks.some((b) => b.kind === "figure")).toBe(false);
+    expect(blocks.find((b) => b.kind === "paragraph")).toMatchObject({
+      text: "Look at [img:dx-3f9a2c4b] here.",
+    });
+  });
+});
+
+describe("noteImageStems", () => {
+  it("finds every figure in document order", () => {
+    const md =
+      "# T\n\n[img:aaa-1111] first.\n\nSome text.\n\n[img:bbb-2222]\n\n[img:ccc-3333] third.\n\n";
+
+    expect(noteImageStems(md)).toEqual(["aaa-1111", "bbb-2222", "ccc-3333"]);
+  });
+
+  it("returns [] for a note with no figures", () => {
+    expect(noteImageStems("# T\n\nJust prose.\n\n")).toEqual([]);
+  });
+});
+
+describe("editing a callout or figure leaves siblings' raw untouched (spec 0021-2)", () => {
+  const md =
+    "# T\n\nIntro paragraph.\n\n> [!tip] Handy\n> Original body.\n\n[img:dx-3f9a2c4b] Original caption.\n\nOutro paragraph.\n\n";
+
+  it("editing the callout's text leaves the figure's and paragraphs' raw untouched", () => {
+    const blocks = parseNoteBlocks(md);
+    const editIndex = blocks.findIndex((b) => b.kind === "callout");
+    const original = blocks[editIndex];
+    if (original === undefined || original.kind !== "callout") {
+      throw new Error("fixture must contain a callout block");
+    }
+
+    const edited: NoteBlock = { ...original, text: "Edited body." };
+    const rendered: NoteBlock = { ...edited, raw: renderNoteBlock(edited) };
+    const next = normalizeSeparators(
+      blocks.map((b, i) => (i === editIndex ? rendered : b)),
+    );
+
+    blocks.forEach((block, i) => {
+      if (i === editIndex) {
+        return;
+      }
+      expect(next[i]?.raw).toBe(block.raw);
+    });
+  });
+
+  it("editing the figure's caption leaves the callout's and paragraphs' raw untouched", () => {
+    const blocks = parseNoteBlocks(md);
+    const editIndex = blocks.findIndex((b) => b.kind === "figure");
+    const original = blocks[editIndex];
+    if (original === undefined || original.kind !== "figure") {
+      throw new Error("fixture must contain a figure block");
+    }
+
+    const edited: NoteBlock = { ...original, caption: "Edited caption." };
+    const rendered: NoteBlock = { ...edited, raw: renderNoteBlock(edited) };
+    const next = normalizeSeparators(
+      blocks.map((b, i) => (i === editIndex ? rendered : b)),
+    );
+
+    blocks.forEach((block, i) => {
+      if (i === editIndex) {
+        return;
+      }
+      expect(next[i]?.raw).toBe(block.raw);
+    });
   });
 });

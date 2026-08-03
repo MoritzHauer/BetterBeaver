@@ -67,6 +67,15 @@
   --incorrect-bg: rgba(198, 40, 40, 0.12);
   --incorrect-fill: #c62828;
   --on-fill: #ffffff;
+  /* Callout tints (spec 0021-2 §1d): the same border+translucent-bg
+   * pattern as --correct/--incorrect, one per variant — `warning` reuses
+   * --incorrect-border/-bg outright (red already means "danger" here);
+   * `note`/`tip`/`example` reuse --vocab/--accent/--recall as their border
+   * (each already the right hue for the feeling) and only need a matching
+   * translucent bg, which none of those three had before. */
+  --callout-note-bg: rgba(58, 98, 143, 0.12);
+  --callout-tip-bg: rgba(156, 92, 6, 0.12);
+  --callout-example-bg: rgba(106, 76, 147, 0.12);
   /* Text-on-background tokens (ui-review 2026-07-19): fills are for
    * surfaces under --on-fill, never for text — these are the AA text/border
    * counterparts per theme. */
@@ -115,6 +124,9 @@
   --incorrect-bg: rgba(239, 83, 80, 0.15);
   --incorrect-fill: #8e1f1c;
   --on-fill: #ffffff;
+  --callout-note-bg: rgba(142, 194, 238, 0.15);
+  --callout-tip-bg: rgba(240, 162, 74, 0.15);
+  --callout-example-bg: rgba(179, 157, 219, 0.15);
   --error-text: #ef5350;
   --done-text: #4caf50;
   --input-border: #767061;
@@ -330,6 +342,59 @@ section.card {
  * Kyrgyz sentences); scroll it instead of blowing out the page. */
 .note-table {
   overflow-x: auto;
+}
+
+/* Callout (spec 0021-2 §1d): a tinted panel, glyph leading the title row —
+ * one accent per variant, via the --callout-*-bg tokens above (borders reuse
+ * --vocab/--accent/--incorrect-border/--recall directly). */
+.note-callout {
+  display: block;
+  border: 1px solid;
+  border-radius: 0.75rem;
+  padding: 0.75rem 1rem;
+  margin: 1rem 0;
+}
+
+.note-callout .icon-glyph {
+  margin-right: 0.4rem;
+}
+
+.note-callout.note {
+  border-color: var(--vocab);
+  background: var(--callout-note-bg);
+}
+
+.note-callout.tip {
+  border-color: var(--accent);
+  background: var(--callout-tip-bg);
+}
+
+.note-callout.warning {
+  border-color: var(--incorrect-border);
+  background: var(--incorrect-bg);
+}
+
+.note-callout.example {
+  border-color: var(--recall);
+  background: var(--callout-example-bg);
+}
+
+/* Figure (spec 0021-2 §2c): same overflow guard as the asset manager's own
+ * previews (`.asset-list img`) — an author-picked photo can be much wider
+ * than a phone. */
+.note-figure {
+  margin: 1rem 0;
+}
+
+.note-figure img {
+  max-width: 100%;
+  display: block;
+}
+
+.note-figure figcaption {
+  font-size: 0.85rem;
+  color: var(--locked-fg);
+  margin-top: 0.25rem;
 }
 
 .usage-note {
@@ -1356,6 +1421,16 @@ input[type="email"],
   max-height: 8rem;
   object-fit: contain;
   display: block;
+}
+
+/* NoteEditor's `+ image` picker and a figure block's own preview (spec
+ * 0021-2 §2f/§2g) — same overflow concern as `.asset-list img`, smaller. */
+.asset-thumb {
+  max-width: 4rem;
+  max-height: 4rem;
+  object-fit: contain;
+  vertical-align: middle;
+  margin-right: 0.35rem;
 }
 
 .editor-publish {

@@ -247,16 +247,32 @@ export function MaintainEditScreen({
   // When `record.published` is null, the (possibly-topic) slot falls back to
   // the same empty stand-in, so "nothing published" naturally means
   // "nothing found" with no separate branch needed.
+  // Full literals, not `{items: []} as unknown as BookDocument`: the cast
+  // silently accepted a stand-in missing `notes`, which crashed the moment
+  // `assetReferences` grew a note scan (spec 0021-2 §2e). Every field is
+  // present so the next scan to be added cannot repeat that.
+  const emptyBook: BookDocument = {
+    topic: {},
+    lessons: [],
+    units: [],
+    items: [],
+    tasks: [],
+    resources: [],
+    notes: [],
+  };
+  const emptyDomain: DomainDocument = {
+    domain: {},
+    entries: [],
+    families: [],
+  };
   const publishedBook: BookDocument =
     record.kind === "topic"
-      ? ((record.published as BookDocument | null) ??
-        ({ items: [] } as unknown as BookDocument))
-      : ({ items: [] } as unknown as BookDocument);
+      ? ((record.published as BookDocument | null) ?? emptyBook)
+      : emptyBook;
   const publishedDomain: DomainDocument =
     record.kind === "domain"
-      ? ((record.published as DomainDocument | null) ??
-        ({ entries: [] } as unknown as DomainDocument))
-      : ({ entries: [] } as unknown as DomainDocument);
+      ? ((record.published as DomainDocument | null) ?? emptyDomain)
+      : emptyDomain;
 
   const deleteBlockedBy = (stem: string) =>
     assetReferences(publishedBook, publishedDomain, stem);
@@ -383,6 +399,11 @@ export function MaintainEditScreen({
         setView={setView}
         onChange={change}
         domainEntries={domainEntries}
+        // Images only: a figure's stem validates against `imageStemSet`, so
+        // offering an audio stem in the `+ image` picker would author a
+        // guaranteed `dangling imageRef` (spec 0021-2 §2d).
+        assets={assetViews.filter((asset) => asset.kind === "image")}
+        onUploadAsset={handleAssetAdd}
       />
     ) : (
       <DomainEditor

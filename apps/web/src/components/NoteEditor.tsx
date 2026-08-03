@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  CALLOUT_VARIANTS,
+  type CalloutVariant,
   type NoteBlock,
   normalizeSeparators,
   parseNoteBlocks,
@@ -10,6 +12,15 @@ import { NOTE_ICONS } from "../content/noteIcons";
 import { RowActions } from "../screens/edit/fields";
 
 type FieldElement = HTMLInputElement | HTMLTextAreaElement;
+
+/** A deliberate subset of `AssetView` (`apps/web/src/screens/edit/AssetsManager.tsx`),
+ * not a re-export — keeps this component from depending on the assets
+ * manager (spec 0021-2 §2f). */
+export interface NoteAsset {
+  stem: string;
+  name: string;
+  url: string;
+}
 
 /**
  * Where the selection toolbar (spec 0021-1 §4) acts: which block, and for a
@@ -67,13 +78,17 @@ function resolveApply(
     if (
       block.kind !== "title" &&
       block.kind !== "heading" &&
-      block.kind !== "paragraph"
+      block.kind !== "paragraph" &&
+      block.kind !== "callout"
     ) {
       return null;
     }
     return (next) =>
       updateAt(blocks, target.blockIndex, (b) =>
-        b.kind === "title" || b.kind === "heading" || b.kind === "paragraph"
+        b.kind === "title" ||
+        b.kind === "heading" ||
+        b.kind === "paragraph" ||
+        b.kind === "callout"
           ? { ...b, text: next }
           : b,
       );
@@ -116,9 +131,17 @@ function resolveApply(
 export function NoteEditor({
   markdown,
   onChange,
+  assets = [],
+  onUploadAsset,
 }: {
   markdown: string;
   onChange: (markdown: string) => void;
+  /** Images available to this document. Empty disables `+ image` (spec
+   * 0021-2 §2f). */
+  assets?: NoteAsset[];
+  /** Absent means uploads are unavailable in this mode (propose, spec
+   * 0021-2 §2f). */
+  onUploadAsset?: (file: File) => Promise<void>;
 }) {
   // ponytail: re-parses the whole note per keystroke — ~8 blocks on the
   // longest real note. Memoize on `markdown` only if a note ever gets large
@@ -134,6 +157,7 @@ export function NoteEditor({
   const [hasFocused, setHasFocused] = useState(false);
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const [iconSearch, setIconSearch] = useState("");
+  const [imagePickerOpen, setImagePickerOpen] = useState(false);
 
   // Restores the caret/selection a toolbar button spliced markers around,
   // after the controlled re-render that follows `onChange` — see
@@ -151,6 +175,19 @@ export function NoteEditor({
   const focus = (target: FocusTarget) => {
     focusRef.current = target;
     setHasFocused(true);
+  };
+
+  /** Fields the toolbar cannot act on (a callout's title, a figure's
+   * caption) must clear the target rather than leave the previous one
+   * standing — otherwise B/Аү/icon stay enabled and splice their markers
+   * into whichever block was focused before, silently corrupting a block
+   * the author is not looking at. Registering a `FocusTarget` instead would
+   * be worse: `resolveApply` maps a callout to its `text`, so bolding in the
+   * title would splice into the body. Spec 0021-1 §1c pins the toolbar to
+   * the body textarea only. */
+  const blurToolbar = () => {
+    focusRef.current = null;
+    setHasFocused(false);
   };
 
   /** A structured-field edit: regenerates the touched block's `raw` (spec
@@ -194,7 +231,9 @@ export function NoteEditor({
     commitStructural(blocks.filter((_, i) => i !== index));
   };
 
-  const addBlock = (kind: "paragraph" | "heading" | "list" | "table") => {
+  const addBlock = (
+    kind: "paragraph" | "heading" | "list" | "table" | "callout",
+  ) => {
     // Seeds must be non-empty: `renderNoteBlock` on an empty paragraph is
     // just "\n\n" (no block for the next parse to find — it gets absorbed
     // as blank lines onto whatever came before), and an empty heading/list
@@ -203,7 +242,10 @@ export function NoteEditor({
     // placeholder text round-trips correctly, same idea as `"# New
     // note\n\n"` for a brand-new note. A 1x1 table has real content in
     // neither sense — an empty cell already round-trips fine — so it's the
-    // one kind that can stay empty.
+    // one kind that can stay empty. A callout's marker line is its
+    // `[!variant]` tag, which survives `trim()` regardless of body length,
+    // so it doesn't strictly need this either — seeded anyway so a freshly
+    // added box isn't just a blank aside.
     const fresh: NoteBlock =
       kind === "paragraph"
         ? { kind: "paragraph", text: "New paragraph", raw: "" }
@@ -211,8 +253,53 @@ export function NoteEditor({
           ? { kind: "heading", text: "New heading", raw: "" }
           : kind === "list"
             ? { kind: "list", items: ["New item"], raw: "" }
-            : { kind: "table", rows: [[""]], raw: "" };
+            : kind === "table"
+              ? { kind: "table", rows: [[""]], raw: "" }
+              : {
+                  kind: "callout",
+                  variant: "note",
+                  title: "",
+                  text: "New callout",
+                  raw: "",
+                };
     commitEdit([...blocks, fresh], blocks.length);
+  };
+
+  const editCalloutVariant = (index: number, variant: CalloutVariant) => {
+    commitEdit(
+      updateAt(blocks, index, (b) =>
+        b.kind === "callout" ? { ...b, variant } : b,
+      ),
+      index,
+    );
+  };
+
+  const editCalloutTitle = (index: number, title: string) => {
+    commitEdit(
+      updateAt(blocks, index, (b) =>
+        b.kind === "callout" ? { ...b, title } : b,
+      ),
+      index,
+    );
+  };
+
+  const editFigureCaption = (index: number, caption: string) => {
+    commitEdit(
+      updateAt(blocks, index, (b) =>
+        b.kind === "figure" ? { ...b, caption } : b,
+      ),
+      index,
+    );
+  };
+
+  /** `+ image` picks an already-uploaded asset (spec 0021-2 §2f) — a stem is
+   * never typed. */
+  const addImageBlock = (stem: string) => {
+    commitEdit(
+      [...blocks, { kind: "figure", stem, caption: "", raw: "" }],
+      blocks.length,
+    );
+    setImagePickerOpen(false);
   };
 
   const moveItem = (blockIndex: number, itemIndex: number, delta: -1 | 1) => {
@@ -446,171 +533,241 @@ export function NoteEditor({
         </div>
       )}
       <ul className="editor-list">
-        {blocks.map((block, index) => (
-          // No stable id exists per block (the pinned `NoteBlock` type has
-          // none, matching `NoteView`'s own `key={index}`) — index is fine
-          // here since content always re-derives from `markdown`.
-          <li key={index} className="note-editor-block">
-            {block.kind === "title" || block.kind === "heading" ? (
-              <input
-                type="text"
-                value={block.text}
-                onFocus={(e) =>
-                  focus({
-                    element: e.currentTarget,
-                    kind: "text",
-                    blockIndex: index,
-                  })
-                }
-                onChange={(e) =>
-                  editField(
-                    {
+        {blocks.map((block, index) => {
+          // Only read for a "figure" block, below — computed once here so
+          // the JSX doesn't repeat the lookup (spec 0021-2 §2g: the editor
+          // shows the picker's own `url`, never `getAssetUrl`).
+          const figureAsset =
+            block.kind === "figure"
+              ? assets.find((a) => a.stem === block.stem)
+              : undefined;
+          return (
+            // No stable id exists per block (the pinned `NoteBlock` type has
+            // none, matching `NoteView`'s own `key={index}`) — index is fine
+            // here since content always re-derives from `markdown`.
+            <li key={index} className="note-editor-block">
+              {block.kind === "title" || block.kind === "heading" ? (
+                <input
+                  type="text"
+                  value={block.text}
+                  onFocus={(e) =>
+                    focus({
                       element: e.currentTarget,
                       kind: "text",
                       blockIndex: index,
-                    },
-                    e.target.value,
-                  )
-                }
-              />
-            ) : block.kind === "paragraph" ? (
-              <textarea
-                rows={3}
-                value={block.text}
-                onFocus={(e) =>
-                  focus({
-                    element: e.currentTarget,
-                    kind: "text",
-                    blockIndex: index,
-                  })
-                }
-                onChange={(e) =>
-                  editField(
-                    {
+                    })
+                  }
+                  onChange={(e) =>
+                    editField(
+                      {
+                        element: e.currentTarget,
+                        kind: "text",
+                        blockIndex: index,
+                      },
+                      e.target.value,
+                    )
+                  }
+                />
+              ) : block.kind === "paragraph" ? (
+                <textarea
+                  rows={3}
+                  value={block.text}
+                  onFocus={(e) =>
+                    focus({
                       element: e.currentTarget,
                       kind: "text",
                       blockIndex: index,
-                    },
-                    e.target.value,
-                  )
-                }
-              />
-            ) : block.kind === "list" ? (
-              <div className="note-editor-list-block">
-                <ul className="editor-list">
-                  {block.items.map((item, itemIndex) => (
-                    <li key={itemIndex}>
-                      <input
-                        type="text"
-                        value={item}
-                        onFocus={(e) =>
-                          focus({
-                            element: e.currentTarget,
-                            kind: "item",
-                            blockIndex: index,
-                            itemIndex,
-                          })
-                        }
-                        onChange={(e) =>
-                          editField(
-                            {
+                    })
+                  }
+                  onChange={(e) =>
+                    editField(
+                      {
+                        element: e.currentTarget,
+                        kind: "text",
+                        blockIndex: index,
+                      },
+                      e.target.value,
+                    )
+                  }
+                />
+              ) : block.kind === "list" ? (
+                <div className="note-editor-list-block">
+                  <ul className="editor-list">
+                    {block.items.map((item, itemIndex) => (
+                      <li key={itemIndex}>
+                        <input
+                          type="text"
+                          value={item}
+                          onFocus={(e) =>
+                            focus({
                               element: e.currentTarget,
                               kind: "item",
                               blockIndex: index,
                               itemIndex,
-                            },
-                            e.target.value,
-                          )
-                        }
-                      />
-                      <RowActions
-                        onUp={
-                          itemIndex > 0
-                            ? () => moveItem(index, itemIndex, -1)
-                            : undefined
-                        }
-                        onDown={
-                          itemIndex < block.items.length - 1
-                            ? () => moveItem(index, itemIndex, 1)
-                            : undefined
-                        }
-                        onRemove={() => removeItem(index, itemIndex)}
-                        removeLabel="Delete item"
-                      />
-                    </li>
-                  ))}
-                </ul>
-                <button
-                  type="button"
-                  className="editor-add"
-                  onClick={() => addItem(index)}
-                >
-                  + item
-                </button>
-              </div>
-            ) : (
-              <div className="note-editor-table-block">
-                {block.rows.map((row, rowIndex) => (
-                  <div className="note-editor-table-row" key={rowIndex}>
-                    {row.map((cell, colIndex) => (
-                      <input
-                        key={colIndex}
-                        type="text"
-                        value={cell}
-                        onFocus={(e) =>
-                          focus({
-                            element: e.currentTarget,
-                            kind: "cell",
-                            blockIndex: index,
-                            row: rowIndex,
-                            col: colIndex,
-                          })
-                        }
-                        onChange={(e) =>
-                          editField(
-                            {
+                            })
+                          }
+                          onChange={(e) =>
+                            editField(
+                              {
+                                element: e.currentTarget,
+                                kind: "item",
+                                blockIndex: index,
+                                itemIndex,
+                              },
+                              e.target.value,
+                            )
+                          }
+                        />
+                        <RowActions
+                          onUp={
+                            itemIndex > 0
+                              ? () => moveItem(index, itemIndex, -1)
+                              : undefined
+                          }
+                          onDown={
+                            itemIndex < block.items.length - 1
+                              ? () => moveItem(index, itemIndex, 1)
+                              : undefined
+                          }
+                          onRemove={() => removeItem(index, itemIndex)}
+                          removeLabel="Delete item"
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                  <button
+                    type="button"
+                    className="editor-add"
+                    onClick={() => addItem(index)}
+                  >
+                    + item
+                  </button>
+                </div>
+              ) : block.kind === "callout" ? (
+                <div className="note-editor-callout-block">
+                  <select
+                    value={block.variant}
+                    onChange={(e) =>
+                      editCalloutVariant(
+                        index,
+                        e.target.value as CalloutVariant,
+                      )
+                    }
+                  >
+                    {CALLOUT_VARIANTS.map((variant) => (
+                      <option key={variant} value={variant}>
+                        {variant}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="text"
+                    placeholder="Title (optional)"
+                    value={block.title}
+                    onFocus={blurToolbar}
+                    onChange={(e) => editCalloutTitle(index, e.target.value)}
+                  />
+                  <textarea
+                    rows={3}
+                    value={block.text}
+                    onFocus={(e) =>
+                      focus({
+                        element: e.currentTarget,
+                        kind: "text",
+                        blockIndex: index,
+                      })
+                    }
+                    onChange={(e) =>
+                      editField(
+                        {
+                          element: e.currentTarget,
+                          kind: "text",
+                          blockIndex: index,
+                        },
+                        e.target.value,
+                      )
+                    }
+                  />
+                </div>
+              ) : block.kind === "figure" ? (
+                <div className="note-editor-figure-block">
+                  {figureAsset !== undefined ? (
+                    <img className="asset-thumb" src={figureAsset.url} alt="" />
+                  ) : (
+                    <p className="status">Image not available: {block.stem}</p>
+                  )}
+                  <input
+                    type="text"
+                    placeholder="Caption (optional)"
+                    value={block.caption}
+                    onFocus={blurToolbar}
+                    onChange={(e) => editFigureCaption(index, e.target.value)}
+                  />
+                </div>
+              ) : (
+                <div className="note-editor-table-block">
+                  {block.rows.map((row, rowIndex) => (
+                    <div className="note-editor-table-row" key={rowIndex}>
+                      {row.map((cell, colIndex) => (
+                        <input
+                          key={colIndex}
+                          type="text"
+                          value={cell}
+                          onFocus={(e) =>
+                            focus({
                               element: e.currentTarget,
                               kind: "cell",
                               blockIndex: index,
                               row: rowIndex,
                               col: colIndex,
-                            },
-                            e.target.value,
-                          )
-                        }
+                            })
+                          }
+                          onChange={(e) =>
+                            editField(
+                              {
+                                element: e.currentTarget,
+                                kind: "cell",
+                                blockIndex: index,
+                                row: rowIndex,
+                                col: colIndex,
+                              },
+                              e.target.value,
+                            )
+                          }
+                        />
+                      ))}
+                      <RowActions
+                        onRemove={() => removeRow(index, rowIndex)}
+                        removeLabel="Delete row"
                       />
-                    ))}
-                    <RowActions
-                      onRemove={() => removeRow(index, rowIndex)}
-                      removeLabel="Delete row"
-                    />
+                    </div>
+                  ))}
+                  <div className="editor-add">
+                    <button type="button" onClick={() => addRow(index)}>
+                      + row
+                    </button>
+                    <button type="button" onClick={() => addColumn(index)}>
+                      + column
+                    </button>
+                    <button type="button" onClick={() => removeColumn(index)}>
+                      - column
+                    </button>
                   </div>
-                ))}
-                <div className="editor-add">
-                  <button type="button" onClick={() => addRow(index)}>
-                    + row
-                  </button>
-                  <button type="button" onClick={() => addColumn(index)}>
-                    + column
-                  </button>
-                  <button type="button" onClick={() => removeColumn(index)}>
-                    - column
-                  </button>
                 </div>
-              </div>
-            )}
-            <RowActions
-              onUp={index > 0 ? () => moveBlock(index, -1) : undefined}
-              onDown={
-                index < blocks.length - 1
-                  ? () => moveBlock(index, 1)
-                  : undefined
-              }
-              onRemove={() => removeBlock(index)}
-              removeLabel="Delete block"
-            />
-          </li>
-        ))}
+              )}
+              <RowActions
+                onUp={index > 0 ? () => moveBlock(index, -1) : undefined}
+                onDown={
+                  index < blocks.length - 1
+                    ? () => moveBlock(index, 1)
+                    : undefined
+                }
+                onRemove={() => removeBlock(index)}
+                removeLabel="Delete block"
+              />
+            </li>
+          );
+        })}
       </ul>
       <div className="editor-add">
         <button type="button" onClick={() => addBlock("paragraph")}>
@@ -625,7 +782,54 @@ export function NoteEditor({
         <button type="button" onClick={() => addBlock("table")}>
           + table
         </button>
+        <button type="button" onClick={() => addBlock("callout")}>
+          + box
+        </button>
+        <button
+          type="button"
+          disabled={assets.length === 0}
+          onClick={() => setImagePickerOpen((open) => !open)}
+        >
+          + image
+        </button>
       </div>
+      {/* No "add one in Assets" hint: propose mode has no assets manager at
+          all (Storage RLS is maintainer-only), so pointing there would
+          misdirect exactly the reader §2f's reason exists to inform. */}
+      {assets.length === 0 && (
+        <p className="status">No images available to insert.</p>
+      )}
+      {imagePickerOpen && (
+        <div className="note-editor-image-picker">
+          {onUploadAsset !== undefined && (
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (file !== undefined) {
+                  void onUploadAsset(file);
+                }
+              }}
+            />
+          )}
+          <ul className="editor-list">
+            {assets.map((asset) => (
+              <li key={asset.stem}>
+                <button
+                  type="button"
+                  className="plain"
+                  onClick={() => addImageBlock(asset.stem)}
+                >
+                  <img className="asset-thumb" src={asset.url} alt="" />
+                  {asset.name}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

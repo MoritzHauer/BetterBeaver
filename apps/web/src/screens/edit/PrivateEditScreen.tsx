@@ -380,6 +380,11 @@ export function PrivateEditScreen({
           onChange={changeBook}
           hideCoverArt
           domainEntries={domain.entries}
+          // Images only: a figure's stem validates against `imageStemSet`,
+          // so offering an audio stem in the `+ image` picker would author a
+          // guaranteed `dangling imageRef` (spec 0021-2 §2d).
+          assets={assetViews.filter((asset) => asset.kind === "image")}
+          onUploadAsset={handleAssetAdd}
         />
       )}
       {validationErrors.length > 0 && (

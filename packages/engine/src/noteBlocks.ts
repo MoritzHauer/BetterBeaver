@@ -28,7 +28,33 @@ export type NoteBlock =
   | { kind: "heading"; text: string; raw: string }
   | { kind: "paragraph"; text: string; raw: string }
   | { kind: "list"; items: string[]; raw: string }
-  | { kind: "table"; rows: string[][]; raw: string };
+  | { kind: "table"; rows: string[][]; raw: string }
+  | {
+      kind: "callout";
+      variant: CalloutVariant;
+      title: string;
+      text: string;
+      raw: string;
+    }
+  | { kind: "figure"; stem: string; caption: string; raw: string };
+
+/** A tinted, glyph-led aside (spec 0021-2 §1). `note` is also the fallback
+ * for an unrecognised `[!variant]` tag (rule 4) and for a bare `> quoted
+ * line` with no tag at all. */
+export const CALLOUT_VARIANTS = ["note", "tip", "warning", "example"] as const;
+export type CalloutVariant = (typeof CALLOUT_VARIANTS)[number];
+
+/** First line of a callout run: `[!variant] optional title`. Checked against
+ * the line's content *after* stripping its leading `> `, first line only
+ * (spec 0021-2 §1a rule 3) — an unrecognised variant (rule 4) simply fails
+ * this match and falls through to plain body text. */
+const CALLOUT_TAG = /^\[!(note|tip|warning|example)\]\s*(.*)$/;
+
+/** `[img:stem] optional caption` — a figure is a whole line, never an inline
+ * run (spec 0021-2 §2a): the different `img:` prefix (vs. `icon:`) is what
+ * keeps `parseInline`'s icon regex in `NoteView.tsx` from ever matching it,
+ * so that parser is untouched. */
+const FIGURE_LINE = /^\[img:([a-z0-9]+(?:-[a-z0-9]+)*)\]\s*(.*)$/;
 
 /** A `| --- | :--- |` alignment row, which carries no content. */
 function isTableRule(cells: string[]): boolean {
@@ -148,6 +174,46 @@ export function parseNoteBlocks(markdown: string): NoteBlock[] {
       continue;
     }
 
+    if (trimmed.startsWith(">")) {
+      // Rule 2: strip the leading `>` and one optional following space.
+      const content = trimmed.slice(1).replace(/^ /, "");
+      if (last !== null && last.kind === "callout") {
+        last.text = last.text === "" ? content : `${last.text} ${content}`;
+        last.raw += raw;
+      } else {
+        // First line only (rule 3); an unrecognised variant (rule 4) fails
+        // this match and the whole line becomes body text instead.
+        const tag = CALLOUT_TAG.exec(content);
+        const block: NoteBlock = {
+          kind: "callout",
+          variant: tag !== null ? (tag[1] as CalloutVariant) : "note",
+          title: tag !== null ? (tag[2] ?? "") : "",
+          text: tag !== null ? "" : content,
+          raw: pendingPrefix + raw,
+        };
+        pendingPrefix = "";
+        blocks.push(block);
+        last = block;
+      }
+      continue;
+    }
+
+    const figureMatch = FIGURE_LINE.exec(trimmed);
+    if (figureMatch !== null) {
+      // Never merges with a preceding figure — one line is one block,
+      // same as a heading or title line.
+      const block: NoteBlock = {
+        kind: "figure",
+        stem: figureMatch[1] ?? "",
+        caption: figureMatch[2] ?? "",
+        raw: pendingPrefix + raw,
+      };
+      pendingPrefix = "";
+      blocks.push(block);
+      last = block;
+      continue;
+    }
+
     // A continuation of whatever is open: a wrapped list item stays with
     // its bullet, an open paragraph keeps growing, anything else starts a
     // new paragraph.
@@ -196,7 +262,34 @@ export function renderNoteBlock(block: NoteBlock): string {
           : [firstRow, firstRow.map(() => "---"), ...restRows];
       return rows.map((row) => `| ${row.join(" | ")} |\n`).join("") + "\n";
     }
+    case "callout": {
+      const header =
+        block.title === ""
+          ? `> [!${block.variant}]\n`
+          : `> [!${block.variant}] ${block.title}\n`;
+      return `${header}> ${block.text}\n\n`;
+    }
+    case "figure":
+      return `[img:${block.stem}]${block.caption === "" ? "" : ` ${block.caption}`}\n\n`;
   }
+}
+
+/**
+ * Every figure stem referenced by a note's markdown, in document order
+ * (duplicates included — both consumers set-ify). The one and only place
+ * that scans note markdown for `[img:...]` refs (spec 0021-2 §2b): the
+ * validator (`documentSource.ts`'s `ValidateContentInput` construction) and
+ * the Assets manager's delete guard (`assetReferences`) both call this and
+ * no other extractor, so the two can never drift into disagreeing about
+ * what counts as a reference.
+ */
+export function noteImageStems(markdown: string): string[] {
+  return parseNoteBlocks(markdown)
+    .filter(
+      (block): block is NoteBlock & { kind: "figure" } =>
+        block.kind === "figure",
+    )
+    .map((block) => block.stem);
 }
 
 /**
