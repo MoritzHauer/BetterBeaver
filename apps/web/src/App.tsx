@@ -64,6 +64,7 @@ import { StartScreen } from "./screens/StartScreen";
 import { AuthorScreen } from "./screens/AuthorScreen";
 import { EditScreen, type EditTarget } from "./screens/EditScreen";
 import { PrivacyScreen } from "./screens/PrivacyScreen";
+import { ImpressumScreen } from "./screens/ImpressumScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { StatsScreen } from "./screens/StatsScreen";
 import { LessonSummaryScreen } from "./screens/LessonSummaryScreen";
@@ -148,7 +149,11 @@ type Screen =
       mode?: "maintain" | "propose" | "private";
       back?: Screen;
     }
-  | { screen: "privacy" }
+  // The two legal pages (§ 5 DDG, Art. 13 GDPR), reached from the legal links
+  // on the cover and the home screen. `back` returns to the sign-in form for
+  // the one link that isn't the footer (AuthorScreen's "privacy note").
+  | { screen: "privacy"; back?: Screen }
+  | { screen: "impressum" }
   // Learner settings and stats (reached from the home top bar); both are
   // back-button screens over on-device state.
   | { screen: "settings" }
@@ -1327,9 +1332,30 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     return <ErrorScreen errors={contentSourceResult.errors} />;
   }
 
+  // Above the cover check on purpose: the legal links live on the cover too,
+  // and `started` stays false while they are open — so Back lands the visitor
+  // right back on the cover, and a started user back on home.
+  if (screen.screen === "impressum") {
+    const onBack = () => setScreen({ screen: "books" });
+    backActionRef.current = onBack;
+    return <ImpressumScreen onBack={onBack} />;
+  }
+  if (screen.screen === "privacy") {
+    const back = screen.back ?? { screen: "books" as const };
+    const onBack = () => setScreen(back);
+    backActionRef.current = onBack;
+    return <PrivacyScreen onBack={onBack} />;
+  }
+
   if (!started) {
     backActionRef.current = null;
-    return <StartScreen onStart={() => setStarted(true)} />;
+    return (
+      <StartScreen
+        onStart={() => setStarted(true)}
+        onImpressum={() => setScreen({ screen: "impressum" })}
+        onPrivacy={() => setScreen({ screen: "privacy" })}
+      />
+    );
   }
 
   if (screen.screen === "author") {
@@ -1346,7 +1372,11 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
         onOpenDocument={(docId, mode) =>
           setScreen({ screen: "edit", docId, mode })
         }
-        onPrivacy={() => setScreen({ screen: "privacy" })}
+        // Pinned back: the note is read from the sign-in form, and losing a
+        // half-typed email to a Back tap would be its own little betrayal.
+        onPrivacy={() =>
+          setScreen({ screen: "privacy", back: { screen: "author" } })
+        }
         onBack={onBack}
       />
     );
@@ -1380,12 +1410,6 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
       />
     );
   }
-  if (screen.screen === "privacy") {
-    const onBack = () => setScreen({ screen: "author" });
-    backActionRef.current = onBack;
-    return <PrivacyScreen onBack={onBack} />;
-  }
-
   if (screen.screen === "settings") {
     const onBack = () => setScreen({ screen: "books" });
     backActionRef.current = onBack;
@@ -1483,6 +1507,8 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           onAuthor={() => setScreen({ screen: "author" })}
           onOpenStats={() => setScreen({ screen: "stats" })}
           onOpenSettings={() => setScreen({ screen: "settings" })}
+          onImpressum={() => setScreen({ screen: "impressum" })}
+          onPrivacy={() => setScreen({ screen: "privacy" })}
         />
         {namingBook && (
           <NewBookSheet
