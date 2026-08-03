@@ -169,99 +169,60 @@ function reportOwnership(
   }
 }
 
-export function validateContent(
-  input: ValidateContentInput,
-): ValidateContentResult {
-  const phase1Errors: string[] = [];
+export interface ParsedSet {
+  book: Book;
+  lessons: Lesson[];
+  units: Unit[];
+  /** Book-owned items ONLY — never the merged pool. See the doc comment on `checkReferences`. */
+  items: Item[];
+  tasks: Task[];
+  resources: Resource[];
+  notes: { id: string; stem: string }[];
+  domain: Domain;
+  entries: Item[];
+  families: Family[];
+  /** Asset stems, carried through unchanged from ValidateContentInput. */
+  audioStems: string[];
+  imageStems: string[];
+  lexiconAudioStems: string[];
+  lexiconImageStems: string[];
+  noteImageRefs: { noteStem: string; stem: string }[];
+}
 
-  const bookResult = bookSchema.safeParse(input.topic);
-  if (!bookResult.success) {
-    phase1Errors.push(formatZodError("book", bookResult.error));
-  }
-
-  const lessons = parseAll(
-    lessonSchema,
-    input.lessons,
-    (raw, i) => idLabel(raw, i, "lessons"),
-    phase1Errors,
-  );
-  const units = parseAll(
-    unitSchema,
-    input.units,
-    (raw, i) => idLabel(raw, i, "units"),
-    phase1Errors,
-  );
-  const items = parseAll(
-    itemSchema,
-    input.items,
-    (raw, i) => idLabel(raw, i, "items"),
-    phase1Errors,
-  );
-  const tasks = parseAll(
-    taskSchema,
-    input.tasks,
-    (raw, i) => idLabel(raw, i, "tasks"),
-    phase1Errors,
-  );
-  const resources = parseAll(
-    resourceSchema,
-    input.resources,
-    (raw, i) => idLabel(raw, i, "resources"),
-    phase1Errors,
-  );
-
-  const domainResult = domainSchema.safeParse(input.domain);
-  if (!domainResult.success) {
-    phase1Errors.push(formatZodError("domain", domainResult.error));
-  }
-  const entries = parseAll(
-    itemSchema,
-    input.entries,
-    (raw, i) => idLabel(raw, i, "entries"),
-    phase1Errors,
-  );
-  const families = parseAll(
-    familySchema,
-    input.families,
-    (raw, i) => idLabel(raw, i, "families"),
-    phase1Errors,
-  );
-
-  for (const [name, stems] of [
-    ["noteStems", input.noteStems],
-    ["audioStems", input.audioStems],
-    ["imageStems", input.imageStems],
-    ["lexiconAudioStems", input.lexiconAudioStems],
-    ["lexiconImageStems", input.lexiconImageStems],
-  ] as const) {
-    for (const [index, stem] of stems.entries()) {
-      if (!slugPattern.test(stem)) {
-        phase1Errors.push(`${name}[${index}] ("${stem}"): invalid slug`);
-      }
-    }
-  }
-
-  if (
-    phase1Errors.length > 0 ||
-    !bookResult.success ||
-    !domainResult.success ||
-    lessons === undefined ||
-    units === undefined ||
-    items === undefined ||
-    tasks === undefined ||
-    resources === undefined ||
-    entries === undefined ||
-    families === undefined
-  ) {
-    return { errors: phase1Errors };
-  }
-
-  const book = bookResult.data;
-  const domain = domainResult.data;
-  const notes = input.noteStems.map((stem) => ({
-    id: `${book.code}-note-${stem}`,
-    stem,
-  }));
+/**
+ * `validateContent`'s phases 2+3: uniqueness (class (j)/(k)) plus the ~40
+ * referential checks, extracted (mechanical move, spec 0021-4 §1) so a
+ * caller that already has a coerced, schema-shaped `ParsedSet` — e.g. the
+ * in-place editor's mid-edit draft (`draftContent`) — can run reference
+ * checks without re-parsing through zod.
+ *
+ * `parsed.items` MUST be the book-owned pool only, never the merged
+ * `Content.items`: the `${book.code}-` prefix check below iterates it
+ * unmerged, exactly as `validateContent` always has. Handing this a merged
+ * pool would report every lexicon entry as wrongly prefixed.
+ *
+ * The uniqueness phase's early return moves in unchanged: id collisions
+ * make the by-id `Map`s below (last-wins) ill-defined, so if anything here
+ * fails the remaining, Map-dependent checks never run.
+ */
+export function checkReferences(parsed: ParsedSet): string[] {
+  const {
+    book,
+    lessons,
+    units,
+    items,
+    tasks,
+    resources,
+    notes,
+    domain,
+    entries,
+    families,
+    audioStems,
+    imageStems,
+    lexiconAudioStems,
+    lexiconImageStems,
+    noteImageRefs,
+  } = parsed;
 
   // --- uniqueness phase: class (j) duplicate entity ids, class (k) duplicate list entries ---
   // Id collisions make the by-id Maps below (last-wins) ill-defined, so if
@@ -303,7 +264,7 @@ export function validateContent(
   }
 
   if (uniquenessErrors.length > 0) {
-    return { errors: uniquenessErrors };
+    return uniquenessErrors;
   }
 
   const errors: string[] = [];
@@ -601,8 +562,8 @@ export function validateContent(
   // --- classes (m) and (n), per item: invalid cloze markup on sentence
   // text (the zero-blanks-for-a-cloze-task sub-case lives in the task loop
   // above) and dangling audioRef/imageRef ---
-  const audioStemSet = new Set(input.audioStems);
-  const imageStemSet = new Set(input.imageStems);
+  const audioStemSet = new Set(audioStems);
+  const imageStemSet = new Set(imageStems);
   for (const item of items) {
     if (item.kind === "pair") {
       for (const side of ["a", "b"] as const) {
@@ -645,7 +606,7 @@ export function validateContent(
 
   // --- dangling note figure refs (spec 0021-2 §2d), against the same
   // `imageStemSet` item imageRefs check above ---
-  for (const ref of input.noteImageRefs) {
+  for (const ref of noteImageRefs) {
     if (!imageStemSet.has(ref.stem)) {
       errors.push(
         `${book.code}-note-${ref.noteStem}: dangling imageRef "${ref.stem}"`,
@@ -777,8 +738,8 @@ export function validateContent(
   // resource/asset pools (asset-resolution pinned rule) ---
   const expectedEntryKind = DOMAIN_ENTRY_KIND[domain.kind];
   const entryPrefix = `${domain.code}-`;
-  const lexiconAudioStemSet = new Set(input.lexiconAudioStems);
-  const lexiconImageStemSet = new Set(input.lexiconImageStems);
+  const lexiconAudioStemSet = new Set(lexiconAudioStems);
+  const lexiconImageStemSet = new Set(lexiconImageStems);
   for (const entry of entries) {
     if (!entry.id.startsWith(entryPrefix)) {
       errors.push(`${entry.id}: entry id must start with "${entryPrefix}"`);
@@ -894,6 +855,121 @@ export function validateContent(
     }
   }
 
+  return errors;
+}
+
+export function validateContent(
+  input: ValidateContentInput,
+): ValidateContentResult {
+  const phase1Errors: string[] = [];
+
+  const bookResult = bookSchema.safeParse(input.topic);
+  if (!bookResult.success) {
+    phase1Errors.push(formatZodError("book", bookResult.error));
+  }
+
+  const lessons = parseAll(
+    lessonSchema,
+    input.lessons,
+    (raw, i) => idLabel(raw, i, "lessons"),
+    phase1Errors,
+  );
+  const units = parseAll(
+    unitSchema,
+    input.units,
+    (raw, i) => idLabel(raw, i, "units"),
+    phase1Errors,
+  );
+  const items = parseAll(
+    itemSchema,
+    input.items,
+    (raw, i) => idLabel(raw, i, "items"),
+    phase1Errors,
+  );
+  const tasks = parseAll(
+    taskSchema,
+    input.tasks,
+    (raw, i) => idLabel(raw, i, "tasks"),
+    phase1Errors,
+  );
+  const resources = parseAll(
+    resourceSchema,
+    input.resources,
+    (raw, i) => idLabel(raw, i, "resources"),
+    phase1Errors,
+  );
+
+  const domainResult = domainSchema.safeParse(input.domain);
+  if (!domainResult.success) {
+    phase1Errors.push(formatZodError("domain", domainResult.error));
+  }
+  const entries = parseAll(
+    itemSchema,
+    input.entries,
+    (raw, i) => idLabel(raw, i, "entries"),
+    phase1Errors,
+  );
+  const families = parseAll(
+    familySchema,
+    input.families,
+    (raw, i) => idLabel(raw, i, "families"),
+    phase1Errors,
+  );
+
+  for (const [name, stems] of [
+    ["noteStems", input.noteStems],
+    ["audioStems", input.audioStems],
+    ["imageStems", input.imageStems],
+    ["lexiconAudioStems", input.lexiconAudioStems],
+    ["lexiconImageStems", input.lexiconImageStems],
+  ] as const) {
+    for (const [index, stem] of stems.entries()) {
+      if (!slugPattern.test(stem)) {
+        phase1Errors.push(`${name}[${index}] ("${stem}"): invalid slug`);
+      }
+    }
+  }
+
+  if (
+    phase1Errors.length > 0 ||
+    !bookResult.success ||
+    !domainResult.success ||
+    lessons === undefined ||
+    units === undefined ||
+    items === undefined ||
+    tasks === undefined ||
+    resources === undefined ||
+    entries === undefined ||
+    families === undefined
+  ) {
+    return { errors: phase1Errors };
+  }
+
+  const book = bookResult.data;
+  const domain = domainResult.data;
+  const notes = input.noteStems.map((stem) => ({
+    id: `${book.code}-note-${stem}`,
+    stem,
+  }));
+
+  const parsed: ParsedSet = {
+    book,
+    lessons,
+    units,
+    items,
+    tasks,
+    resources,
+    notes,
+    domain,
+    entries,
+    families,
+    audioStems: input.audioStems,
+    imageStems: input.imageStems,
+    lexiconAudioStems: input.lexiconAudioStems,
+    lexiconImageStems: input.lexiconImageStems,
+    noteImageRefs: input.noteImageRefs,
+  };
+  const errors = checkReferences(parsed);
   if (errors.length > 0) {
     return { errors };
   }
