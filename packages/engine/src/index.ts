@@ -6,6 +6,7 @@ export * from "./domain.js";
 export * from "./interfaces.js";
 export * from "./lookup.js";
 export * from "./normalize.js";
+export * from "./noteBlocks.js";
 export * from "./progress.js";
 export * from "./session.js";
 export * from "./store.js";

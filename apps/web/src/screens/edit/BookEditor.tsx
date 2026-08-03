@@ -11,6 +11,7 @@ import {
   setNote,
   upsertEntity,
 } from "@betterbeaver/engine";
+import { NoteEditor } from "../../components/NoteEditor";
 import { newEntityId } from "../../content/entity-ids";
 import { noteTitle } from "../../content/noteTitle";
 import { newPrivateId } from "../../content/private-ids";
@@ -195,14 +196,10 @@ export function BookEditor({
     return (
       <section>
         <h2>note · {noteTitle(note.markdown, note.stem)}</h2>
-        <label className="field">
-          Markdown
-          <textarea
-            rows={14}
-            value={note.markdown}
-            onChange={(e) => onChange(setNote(doc, note.stem, e.target.value))}
-          />
-        </label>
+        <NoteEditor
+          markdown={note.markdown}
+          onChange={(markdown) => onChange(setNote(doc, note.stem, markdown))}
+        />
         <button
           className="plain danger"
           onClick={() => {
