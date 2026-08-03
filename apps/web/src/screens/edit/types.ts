@@ -93,6 +93,22 @@ export function rawPrivateDomainId(book: BookDocument): string {
     : "";
 }
 
+/** The Book's first `resources[]` id, or `""` if it has none — the default
+ * `sourceRef` a newly-added lexicon entry gets (spec 0021-3 §4b). All three
+ * edit shells compute it identically for `BookEditor`'s `sourceRef` prop.
+ *
+ * `resources` is optional-chained even though `BookDocument` declares it
+ * non-optional: a working document is `JSON.parse(localStorage)` or a
+ * backend/catalog row cast straight to `BookDocument` with no shape check,
+ * and `documentSource.ts`'s `bookDocumentShapeError` exists because a
+ * malformed document at rest once bricked the whole boot. This runs on
+ * every render of every edit view, so an unguarded deref would white-screen
+ * the editor rather than degrade one panel. */
+export function firstResourceId(doc: BookDocument): string {
+  const first = (doc.resources as Entity[] | undefined)?.[0];
+  return typeof first?.id === "string" ? first.id : "";
+}
+
 /** Local-first draft storage (one key per document). The draft lives here
  * until the author explicitly syncs it from the root (book) view. */
 export const draftKey = (docId: string) => `bb.author.draft.${docId}`;

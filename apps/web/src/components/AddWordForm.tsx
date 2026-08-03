@@ -4,17 +4,21 @@ import { DOMAIN_ENTRY_KIND } from "@betterbeaver/schema";
 import { newUserEntryId } from "../progress/user-entries";
 
 /** Add-word form (plan 0006): the Vocabulary screen's own entry point (step
- * 3) and the tap-to-lookup popup's not-found fallback (step 4) both render
- * this. Fields match the domain's entry kind: lexeme
- * (script/transliteration/gloss/example/usageNote) or concept
- * (term/definition/example). Saving creates the entry only — per the plan's
- * rule, saving never creates SRS state or list membership; the word becomes
- * studyable simply by existing in the pool. */
+ * 3), the tap-to-lookup popup's not-found fallback (step 4), and the note
+ * editor's lexicon sheet (spec 0021-3 §4) all render this. Fields match the
+ * domain's entry kind: lexeme (script/transliteration/gloss/example/
+ * usageNote) or concept (term/definition/example). Saving creates the entry
+ * only — per the plan's rule, saving never creates SRS state or list
+ * membership; the word becomes studyable simply by existing in the pool. */
 export function AddWordForm({
   domain,
   prefill,
   onSubmit,
   onCancel,
+  makeId = newUserEntryId,
+  /** Authored entries need a resource the Book owns; learner entries never
+   * resolve one. */
+  sourceRef = "user",
 }: {
   domain: Domain;
   /** Prefills the primary field (script for a lexeme, term for a concept) —
@@ -22,6 +26,8 @@ export function AddWordForm({
   prefill?: string | undefined;
   onSubmit: (item: Item) => void;
   onCancel: () => void;
+  makeId?: () => string;
+  sourceRef?: string;
 }) {
   const kind = DOMAIN_ENTRY_KIND[domain.kind];
   const [script, setScript] = useState(prefill ?? "");
@@ -41,11 +47,7 @@ export function AddWordForm({
       : term.trim() !== "" && definition.trim() !== "";
 
   function submit() {
-    const id = newUserEntryId();
-    // sourceRef is unused for user entries (they're never
-    // validator-checked, and nothing at runtime reads it back off an
-    // entry) — a fixed placeholder satisfies the `Item` type.
-    const sourceRef = "user";
+    const id = makeId();
     const item: Item =
       kind === "lexeme"
         ? {

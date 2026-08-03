@@ -3,8 +3,12 @@ import {
   type BookDocument,
   type DomainDocument,
   contentIdOf,
+  domainSchema,
 } from "@betterbeaver/schema";
-import { createDocumentContentSource } from "@betterbeaver/engine";
+import {
+  createDocumentContentSource,
+  upsertDomainEntry,
+} from "@betterbeaver/engine";
 import {
   privateAssetStems,
   registerPrivateAssets,
@@ -22,6 +26,7 @@ import {
   type EditTarget,
   type Entity,
   type View,
+  firstResourceId,
   initialView,
   rawPrivateDomainId,
   upView,
@@ -231,6 +236,17 @@ export function PrivateEditScreen({
   const currentBook: BookDocument = book;
   const currentDomain: DomainDocument = domain;
 
+  // Parsed once per render for `BookEditor`'s lexicon prop group (spec
+  // 0021-3 §5) — `DomainDocument.domain` is `unknown` at rest (a private
+  // Book's own domain document, same as any other), so a fresh/half-edited
+  // one that fails `domainSchema` just means the lexicon sheet stays off
+  // this render, same best-effort degrade `domainEntries`/`assets` already
+  // use elsewhere in this file.
+  const domainEntityResult = domainSchema.safeParse(currentDomain.domain);
+  const domainEntity = domainEntityResult.success
+    ? domainEntityResult.data
+    : undefined;
+
   const bookCode =
     typeof (currentBook.topic as Entity).code === "string"
       ? ((currentBook.topic as Entity).code as string)
@@ -380,6 +396,12 @@ export function PrivateEditScreen({
           onChange={changeBook}
           hideCoverArt
           domainEntries={domain.entries}
+          domain={domainEntity}
+          domainCode={domainEntity?.code ?? ""}
+          sourceRef={firstResourceId(currentBook)}
+          onAddEntry={(entry) =>
+            changeDomain(upsertDomainEntry(currentDomain, entry))
+          }
           // Images only: a figure's stem validates against `imageStemSet`,
           // so offering an audio stem in the `+ image` picker would author a
           // guaranteed `dangling imageRef` (spec 0021-2 §2d).

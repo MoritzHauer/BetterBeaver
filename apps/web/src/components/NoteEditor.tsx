@@ -4,12 +4,23 @@ import {
   type CalloutVariant,
   type NoteBlock,
   normalizeSeparators,
+  normalizeToken,
   parseNoteBlocks,
   renderNoteBlock,
+  resolveToken,
   serializeNoteBlocks,
 } from "@betterbeaver/engine";
+import {
+  type Domain,
+  type Item,
+  itemDisplayText,
+  itemSchema,
+} from "@betterbeaver/schema";
+import { newEntityId } from "../content/entity-ids";
 import { NOTE_ICONS } from "../content/noteIcons";
 import { RowActions } from "../screens/edit/fields";
+import { AddWordForm } from "./AddWordForm";
+import { Sheet } from "./Sheet";
 
 type FieldElement = HTMLInputElement | HTMLTextAreaElement;
 
@@ -20,6 +31,47 @@ export interface NoteAsset {
   stem: string;
   name: string;
   url: string;
+}
+
+/**
+ * What the `Аү` toolbar button needs to resolve, search and grow the
+ * domain's lexicon from inside a note (spec 0021-3 §5). One optional prop
+ * group on `NoteEditor` — absent entirely (`lexicon === undefined`) means
+ * this mounting has no lexicon in hand: the button still wraps the
+ * selection, no sheet opens.
+ */
+export interface LexiconAccess {
+  /** Raw draft entries; parsed inside (§2) — a half-typed draft fails
+   * `itemSchema` and simply isn't in the pool yet, not a crash. */
+  entries: unknown[];
+  domain: Domain;
+  /** The prefix for generated entry ids — the Domain's own `code`. */
+  domainCode: string;
+  /** Default sourceRef for a new entry; "" when the Book has no resources. */
+  sourceRef: string;
+  /** Absent means this mode cannot write the lexicon (§0: maintain and
+   * propose, until plan 0021 slice 5 gives them a domain draft/publish
+   * path of their own). */
+  onAddEntry?: (entry: Item) => void;
+}
+
+/** An entry's dictionary-form text, the same field `resolveToken`
+ * (`packages/engine/src/lookup.ts`) matches against. That file's own
+ * `entryText` isn't exported — it's a one-line field read, not the matching
+ * rule spec 0021-3 §2 says never to reimplement, so duplicating it here
+ * beats widening engine's public surface for it. Returns `undefined` for a
+ * `sentence`/`pair` item, which a domain's entries never legitimately hold
+ * but a raw, untrusted draft could — callers must check this before calling
+ * `itemDisplayText` on the same item, which throws on `pair`. */
+function lexiconEntryText(item: Item): string | undefined {
+  switch (item.kind) {
+    case "lexeme":
+      return item.payload.script;
+    case "concept":
+      return item.payload.term;
+    default:
+      return undefined;
+  }
 }
 
 /**
@@ -133,6 +185,7 @@ export function NoteEditor({
   onChange,
   assets = [],
   onUploadAsset,
+  lexicon,
 }: {
   markdown: string;
   onChange: (markdown: string) => void;
@@ -142,6 +195,9 @@ export function NoteEditor({
   /** Absent means uploads are unavailable in this mode (propose, spec
    * 0021-2 §2f). */
   onUploadAsset?: (file: File) => Promise<void>;
+  /** The `Аү` button's lexicon sheet (spec 0021-3). Absent: the button
+   * still wraps, no sheet opens. */
+  lexicon?: LexiconAccess;
 }) {
   // ponytail: re-parses the whole note per keystroke — ~8 blocks on the
   // longest real note. Memoize on `markdown` only if a note ever gets large
@@ -158,6 +214,18 @@ export function NoteEditor({
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const [iconSearch, setIconSearch] = useState("");
   const [imagePickerOpen, setImagePickerOpen] = useState(false);
+  // The lexicon sheet's own state (spec 0021-3 §1): `token` is the wrapped
+  // word the readout/search resolve against, `search` the search box, and
+  // `adding` toggles the add-row's `AddWordForm` in. One object rather than
+  // three separate `useState`s so opening/dismissing the sheet (§1) resets
+  // all three together — a stray `search`/`adding` left over from the last
+  // word would otherwise survive the *component's* lifetime (only the
+  // `<Sheet>` JSX unmounts on dismiss, not `NoteEditor` itself).
+  const [lexiconSheet, setLexiconSheet] = useState<{
+    token: string;
+    search: string;
+    adding: boolean;
+  } | null>(null);
 
   // Restores the caret/selection a toolbar button spliced markers around,
   // after the controlled re-render that follows `onChange` — see
@@ -427,15 +495,18 @@ export function NoteEditor({
 
   /** Reads the current selection off the focused field, splices `before`
    * and `after` around it, and restores the selection over the same text
-   * (spec §4 mechanics 2–3). */
+   * (spec §4 mechanics 2–3). Returns the text that was wrapped, or
+   * `undefined` if there was no focused field to act on — spec 0021-3 §1
+   * uses this to decide whether to open the lexicon sheet (only for a
+   * non-empty selection); every other caller still just ignores it. */
   const wrapSelection = (before: string, after: string) => {
     const target = focusRef.current;
     if (target === null) {
-      return;
+      return undefined;
     }
     const apply = resolveApply(blocks, target);
     if (apply === null) {
-      return;
+      return undefined;
     }
     const { element } = target;
     const start = element.selectionStart ?? element.value.length;
@@ -449,6 +520,31 @@ export function NoteEditor({
       start: start + before.length,
       end: start + before.length + selected.length,
     };
+    commitEdit(apply(next), target.blockIndex);
+    return selected;
+  };
+
+  /** Replaces the current selection outright with `text` — unlike
+   * `wrapSelection`, nothing is spliced in around it, because the stars are
+   * already in place from the wrap that opened the lexicon sheet. Used when
+   * tapping a search row swaps the starred word for that entry's
+   * dictionary form (spec 0021-3 §3): `*Саламдашуу*` -> `*Салам*`, the
+   * stars untouched. Same restore-selection mechanic as `wrapSelection`. */
+  const replaceSelection = (text: string) => {
+    const target = focusRef.current;
+    if (target === null) {
+      return;
+    }
+    const apply = resolveApply(blocks, target);
+    if (apply === null) {
+      return;
+    }
+    const { element } = target;
+    const start = element.selectionStart ?? element.value.length;
+    const end = element.selectionEnd ?? element.value.length;
+    const value = element.value;
+    const next = value.slice(0, start) + text + value.slice(end);
+    pendingSelectionRef.current = { element, start, end: start + text.length };
     commitEdit(apply(next), target.blockIndex);
   };
 
@@ -477,6 +573,78 @@ export function NoteEditor({
     name.toLowerCase().includes(iconSearch.toLowerCase()),
   );
 
+  // Parsed only while the sheet is actually open — `NoteEditor` re-renders
+  // per keystroke (it's controlled), and a real domain's entries run into
+  // the thousands, so `safeParse`-ing all of them on every render would be
+  // wasted work the rest of the time. Still derived fresh from
+  // `lexicon.entries` every time, never cached in local state — that's what
+  // lets the readout flip to exact the instant `onAddEntry` lands a new
+  // entry in the parent's props (spec 0021-3 §4c).
+  //
+  // `itemSchema.safeParse` also does the load-bearing part of §2's other
+  // caveat: `domainEntries`/`entries` is raw, untrusted `unknown[]` — some
+  // drafts are half-typed (e.g. a lexeme missing `gloss`) — so a failed
+  // parse just drops that entry from the pool instead of crashing the
+  // readout. Separately: at runtime the merged pool also carries
+  // learner-created `user-` entries this editor never sees, but
+  // `pickBest` (lookup.ts) prefers a non-`user-` entry whenever both
+  // match, so an authored entry always wins when one exists — this readout
+  // can only be over-pessimistic (⚠ no entry where a learner's own word
+  // would actually resolve), never wrong about an entry the author
+  // themself wrote.
+  //
+  // ponytail: re-parses the whole entry list per keystroke while the sheet is
+  // open (search state lives on this controlled component). Gated on an open
+  // sheet, so it costs nothing in the common case, but a lexicon with
+  // thousands of entries would feel it while typing a search. Memoize on
+  // `lexicon.entries` if that ever shows up in a real Book.
+  const lexiconEntries: Item[] =
+    lexicon !== undefined && lexiconSheet !== null
+      ? lexicon.entries.flatMap((raw) => {
+          const parsed = itemSchema.safeParse(raw);
+          return parsed.success ? [parsed.data] : [];
+        })
+      : [];
+
+  const lexiconResolved =
+    lexiconSheet !== null
+      ? resolveToken(lexiconSheet.token, lexiconEntries)
+      : undefined;
+  // Outcome is derived from the entry `resolveToken` actually returned, not
+  // by re-running its exact/prefix rules (spec 0021-3 §2) — the whole point
+  // is to report what the real function did, including the prefix-match
+  // case where it silently bound to a *different* word than the token.
+  const lexiconResolvedText =
+    lexiconResolved !== undefined
+      ? lexiconEntryText(lexiconResolved)
+      : undefined;
+  const lexiconExact =
+    lexiconSheet !== null &&
+    lexiconResolvedText !== undefined &&
+    normalizeToken(lexiconResolvedText) === normalizeToken(lexiconSheet.token);
+
+  const lexiconQuery = lexiconSheet?.search.trim().toLowerCase() ?? "";
+  // `lexiconEntryText` returning `undefined` here also guards the
+  // `itemDisplayText` call below it: that function throws on a `pair` item,
+  // which a domain's entries never legitimately hold but a raw draft could
+  // — this filter drops anything without a script/term before either read
+  // reaches it, same guard the readout above gets from `resolveToken`
+  // itself never returning a pair/sentence match.
+  const lexiconMatches = lexiconEntries.filter((item) => {
+    const text = lexiconEntryText(item);
+    if (text === undefined) {
+      return false;
+    }
+    return (
+      lexiconQuery === "" ||
+      text.toLowerCase().includes(lexiconQuery) ||
+      itemDisplayText(item).toLowerCase().includes(lexiconQuery)
+    );
+  });
+  // Capped the way `DomainEditor`'s own entry list is (spec 0021-3 §3).
+  const lexiconVisible = lexiconMatches.slice(0, 50);
+  const lexiconHidden = lexiconMatches.length - lexiconVisible.length;
+
   return (
     <div className="note-editor">
       <div className="note-editor-toolbar">
@@ -492,7 +660,20 @@ export function NoteEditor({
           type="button"
           disabled={!hasFocused}
           onMouseDown={(e) => e.preventDefault()}
-          onClick={() => wrapSelection("*", "*")}
+          onClick={() => {
+            // Wrapping happens first and unconditionally (spec 0021-3 §1):
+            // the button always does its slice-1 job even when there's no
+            // lexicon to open a sheet against, or the selection was empty
+            // and there's no word to resolve.
+            const selected = wrapSelection("*", "*");
+            if (
+              lexicon !== undefined &&
+              selected !== undefined &&
+              selected !== ""
+            ) {
+              setLexiconSheet({ token: selected, search: "", adding: false });
+            }
+          }}
         >
           Аү
         </button>
@@ -829,6 +1010,123 @@ export function NoteEditor({
             ))}
           </ul>
         </div>
+      )}
+      {lexicon !== undefined && lexiconSheet !== null && (
+        <Sheet
+          label={`Lexicon: ${lexiconSheet.token}`}
+          onDismiss={() => setLexiconSheet(null)}
+        >
+          <button
+            type="button"
+            className="plain sheet-close"
+            aria-label="Close"
+            onClick={() => setLexiconSheet(null)}
+          >
+            &#10005;
+          </button>
+          <p className="status">
+            {lexiconResolved === undefined
+              ? "⚠ no entry for this word"
+              : lexiconExact
+                ? `✓ ${lexiconResolvedText} · ${itemDisplayText(lexiconResolved)}`
+                : `→ ${lexiconResolvedText} · ${itemDisplayText(lexiconResolved)}  (prefix match, not exact)`}
+          </p>
+          {lexiconSheet.adding ? (
+            <AddWordForm
+              domain={lexicon.domain}
+              prefill={lexiconSheet.token}
+              makeId={() => newEntityId(lexicon.domainCode)}
+              sourceRef={lexicon.sourceRef}
+              onSubmit={(item) => {
+                lexicon.onAddEntry?.(item);
+                setLexiconSheet((s) =>
+                  s === null ? s : { ...s, adding: false },
+                );
+              }}
+              onCancel={() =>
+                setLexiconSheet((s) =>
+                  s === null ? s : { ...s, adding: false },
+                )
+              }
+            />
+          ) : (
+            <>
+              {/* Deliberately no `onFocus={blurToolbar}` here (compare the
+                  callout-title/figure-caption inputs above): `Sheet` is a
+                  modal `<dialog>`, so the toolbar is already unreachable
+                  while this is open — the hazard `blurToolbar` guards
+                  against can't occur. Wiring it anyway would actively
+                  break `replaceSelection` below, which depends on
+                  `focusRef.current` still naming the field this sheet was
+                  opened for. */}
+              <input
+                type="text"
+                placeholder="Search the lexicon…"
+                value={lexiconSheet.search}
+                onChange={(e) =>
+                  setLexiconSheet((s) =>
+                    s === null ? s : { ...s, search: e.target.value },
+                  )
+                }
+              />
+              <ul className="editor-list">
+                {lexiconVisible.map((item) => {
+                  const text = lexiconEntryText(item);
+                  return (
+                    <li key={item.id}>
+                      <button
+                        type="button"
+                        className="plain"
+                        onClick={() => {
+                          if (text === undefined) {
+                            return;
+                          }
+                          // Same splice-and-restore-selection mechanic
+                          // `wrapSelection` uses (spec 0021-3 §3): only the
+                          // inner word changes, the stars stay put.
+                          replaceSelection(text);
+                          setLexiconSheet((s) =>
+                            s === null ? s : { ...s, token: text },
+                          );
+                        }}
+                      >
+                        {text} · {itemDisplayText(item)}
+                      </button>
+                    </li>
+                  );
+                })}
+                {lexiconHidden > 0 && (
+                  <li>…{lexiconHidden} more — search to narrow</li>
+                )}
+              </ul>
+              {lexicon.onAddEntry !== undefined ? (
+                <button
+                  type="button"
+                  className="editor-add"
+                  onClick={() =>
+                    setLexiconSheet((s) =>
+                      s === null ? s : { ...s, adding: true },
+                    )
+                  }
+                >
+                  ⊕ add "{lexiconSheet.token}" as new
+                </button>
+              ) : (
+                <>
+                  <button type="button" className="editor-add" disabled>
+                    ⊕ add "{lexiconSheet.token}" as new
+                  </button>
+                  {/* §0: a deliberate staging gap, not an oversight — say
+                      why rather than just disabling. */}
+                  <p className="status">
+                    This mode can't add lexicon entries yet — open this Book
+                    privately (no account) to add one.
+                  </p>
+                </>
+              )}
+            </>
+          )}
+        </Sheet>
       )}
     </div>
   );

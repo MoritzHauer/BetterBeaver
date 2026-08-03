@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import {
   type BookDocument,
   CONTENT_SCHEMA_VERSION,
+  type Domain,
   type DomainDocument,
   documentId,
+  domainSchema,
 } from "@betterbeaver/schema";
 import { validateForPublish } from "../../backend/publishCheck";
 import {
@@ -35,6 +37,7 @@ import {
   type Entity,
   type View,
   draftKey,
+  firstResourceId,
   initialView,
   rawPrivateDomainId,
   upView,
@@ -76,6 +79,14 @@ export function MaintainEditScreen({
   // pickers merge book items with these. Best-effort — a fetch failure just
   // leaves the Vocabulary side of the picker empty, it never blocks editing.
   const [domainEntries, setDomainEntries] = useState<unknown[]>([]);
+  // The same fetch's domain entity, parsed for `BookEditor`'s lexicon prop
+  // group (spec 0021-3 §5) — the note editor's `Аү` sheet's readout/search
+  // ship in maintain mode too, only its add-row's write path is deferred
+  // (§0). Same best-effort fallback: a fetch or parse failure just leaves
+  // the lexicon sheet off, never blocks editing.
+  const [domainEntity, setDomainEntity] = useState<Domain | undefined>(
+    undefined,
+  );
   // This document's Storage assets (spec 0012-C §4). Same best-effort
   // fallback as `openProposals`/`domainEntries` above — a listing failure
   // just leaves the Assets section empty rather than blocking the editor.
@@ -105,20 +116,23 @@ export function MaintainEditScreen({
   useEffect(() => {
     if (domainId === "") {
       setDomainEntries([]);
+      setDomainEntity(undefined);
       return;
     }
     let cancelled = false;
     loadDocument(documentId("domain", domainId)).then(
       (d) => {
         if (!cancelled) {
-          setDomainEntries(
-            ((d.draft ?? d.published) as DomainDocument | null)?.entries ?? [],
-          );
+          const domainDoc = (d.draft ?? d.published) as DomainDocument | null;
+          setDomainEntries(domainDoc?.entries ?? []);
+          const parsed = domainSchema.safeParse(domainDoc?.domain);
+          setDomainEntity(parsed.success ? parsed.data : undefined);
         }
       },
       () => {
         if (!cancelled) {
           setDomainEntries([]);
+          setDomainEntity(undefined);
         }
       },
     );
@@ -399,6 +413,13 @@ export function MaintainEditScreen({
         setView={setView}
         onChange={change}
         domainEntries={domainEntries}
+        domain={domainEntity}
+        domainCode={domainEntity?.code ?? ""}
+        sourceRef={firstResourceId(working as BookDocument)}
+        // No `onAddEntry` (spec 0021-3 §0): this mode has no domain
+        // draft/publish path of its own yet — the note editor's lexicon
+        // sheet still shows the readout and search, just with the add row
+        // disabled and a reason shown.
         // Images only: a figure's stem validates against `imageStemSet`, so
         // offering an audio stem in the `+ image` picker would author a
         // guaranteed `dangling imageRef` (spec 0021-2 §2d).

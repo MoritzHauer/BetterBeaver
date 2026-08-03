@@ -2,6 +2,8 @@ import { useState } from "react";
 import {
   BOOK_ICONS,
   type BookDocument,
+  type Domain,
+  type Item,
   TASK_TYPES,
 } from "@betterbeaver/schema";
 import {
@@ -11,7 +13,11 @@ import {
   setNote,
   upsertEntity,
 } from "@betterbeaver/engine";
-import { NoteEditor, type NoteAsset } from "../../components/NoteEditor";
+import {
+  NoteEditor,
+  type LexiconAccess,
+  type NoteAsset,
+} from "../../components/NoteEditor";
 import { newEntityId } from "../../content/entity-ids";
 import { noteTitle } from "../../content/noteTitle";
 import { newPrivateId } from "../../content/private-ids";
@@ -39,6 +45,10 @@ export function BookEditor({
   onChange,
   hideCoverArt,
   domainEntries = [],
+  domain,
+  domainCode = "",
+  sourceRef = "",
+  onAddEntry,
   assets,
   onUploadAsset,
 }: {
@@ -57,6 +67,20 @@ export function BookEditor({
    * rule). Default `[]` degrades gracefully — an empty Vocabulary filter —
    * when a shell hasn't (or couldn't) fetch the domain doc. */
   domainEntries?: unknown[];
+  /** The Book's domain entity (spec 0021-3 §5), threaded to `NoteEditor`'s
+   * lexicon sheet. Absent when a shell couldn't fetch/parse it — the sheet
+   * then stays off entirely for this note, same best-effort degrade as
+   * `domainEntries`'s own default (the `Аү` button still wraps). */
+  domain?: Domain;
+  /** The prefix for generated entry ids — the Domain's own `code` (spec
+   * 0021-3 §4b). */
+  domainCode?: string;
+  /** Default sourceRef for a newly added entry; "" when the Book has no
+   * resources (spec 0021-3 §4b). */
+  sourceRef?: string;
+  /** Absent means this mode cannot write the lexicon (spec 0021-3 §0):
+   * maintain and propose omit it until plan 0021 slice 5. */
+  onAddEntry?: (entry: Item) => void;
   /** Threaded straight through to `NoteEditor`'s `+ image` picker (spec
    * 0021-2 §2f) — passed as-is per mode: maintain and private each supply
    * their own asset list/uploader, propose supplies neither (undefined
@@ -65,6 +89,15 @@ export function BookEditor({
   assets?: NoteAsset[];
   onUploadAsset?: (file: File) => Promise<void>;
 }) {
+  // Built once and threaded to every `NoteEditor` mount below (there's
+  // exactly one, in the `view.v === "note"` branch, but this keeps that
+  // branch itself simple). `domain` gates it, not `onAddEntry`: the readout
+  // and search ship in every mode (spec 0021-3 §0); only the add row's
+  // enabled-ness depends on `onAddEntry`, which `NoteEditor` itself checks.
+  const lexicon: LexiconAccess | undefined =
+    domain !== undefined
+      ? { entries: domainEntries, domain, domainCode, sourceRef, onAddEntry }
+      : undefined;
   const book = doc.topic as Entity;
   const bookCode = typeof book.code === "string" ? book.code : "";
   const upsert = (collection: BookCollection, entity: Entity) =>
@@ -210,6 +243,7 @@ export function BookEditor({
           onChange={(markdown) => onChange(setNote(doc, note.stem, markdown))}
           assets={assets}
           onUploadAsset={onUploadAsset}
+          lexicon={lexicon}
         />
         <button
           className="plain danger"

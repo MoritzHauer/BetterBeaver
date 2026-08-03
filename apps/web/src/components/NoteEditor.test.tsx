@@ -4,7 +4,8 @@ import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { type NoteBlock, parseNoteBlocks } from "@betterbeaver/engine";
-import { NoteEditor, type NoteAsset } from "./NoteEditor";
+import type { Domain, Item } from "@betterbeaver/schema";
+import { NoteEditor, type LexiconAccess, type NoteAsset } from "./NoteEditor";
 
 // Indirection matters: Vite's dev-server plugin rewrites a literal
 // `new URL("...", import.meta.url)` into an `@fs/...` asset URL, which
@@ -32,6 +33,7 @@ function renderEditor(
   options: {
     assets?: NoteAsset[];
     onUploadAsset?: (file: File) => Promise<void>;
+    lexicon?: LexiconAccess;
   } = {},
 ) {
   const onChange = vi.fn<(markdown: string) => void>();
@@ -46,12 +48,60 @@ function renderEditor(
         }}
         assets={options.assets}
         onUploadAsset={options.onUploadAsset}
+        lexicon={options.lexicon}
       />
     );
   }
   render(<Harness />);
   const last = () => onChange.mock.calls.at(-1)?.[0];
   return { onChange, last };
+}
+
+const testDomain: Domain = {
+  id: "ky",
+  code: "ky",
+  kind: "language",
+  title: "Kyrgyz",
+  glossLanguage: "en",
+};
+
+const rahmatEntry: Item = {
+  id: "ky-1",
+  kind: "lexeme",
+  sourceRef: "ky-book-1",
+  payload: { script: "Рахмат", transliteration: "Rahmat", gloss: "thanks" },
+};
+
+const salamEntry: Item = {
+  id: "ky-2",
+  kind: "lexeme",
+  sourceRef: "ky-book-1",
+  payload: { script: "Салам", transliteration: "Salam", gloss: "hello" },
+};
+
+/** Builds a `LexiconAccess` for a test, `entries`/`onAddEntry` the only
+ * things any given test varies. */
+function lexiconAccess(
+  entries: unknown[],
+  onAddEntry?: (entry: Item) => void,
+): LexiconAccess {
+  return {
+    entries,
+    domain: testDomain,
+    domainCode: "ky",
+    sourceRef: "ky-book-1",
+    onAddEntry,
+  };
+}
+
+/** Selects `text` inside `textarea`, assuming it appears exactly once. */
+function selectText(textarea: HTMLTextAreaElement, text: string) {
+  const start = textarea.value.indexOf(text);
+  if (start === -1) {
+    throw new Error(`expected to find ${JSON.stringify(text)} in the note`);
+  }
+  fireEvent.focus(textarea);
+  textarea.setSelectionRange(start, start + text.length);
 }
 
 function tableBlock(md: string): NoteBlock & { kind: "table" } {
@@ -300,5 +350,173 @@ describe("NoteEditor - callouts and figures (spec 0021-2)", () => {
 
     fireEvent.click(bold);
     expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
+describe("NoteEditor - lexicon sheet (spec 0021-3)", () => {
+  function paragraphTextarea() {
+    return screen
+      .getAllByRole("textbox")
+      .find((el) => el.tagName === "TEXTAREA") as HTMLTextAreaElement;
+  }
+
+  it("Аү over a non-empty selection wraps and opens the sheet", () => {
+    const initial = "# T\n\nСалам world.\n\n";
+    const { last } = renderEditor(initial, {
+      lexicon: lexiconAccess([]),
+    });
+
+    selectText(paragraphTextarea(), "Салам");
+    fireEvent.click(screen.getByRole("button", { name: "Аү" }));
+
+    expect(last()).toBe("# T\n\n*Салам* world.\n\n");
+    expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+
+  it("Аү over an empty selection wraps and opens nothing", () => {
+    const initial = "# T\n\nHello.\n\n";
+    const { last } = renderEditor(initial, {
+      lexicon: lexiconAccess([]),
+    });
+
+    const textarea = paragraphTextarea();
+    fireEvent.focus(textarea);
+    textarea.setSelectionRange(0, 0);
+    fireEvent.click(screen.getByRole("button", { name: "Аү" }));
+
+    expect(last()).toBe("# T\n\n**Hello.\n\n");
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("with lexicon absent, Аү still wraps and no sheet opens", () => {
+    const initial = "# T\n\nСалам world.\n\n";
+    const { last } = renderEditor(initial);
+
+    selectText(paragraphTextarea(), "Салам");
+    fireEvent.click(screen.getByRole("button", { name: "Аү" }));
+
+    expect(last()).toBe("# T\n\n*Салам* world.\n\n");
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("readout: exact match", () => {
+    const initial = "# T\n\nРахмат.\n\n";
+    renderEditor(initial, { lexicon: lexiconAccess([rahmatEntry]) });
+
+    selectText(paragraphTextarea(), "Рахмат");
+    fireEvent.click(screen.getByRole("button", { name: "Аү" }));
+
+    expect(screen.getByText("✓ Рахмат · thanks")).toBeTruthy();
+  });
+
+  it("readout: prefix match, not exact — the case this slice exists for", () => {
+    // `resolveToken` falls back to the longest entry >= 3 chars that
+    // prefixes the token (lookup.ts:72): "Салам" prefixes "Саламдашуу", so
+    // it binds there even though the author typed a different word.
+    const initial = "# T\n\nСаламдашуу.\n\n";
+    renderEditor(initial, { lexicon: lexiconAccess([salamEntry]) });
+
+    selectText(paragraphTextarea(), "Саламдашуу");
+    fireEvent.click(screen.getByRole("button", { name: "Аү" }));
+
+    // Default normalizer: HTML collapses runs of whitespace, so asserting
+    // the source's literal double space would pin something no reader can
+    // see. What must not regress is the "not exact" wording itself — that
+    // is the whole point of the slice.
+    expect(
+      screen.getByText("→ Салам · hello (prefix match, not exact)"),
+    ).toBeTruthy();
+  });
+
+  it("readout: no match", () => {
+    const initial = "# T\n\nBartholomew.\n\n";
+    renderEditor(initial, { lexicon: lexiconAccess([]) });
+
+    selectText(paragraphTextarea(), "Bartholomew");
+    fireEvent.click(screen.getByRole("button", { name: "Аү" }));
+
+    expect(screen.getByText("⚠ no entry for this word")).toBeTruthy();
+  });
+
+  it("a half-typed entry (missing gloss) is excluded from the pool and does not crash the readout", () => {
+    const halfTyped = {
+      id: "ky-3",
+      kind: "lexeme",
+      sourceRef: "ky-book-1",
+      payload: { script: "Дос", transliteration: "Dos" },
+    };
+    const initial = "# T\n\nДос.\n\n";
+    renderEditor(initial, { lexicon: lexiconAccess([halfTyped]) });
+
+    selectText(paragraphTextarea(), "Дос");
+    expect(() =>
+      fireEvent.click(screen.getByRole("button", { name: "Аү" })),
+    ).not.toThrow();
+
+    expect(screen.getByText("⚠ no entry for this word")).toBeTruthy();
+  });
+
+  it("tapping a search row replaces the wrapped text with that entry's script and leaves the rest of the note byte-identical", () => {
+    const initial = "# T\n\nСаламдашуу world.\n\n";
+    const { last } = renderEditor(initial, {
+      lexicon: lexiconAccess([salamEntry]),
+    });
+
+    selectText(paragraphTextarea(), "Саламдашуу");
+    fireEvent.click(screen.getByRole("button", { name: "Аү" }));
+
+    // Typed first, then tapped — proves the row tap works with the search
+    // input focused (spec 0021-3 §3), which is also what makes the
+    // deliberate absence of `blurToolbar` on that input a tested behaviour
+    // rather than an unverified claim: focusing it must not clear the
+    // `focusRef` the tap below depends on.
+    fireEvent.change(screen.getByPlaceholderText("Search the lexicon…"), {
+      target: { value: "hello" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Салам · hello" }));
+
+    expect(last()).toBe("# T\n\n*Салам* world.\n\n");
+    expect(screen.getByText("✓ Салам · hello")).toBeTruthy();
+  });
+
+  it("with onAddEntry absent, the add row is present, disabled, and carries a reason", () => {
+    const initial = "# T\n\nЖаңы.\n\n";
+    renderEditor(initial, { lexicon: lexiconAccess([]) });
+
+    selectText(paragraphTextarea(), "Жаңы");
+    fireEvent.click(screen.getByRole("button", { name: "Аү" }));
+
+    const addButton = screen.getByRole("button", {
+      name: '⊕ add "Жаңы" as new',
+    });
+    expect(addButton.hasAttribute("disabled")).toBe(true);
+    expect(screen.getByText(/can't add lexicon entries/i)).toBeTruthy();
+  });
+
+  it("with onAddEntry present, submitting the form calls it with an id prefixed by domainCode", () => {
+    const onAddEntry = vi.fn<(entry: Item) => void>();
+    const initial = "# T\n\nЖаңы.\n\n";
+    renderEditor(initial, { lexicon: lexiconAccess([], onAddEntry) });
+
+    selectText(paragraphTextarea(), "Жаңы");
+    fireEvent.click(screen.getByRole("button", { name: "Аү" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: '⊕ add "Жаңы" as new' }),
+    );
+
+    fireEvent.change(screen.getByPlaceholderText("Transliteration"), {
+      target: { value: "Zhany" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("Gloss (meaning)"), {
+      target: { value: "new" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add word" }));
+
+    expect(onAddEntry).toHaveBeenCalledTimes(1);
+    const item = onAddEntry.mock.calls[0]![0];
+    expect(item.id.startsWith("ky-")).toBe(true);
+    // Proves `sourceRef` is actually wired through to `AddWordForm`, not
+    // shadowed by its old hardcoded local (spec 0021-3 §4a/§4b).
+    expect(item.sourceRef).toBe("ky-book-1");
   });
 });

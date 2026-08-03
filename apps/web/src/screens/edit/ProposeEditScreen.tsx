@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import {
   type BookDocument,
   CONTENT_SCHEMA_VERSION,
+  type Domain,
   type DomainDocument,
   documentId,
+  domainSchema,
 } from "@betterbeaver/schema";
 import { validateForPublish } from "../../backend/publishCheck";
 import {
@@ -18,6 +20,7 @@ import {
   type EditTarget,
   type StoredProposal,
   type View,
+  firstResourceId,
   initialView,
   proposalKey,
   rawPrivateDomainId,
@@ -64,6 +67,13 @@ export function ProposeEditScreen({
   // MaintainEditScreen — best-effort, from the published catalog
   // since a non-maintainer has no draft to read.
   const [domainEntries, setDomainEntries] = useState<unknown[]>([]);
+  // The same fetch's domain entity (spec 0021-3 §5), same best-effort
+  // fallback as `domainEntries` — see MaintainEditScreen's identical state
+  // for why the note editor's lexicon sheet still wants this even though
+  // this mode never gets `onAddEntry` (§0).
+  const [domainEntity, setDomainEntity] = useState<Domain | undefined>(
+    undefined,
+  );
   const dirtyRef = useRef(false);
   const workingRef = useRef<AnyDoc | null>(null);
   workingRef.current = working;
@@ -132,22 +142,24 @@ export function ProposeEditScreen({
   useEffect(() => {
     if (domainId === "") {
       setDomainEntries([]);
+      setDomainEntity(undefined);
       return;
     }
     let cancelled = false;
     loadCatalogEntry(documentId("domain", domainId)).then(
       (loaded) => {
         if (!cancelled) {
-          setDomainEntries(
-            loaded !== null
-              ? ((loaded.published as DomainDocument).entries ?? [])
-              : [],
-          );
+          const domainDoc =
+            loaded !== null ? (loaded.published as DomainDocument) : null;
+          setDomainEntries(domainDoc?.entries ?? []);
+          const parsed = domainSchema.safeParse(domainDoc?.domain);
+          setDomainEntity(parsed.success ? parsed.data : undefined);
         }
       },
       () => {
         if (!cancelled) {
           setDomainEntries([]);
+          setDomainEntity(undefined);
         }
       },
     );
@@ -303,6 +315,11 @@ export function ProposeEditScreen({
         setView={setView}
         onChange={change}
         domainEntries={domainEntries}
+        domain={domainEntity}
+        domainCode={domainEntity?.code ?? ""}
+        sourceRef={firstResourceId(working as BookDocument)}
+        // No `onAddEntry` (spec 0021-3 §0), same as MaintainEditScreen: a
+        // proposal targets one document and has no domain path of its own.
       />
     ) : (
       <DomainEditor
