@@ -140,12 +140,15 @@ function SheetBody({
   if (item === undefined) {
     // The Book's own slot settles before the lexicon's, so a word opens here
     // at least once before its entry exists — saying it is gone would be a
-    // lie for exactly as long as the second fetch takes.
+    // lie for as long as the second fetch takes. Not "Loading…" either: a
+    // lexicon that *failed* to load leaves the Book editable with an empty
+    // stand-in and never settles (spec 0021-5 §5), so a promise of progress
+    // would sit there forever.
     return (
       <p className="status">
         {session.lexiconLoaded
           ? "This isn’t part of this Book any more."
-          : "Loading…"}
+          : "This Book’s words aren’t loaded — try again from the unit that holds this one."}
       </p>
     );
   }

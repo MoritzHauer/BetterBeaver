@@ -4,16 +4,14 @@ export type Entity = { id: string } & Record<string, unknown>;
 
 export type AnyDoc = BookDocument | DomainDocument;
 
-/** Deep-link target from the learner screens' Edit buttons. Since slice 11
- * its one reader is the scoped session sheet (spec 0021-11 §3), which uses
- * `taskId`/`itemId`/`entryId` to name the one entity it holds; the `View`
- * union and `upView` that used to turn this into the form editor's opening
- * screen went with the form editor. The wider shape is kept because spec
- * 0021-10 §3's publish-error deep-linking reuses it. */
+/** What the question screen's `✎` names: the one entity the scoped session
+ * sheet holds (spec 0021-11 §3). `lessonId`/`unitId`/`noteStem` were here to
+ * seed the form editor's opening screen and went with it, along with the
+ * `View` union and `upView` — spec 0021-10 §3's publish-error deep-linking
+ * has its own `ChangedTarget`, so nothing else needs the wider shape. An
+ * `entryId` and an `itemId` are the same thing to every reader; which
+ * document owns it is `unitEditOps`' business. */
 export interface EditTarget {
-  lessonId?: string;
-  unitId?: string;
-  noteStem?: string;
   itemId?: string;
   entryId?: string;
   taskId?: string;

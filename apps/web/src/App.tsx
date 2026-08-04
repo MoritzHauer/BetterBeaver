@@ -1477,8 +1477,31 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   // flag. It reuses this one hook rather than mounting a second session
   // underneath the first: two sessions over one Book would each autosave
   // their own copy of it.
+  //
+  // The Book is the one whose units actually reference the tapped entity,
+  // not simply the first that uses its lexicon. `itemEditTarget` points a
+  // word at `domain:<id>`, and `ReviewSession` pools items across **every**
+  // Book of a domain — so resolving the document alone would open a session
+  // over Book A for a word tapped in Book B, and the sheet, walking Book A's
+  // units, would report content that plainly exists as gone.
+  const sheetTarget =
+    sessionEdit === null
+      ? undefined
+      : (sessionEdit.target.taskId ??
+        sessionEdit.target.itemId ??
+        sessionEdit.target.entryId);
   const sheetBookId =
-    sessionEdit === null ? null : (editableBookFor(sessionEdit.docId) ?? null);
+    sessionEdit === null
+      ? null
+      : ([...booksContentMap].find(([, bookContent]) =>
+          bookContent.units.some(
+            (unit) =>
+              unit.itemIds.includes(sheetTarget ?? "") ||
+              unit.taskIds.includes(sheetTarget ?? ""),
+          ),
+        )?.[0] ??
+        editableBookFor(sessionEdit.docId) ??
+        null);
   const sessionBookId = editingBookId ?? sheetBookId;
   const editSession = useEditSessionState({
     bookId: sessionBookId ?? "",
