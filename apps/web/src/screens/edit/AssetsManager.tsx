@@ -6,8 +6,8 @@ import { type Entity } from "./types";
 
 /** Kind label for display, from the blob's MIME type — same "image vs.
  * audio" split `content/private-assets.ts`'s runtime overlay uses. Exported
- * for `PrivateEditScreen`, which still holds raw blobs and uses this to
- * build each `AssetView.kind`. */
+ * for the private branch of `EditSession`, which holds raw blobs and uses
+ * this to build each `AssetView.kind`. */
 export function assetKind(blob: Blob): "audio" | "image" {
   return blob.type.startsWith("image/") ? "image" : "audio";
 }
@@ -95,7 +95,7 @@ export interface AssetView {
   // Object URL (private) or public URL (maintain). Private mode may pass
   // `""` for the one render tick before its object URL exists yet (right
   // after mount or after an add) — the card still renders, just without a
-  // preview; see `PrivateEditScreen`'s `assetViews`.
+  // preview; see `EditSession`'s private `assetViews`.
   url: string;
 }
 

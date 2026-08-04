@@ -6,7 +6,6 @@ import {
   type Content,
   type DomainDocument,
   documentId,
-  domainSchema,
 } from "@betterbeaver/schema";
 import {
   type AssetStems,
@@ -51,8 +50,6 @@ import {
   assetReferences,
   type AssetView,
 } from "./AssetsManager";
-import { BookEditor } from "./BookEditor";
-import { DomainEditor } from "./DomainEditor";
 import { EditMenu, type EditPanel } from "./EditMenu";
 import { ProposalReview, emptyDocFor } from "./ProposalReview";
 import {
@@ -73,12 +70,9 @@ import {
   type AnyDoc,
   type Entity,
   type StoredProposal,
-  type View,
   draftKey,
-  firstResourceId,
   proposalKey,
   rawPrivateDomainId,
-  upView,
 } from "./types";
 
 /** Stand-ins for a document that has not loaded. `emptyDocFor` is the one
@@ -150,9 +144,10 @@ interface ServerSlot {
 }
 
 /**
- * `MaintainEditScreen`'s and `ProposeEditScreen`'s lifecycles for ONE
- * document, as branches on `mode` rather than two components. Every
- * behaviour here is carried across from those files unchanged — the
+ * The maintain and propose lifecycles for ONE document, as branches on
+ * `mode` rather than the two components (`MaintainEditScreen` /
+ * `ProposeEditScreen`) they were until slice 11. Every behaviour here was
+ * carried across from those files unchanged — the
  * local-draft-wins rule, the unmount + `beforeunload` flush, the 400 ms
  * debounce, the `baseVersion` staleness check, the post-publish reload
  * order. They are load-bearing and were each fixed in response to a real
@@ -489,7 +484,7 @@ interface PrivateDocs {
   deleteAsset: (stem: string) => Promise<void>;
 }
 
-/** `PrivateEditScreen`'s lifecycle, unchanged (plan 0017 §3): no account, no
+/** The private lifecycle, carried over unchanged (plan 0017 §3): no account, no
  * network, no draft/published distinction — every edit autosaves straight
  * into the private store on the same debounce/flush idiom the maintainer
  * path uses for its localStorage autosave. */
@@ -1202,10 +1197,10 @@ export function useEditSessionState(args: {
  * is the very screen the author was reading — navigating between them keeps
  * `editing`, and entering it never moves you.
  *
- * Until slices 6-7 make those screens editable in place, the editing surface
- * is `EditScreen`'s existing form tree, rendered here as a panel over the
- * children (§0: both editors coexist; nothing is deleted before slice 11).
- * `ProposalReview` and `AssetsManager` are rehomed here unchanged.
+ * Since slice 11 that is the only editing surface there is: the form tree
+ * this used to render as a transitional panel is deleted. What remains here
+ * are the surfaces with no in-place home — `ProposalReview`, `AssetsManager`,
+ * the What-changed index and feedback — plus the `[⋮]` menu.
  */
 export function EditSession({
   session,
@@ -1225,7 +1220,6 @@ export function EditSession({
   onNavigate?: (target: ChangedTarget) => void;
 }) {
   const [panel, setPanel] = useState<EditPanel>(null);
-  const [view, setView] = useState<View>({ v: "root" });
   const [note, setNote] = useState("");
   const [reviewing, setReviewing] = useState<string | null>(null);
   const { value, mode, bookDocId, book, domain, bookSlot, localChoice } =
@@ -1243,7 +1237,6 @@ export function EditSession({
   const closePanel = () => {
     setPanel(null);
     setReviewing(null);
-    setView({ v: "root" });
   };
 
   if (session.loadError !== null) {
@@ -1410,63 +1403,6 @@ export function EditSession({
         )}
       </main>
     );
-  } else if (panel === "forms" && book !== null) {
-    // ponytail: the transitional editing surface. Slices 6-8 move these
-    // fields onto the learner screens themselves and slice 11 deletes the
-    // forms; until then this is what keeps a Book (private ones especially,
-    // which have no other route in) editable at all.
-    body = (
-      <main
-        className={value?.readOnly === true ? "editor read-only" : "editor"}
-      >
-        <BookEditor
-          doc={book}
-          view={view}
-          setView={setView}
-          onChange={(next) => value?.changeBook(next)}
-          hideCoverArt={mode === "private"}
-          domainEntries={domain?.entries ?? []}
-          domain={parseDomain(domain)}
-          domainCode={parseDomain(domain)?.code ?? ""}
-          sourceRef={firstResourceId(book)}
-          {...(session.onAddEntry !== null
-            ? { onAddEntry: session.onAddEntry }
-            : {})}
-          // Images only: a figure's stem validates against `imageStemSet`,
-          // so offering an audio stem in the `+ image` picker would author a
-          // guaranteed `dangling imageRef` (spec 0021-2 §2d).
-          assets={(value?.assets ?? []).filter((a) => a.kind === "image")}
-          {...(value?.uploadAsset !== undefined
-            ? { onUploadAsset: value.uploadAsset }
-            : {})}
-        />
-      </main>
-    );
-  } else if (panel === "lexicon" && domain !== null) {
-    body = (
-      <main
-        className={
-          value?.canEditLexicon === true ? "editor" : "editor read-only"
-        }
-      >
-        {value?.canEditLexicon !== true && (
-          <p className="status">
-            these words come from somewhere else — you can use them, but not
-            change them
-          </p>
-        )}
-        <DomainEditor
-          doc={domain}
-          view={view}
-          setView={setView}
-          onChange={(next) => {
-            if (value?.canEditLexicon === true) {
-              value.changeDomain(next);
-            }
-          }}
-        />
-      </main>
-    );
   }
 
   return (
@@ -1477,14 +1413,8 @@ export function EditSession({
         panel={panel}
         onPanel={(next) => {
           setReviewing(null);
-          setView({ v: "root" });
           setPanel(next);
         }}
-        onUp={
-          panel !== null && view.v !== "root"
-            ? () => setView(upView(view))
-            : null
-        }
         onExit={onExit}
         save={value?.save ?? "saved"}
         readOnly={value?.readOnly ?? false}
@@ -1498,7 +1428,6 @@ export function EditSession({
         onDiscardDraft={session.discardDraft}
         proposalCount={session.proposals?.length ?? 0}
         problemCount={value?.problems.length ?? 0}
-        hasLexicon={domain !== null}
         view={value?.view ?? "edit"}
         onView={value?.setView ?? (() => {})}
         canDiff={value?.canDiff ?? false}
@@ -1554,10 +1483,3 @@ function firstOwnedId(content: Content, message: string): ChangedTarget | null {
 /** `DomainDocument.domain` is `unknown` at rest, so a fresh or half-edited
  * one that fails `domainSchema` just leaves the note editor's lexicon sheet
  * off this render — the same best-effort degrade the three shells use. */
-function parseDomain(domain: DomainDocument | null) {
-  if (domain === null) {
-    return undefined;
-  }
-  const parsed = domainSchema.safeParse(domain.domain);
-  return parsed.success ? parsed.data : undefined;
-}

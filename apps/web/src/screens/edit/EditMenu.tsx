@@ -8,12 +8,10 @@ import type {
 } from "./EditSessionContext";
 
 /** Which full-screen editing panel is open over the learner screen, if any.
- * `forms`/`lexicon` are the transitional form tree (spec 0021-5 §0) — slices
- * 6-8 move their fields onto the screens and slice 11 deletes them. */
+ * Everything editable lives on the screens themselves now; these are the
+ * surfaces that have no in-place home. */
 export type EditPanel =
   | null
-  | "forms"
-  | "lexicon"
   | "assets"
   | "proposals"
   | "feedback"
@@ -37,7 +35,6 @@ export function EditMenu({
   mode,
   panel,
   onPanel,
-  onUp,
   onExit,
   save,
   readOnly,
@@ -51,7 +48,6 @@ export function EditMenu({
   onDiscardDraft,
   proposalCount,
   problemCount,
-  hasLexicon,
   view,
   onView,
   canDiff,
@@ -62,8 +58,6 @@ export function EditMenu({
   mode: EditMode;
   panel: EditPanel;
   onPanel: (panel: EditPanel) => void;
-  /** Up one level inside an open form panel; null at its root. */
-  onUp: (() => void) | null;
   onExit: () => void;
   save: SaveState;
   readOnly: boolean;
@@ -77,7 +71,6 @@ export function EditMenu({
   onDiscardDraft: (() => Promise<void>) | null;
   proposalCount: number;
   problemCount: number;
-  hasLexicon: boolean;
   view: EditView;
   onView: (view: EditView) => void;
   /** False for a private Book (spec 0021-9 §3b): no published "before", so
@@ -114,11 +107,7 @@ export function EditMenu({
     <>
       <div className="edit-bar">
         {panel !== null && (
-          <button
-            className="plain"
-            onClick={() => (onUp !== null ? onUp() : onPanel(null))}
-            title="Back"
-          >
+          <button className="plain" onClick={() => onPanel(null)} title="Back">
             <img
               className="icon-glyph"
               src={`${import.meta.env.BASE_URL}art/icons/arrow_W.png`}
@@ -249,21 +238,6 @@ export function EditMenu({
                       ? "nothing yet"
                       : "everything publishing would change"}
                   </span>
-                </button>
-              </li>
-            )}
-            <li className="card">
-              <button className="plain" onClick={() => choose("forms")}>
-                Edit all fields
-                <span className="status">
-                  the full form editor, until every field is editable in place
-                </span>
-              </button>
-            </li>
-            {hasLexicon && (
-              <li className="card">
-                <button className="plain" onClick={() => choose("lexicon")}>
-                  Words
                 </button>
               </li>
             )}

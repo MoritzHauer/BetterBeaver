@@ -154,52 +154,47 @@ describe("edit mode as a route flag", () => {
     await enterEditMode();
 
     // Not blocked, not an error screen: the session is live and the Book's
-    // own fields are reachable.
+    // own fields are reachable in place.
     await waitFor(() => expect(editBar()?.textContent).toContain("saved"));
-    await openMenu();
-    screen.getByRole("button", { name: /Edit all fields/ }).click();
     expect(
-      await screen.findByRole("button", { name: "New lesson" }),
-    ).toBeTruthy();
+      (await screen.findAllByDisplayValue("Meet BetterBeaver")).length,
+    ).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "+ lesson" })).toBeTruthy();
+    // The lexicon's own controls are not offered: an empty stand-in stood in
+    // for the document that failed, and writing to it would clobber it.
+    expect(screen.queryByRole("button", { name: "+ word family" })).toBeNull();
   });
 
   it("holds the Book and its lexicon together in maintain mode", async () => {
     await enterEditMode();
 
-    await openMenu();
-    // The lexicon is only offered once its own document is in hand — the
-    // Book names it, so it cannot even be looked up until the Book loads.
-    screen.getByRole("button", { name: "Words" }).click();
+    // The lexicon has no screen of its own (decision 11) — its Book-level
+    // settings sit on the Book screen beside the Book's, behind no menu.
     expect(
-      await screen.findByRole("button", { name: "New entry" }),
+      await screen.findByRole("button", { name: "+ word family" }),
     ).toBeTruthy();
-    expect(
-      screen.queryByText(/you can use them, but not change them/),
-    ).toBeNull();
+    expect(screen.getByLabelText(/Read-aloud language/)).toBeTruthy();
   });
 
   it("renders the lexicon read-only when the user does not maintain it", async () => {
-    // Plan decision 12: the Book is theirs, its lexicon is not.
+    // Plan decision 12: the Book is theirs, its lexicon is not. Its controls
+    // are hidden rather than disabled — offering a write that cannot land is
+    // worse than not offering it.
     maintained.delete("domain:demo");
     await enterEditMode();
 
-    await openMenu();
-    screen.getByRole("button", { name: "Words" }).click();
     expect(
-      await screen.findByText(/you can use them, but not change them/),
-    ).toBeTruthy();
+      (await screen.findAllByDisplayValue("Meet BetterBeaver")).length,
+    ).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: "+ word family" })).toBeNull();
   });
 
   it("flushes a pending debounced draft when edit mode is left", async () => {
     await enterEditMode();
-    await openMenu();
-    screen.getByRole("button", { name: /Edit all fields/ }).click();
-    // Wait for the panel itself, not just for *a* "Title" — the Book screen
-    // has one of its own now, and querying too early would type into an
-    // input the panel is about to unmount.
-    await screen.findByRole("button", { name: "New lesson" });
 
-    const title = screen.getByLabelText("Title");
+    // The Book's own Title, which comes first: Sources' seeded row carries a
+    // "Title" of its own, named after the Book (spec 0021-10 §1d).
+    const title = screen.getAllByLabelText("Title")[0]!;
     (title as HTMLInputElement).focus();
     // The 400 ms debounce is deliberately still pending when the session
     // unmounts a few lines below — the flush is what has to catch it.

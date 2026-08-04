@@ -180,7 +180,6 @@ export function LessonScreen({
               )
             }
             multiple={false}
-            hideIds
           />
         </>
       )}

@@ -1,7 +1,8 @@
 // Uploads the content tree as a PROPOSAL against each document's published
 // version (plan 0012 §5) instead of publishing it (`republish-content.ts`).
 // A proposal carries the whole edited document, not a patch: the maintainer
-// reviews the structural diff in `MaintainEditScreen`, and accepting lands
+// reviews the structural diff from the editing menu's open proposals, and
+// accepting lands
 // it in their DRAFT — so nothing reaches learners without a second look.
 //
 // This is the safe counterpart to republish for edits made outside the app:

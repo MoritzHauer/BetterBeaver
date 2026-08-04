@@ -23,7 +23,7 @@ afterEach(() => {
 
 /**
  * `NoteEditor` is controlled (spec 0021-1 §3: markdown in, markdown out, no
- * internal blocks state) — this harness plays the role `BookEditor` plays
+ * internal blocks state) — this harness plays the role the Theory page plays
  * in the app, feeding each `onChange` back in as the next `markdown` prop
  * so edits actually re-render, while a spy captures every value emitted so
  * assertions can read the final markdown without reaching into React state.

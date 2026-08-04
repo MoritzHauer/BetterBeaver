@@ -1003,8 +1003,8 @@ export function SessionScreen({
   pinnedUnitIds?: ReadonlySet<string>;
   onTogglePin?: (unitIds: string[]) => void;
   /** Edit affordance for whoever may edit this content (a maintainer, a
-   * proposer, or a private Book's owner): opens `EditScreen` at the current
-   * question's item/entry/task, layered over this session rather than
+   * proposer, or a private Book's owner): opens the scoped sheet on the
+   * current question's item/entry/task, over this session rather than
    * navigating away, so closing it resumes right here. Hidden on
    * `NoteQuestion` (no resolvable target) but otherwise independent of
    * `taskIds` — unlike Pin, it renders in `TaskSession`/`ReviewSession` too,

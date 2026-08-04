@@ -298,8 +298,8 @@ export function BookScreen({
           {/* Hidden for a private Book, not disabled: the watermark is loaded
               from `art/icons/<book.id>.png` in the app's *public* assets,
               which a private Book can never reach — offering a control that
-              could only ever silently fail is worse than not offering it
-              (`BookEditor.tsx:46-51`, same rationale). */}
+              could only ever silently fail is worse than not offering it —
+              the same rationale the deleted form editor recorded. */}
           {!edit.isPrivate && (
             <label className="field">
               Cover art
@@ -644,7 +644,6 @@ export function BookScreen({
                         edit.patchFamily({ ...family, entryIds: ids })
                       }
                       multiple
-                      hideIds
                     />
                     <ProblemMarker problems={edit.entityProblems(family.id)} />
                     <RowActions onRemove={() => edit.dropFamily(family.id)} />

@@ -268,8 +268,9 @@ function draftDomain(raw: unknown): Domain {
  *
  * Why not a lenient `validateContent`: dropping an invalid entity makes the
  * row the author is typing into vanish mid-keystroke. A freshly created
- * item (`{ id, kind, payload: {}, sourceRef: "" }`, as `BookEditor.tsx`
- * creates one) fails every field the real validator checks; `draftContent`
+ * item (`{ id, kind, payload: {}, sourceRef: "" }`, the shape every add
+ * control creates) fails every field the real validator checks;
+ * `draftContent`
  * turns that into `{ text: "", translation: "" }` — an empty, focusable
  * input — instead of a validation error with nothing to render.
  *

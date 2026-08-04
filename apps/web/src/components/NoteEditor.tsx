@@ -175,10 +175,11 @@ function resolveApply(
 }
 
 /**
- * The block editor that replaces the note `<textarea>` inside `BookEditor`
- * (spec 0021-1 §3). Props are pinned to a bare markdown string in, a bare
- * markdown string out — no `doc`/`stem`/`setNote` — so mounting this
- * elsewhere later (plan 0021 slice 6) is a prop change, not a rewrite.
+ * The note block editor (spec 0021-1 §3), on the Unit screen's Theory page.
+ * Props are pinned to a bare markdown string in, a bare markdown string out
+ * — no `doc`/`stem`/`setNote` — which is what made moving it out of the
+ * form editor's note view (slice 1) into the Unit screen (slice 6) a prop
+ * change rather than a rewrite.
  */
 export function NoteEditor({
   markdown,
@@ -641,7 +642,7 @@ export function NoteEditor({
       itemDisplayText(item).toLowerCase().includes(lexiconQuery)
     );
   });
-  // Capped the way `DomainEditor`'s own entry list is (spec 0021-3 §3).
+  // Capped, as the form editor's own entry list was (spec 0021-3 §3).
   const lexiconVisible = lexiconMatches.slice(0, 50);
   const lexiconHidden = lexiconMatches.length - lexiconVisible.length;
 

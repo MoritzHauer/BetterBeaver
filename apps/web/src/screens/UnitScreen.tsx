@@ -589,7 +589,6 @@ export function ExerciseCard({
         onChange={(ids) => edit.patchTask({ ...raw, itemIds: ids })}
         multiple
         ordered
-        hideIds
         // Taking a word out of an exercise leaves the word alone — the
         // picker's default "Delete" would say otherwise.
         removeLabel={() => "Remove"}
@@ -1068,7 +1067,6 @@ export function UnitScreen({
               }
               multiple={false}
               groupBy
-              hideIds
             />
             <EntityPicker
               label="Remember"
@@ -1079,7 +1077,6 @@ export function UnitScreen({
               }
               multiple
               groupBy
-              hideIds
             />
           </>
         )

@@ -59,8 +59,8 @@ function stringify(value: unknown): string {
 }
 
 /** Flattens two objects into comparable dotted-path leaves and returns only
- * the paths that differ. No reuse of `EditScreen`'s fixed `FieldSpec` lists —
- * a proposal review has no advance knowledge of which fields an entity uses. */
+ * the paths that differ. Never a fixed per-kind field list — a proposal
+ * review has no advance knowledge of which fields an entity uses. */
 function flattenFieldChanges(before: unknown, after: unknown): FieldChange[] {
   const changes: FieldChange[] = [];
   walk(before, after, "", changes);

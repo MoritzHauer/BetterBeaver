@@ -8,7 +8,7 @@ import type { ContentDiff, DomainContent, Problem } from "@betterbeaver/engine";
 import type { AssetView } from "./AssetsManager";
 
 /** Which lifecycle a document is edited through (plan 0012 §5, plan 0017
- * §3) — the same three `EditScreen` dispatches on, now branches inside one
+ * §3) — the three the form editor dispatched on, now branches inside one
  * session rather than three components. */
 export type EditMode = "maintain" | "propose" | "private";
 

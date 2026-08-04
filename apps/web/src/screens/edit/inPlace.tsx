@@ -594,7 +594,7 @@ export function withPayload(
  * `optional()` expects the key absent, and an `undefined` value survives in
  * memory while vanishing across the JSON round-trip to localStorage / the
  * private store, leaving the live document and its persisted copy
- * disagreeing. `BookEditor.tsx:263` records the same trap for
+ * disagreeing. The form editor recorded the same trap for
  * `unlocksAfterUnitId`; `icon` and `hasCoverArt` need it too. */
 export function withOptionalKey(
   entity: Entity,

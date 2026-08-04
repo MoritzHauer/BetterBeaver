@@ -200,7 +200,7 @@ const userEntryStore = createLocalStorageUserEntryStore();
  * `SKIP_COVER_KEY` already makes across the same reload. */
 const OPEN_EDITING_KEY = "bb.openEditing";
 
-/** Resolves the author Edit button's `EditScreen` deep-link target for one
+/** Resolves the author Edit button's scoped-sheet target for one
  * non-matching question's scheduling unit, shared by `TaskSession`,
  * `UnitSession`, and `ReviewSession`: a lexeme/concept item routes to the
  * domain's entry view; any other kind (sentence/pair) routes to its book's
@@ -253,7 +253,7 @@ function TaskSession({
    * author, plan 0017 §3 for a private Book, which has no account behind it
    * at all); gates the session screen's Edit button. */
   canEdit: boolean;
-  /** Opens `EditScreen` at the given deep-link target. */
+  /** Opens the scoped edit sheet on the given target (decision 13). */
   onOpenEdit: (docId: string, target: EditTarget) => void;
   onDone: () => void;
 }) {
@@ -342,7 +342,7 @@ function UnitSession({
    * author, plan 0017 §3 for a private Book, which has no account behind it
    * at all); gates the session screen's Edit button. */
   canEdit: boolean;
-  /** Opens `EditScreen` at the given deep-link target. */
+  /** Opens the scoped edit sheet on the given target (decision 13). */
   onOpenEdit: (docId: string, target: EditTarget) => void;
   onDone: () => void;
   /** Exit back to the unit's last content page (owner request); forwarded to
@@ -485,7 +485,7 @@ function ReviewSession({
    * author, plan 0017 §3 for a private Book, which has no account behind it
    * at all); gates the session screen's Edit button. */
   canEdit: boolean;
-  /** Opens `EditScreen` at the given deep-link target. */
+  /** Opens the scoped edit sheet on the given target (decision 13). */
   onOpenEdit: (docId: string, target: EditTarget) => void;
   onDone: () => void;
 }) {
@@ -1073,7 +1073,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
    * the key the editor it will open actually reads, then opens the first.
    *
    * The import used to write `bb.author.draft.*` and pin maintain mode for
-   * everyone, so a non-maintainer landed in `MaintainEditScreen`, whose
+   * everyone, so a non-maintainer landed in the maintainer's editor, whose
    * `loadDocument` is a `.single()` over a table RLS shows them no rows of
    * — surfacing as a bare "Cannot coerce the result to a single JSON
    * object". Routing through `editModeFor` is what makes "import a file and

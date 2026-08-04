@@ -19,7 +19,6 @@ async function open(
       mode={mode}
       panel={null}
       onPanel={() => {}}
-      onUp={null}
       onExit={() => {}}
       save="saved"
       readOnly={false}
@@ -33,7 +32,6 @@ async function open(
       onDiscardDraft={async () => {}}
       proposalCount={2}
       problemCount={0}
-      hasLexicon
       view="edit"
       onView={() => {}}
       canDiff={mode !== "private"}
@@ -59,10 +57,9 @@ describe("the [⋮] editing menu", () => {
     expect(screen.queryByRole("button", { name: /Sync/ })).toBeNull();
     expect(screen.queryByRole("button", { name: "Discard draft" })).toBeNull();
     expect(screen.queryByRole("button", { name: /open proposal/ })).toBeNull();
-    // What it does have: the editing surfaces and the way out.
-    expect(
-      screen.getByRole("button", { name: /Edit all fields/ }),
-    ).toBeTruthy();
+    // What it does have: the surfaces with no in-place home, and the way
+    // out. Editing itself is on the screens now — the menu's "Edit all
+    // fields" entry went with the form tree it opened (spec 0021-11 §1).
     expect(screen.getByRole("button", { name: "Assets" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Done editing" })).toBeTruthy();
   });

@@ -6,190 +6,16 @@ import {
   groupPickerRows,
   visiblePickerRows,
 } from "../entityPicker";
-import { type Entity } from "./types";
 import type { AssetView } from "./AssetsManager";
 
-export interface FieldSpec {
-  label: string;
-  path: string[];
-  multiline?: boolean;
-  hint?: string;
-  /** Renders a native `<select>` over these options plus "(none)" instead of a text input/textarea. */
-  options?: readonly string[];
-}
-
-export const f = (label: string, ...path: string[]): FieldSpec => ({
-  label,
-  path,
-});
-
-export const fm = (label: string, ...path: string[]): FieldSpec => ({
-  label,
-  path,
-  multiline: true,
-});
-
-// `sourceRef` used to live here as a free-text FieldSpec; spec 0018 §3 moves
-// it out to an `EntityPicker` rendered alongside `EntityForm` at each of
-// this record's two call sites (item view, domain entry view) instead —
-// `FieldSpec`/`Field` stay string-only, on purpose (§3).
-export const ITEM_FIELDS: Record<string, FieldSpec[]> = {
-  sentence: [
-    {
-      label: "Text",
-      path: ["payload", "text"],
-      multiline: true,
-      hint: "Cloze blanks: {{c1::word}}, {{c2::word}}, …",
-    },
-    fm("Translation", "payload", "translation"),
-    f("Audio ref", "payload", "audioRef"),
-  ],
-  concept: [
-    f("Term", "payload", "term"),
-    fm("Definition", "payload", "definition"),
-    fm("Example", "payload", "example"),
-  ],
-  lexeme: [
-    f("Script", "payload", "script"),
-    f("Transliteration", "payload", "transliteration"),
-    f("Gloss", "payload", "gloss"),
-    f("Example text", "payload", "example", "text"),
-    f("Example translation", "payload", "example", "translation"),
-    fm("Usage note", "payload", "usageNote"),
-    f("Audio ref", "payload", "audioRef"),
-  ],
-  pair: [
-    f("A script", "payload", "a", "script"),
-    f("A audio ref", "payload", "a", "audioRef"),
-    f("B script", "payload", "b", "script"),
-    f("B audio ref", "payload", "b", "audioRef"),
-    fm("Contrast", "payload", "contrast"),
-  ],
-};
-
-export function getPath(value: unknown, path: string[]): string {
-  let current: unknown = value;
-  for (const key of path) {
-    if (typeof current !== "object" || current === null) {
-      return "";
-    }
-    current = (current as Record<string, unknown>)[key];
-  }
-  return typeof current === "string" ? current : "";
-}
-
-/** Immutable deep set; an empty string deletes the key (so zod `optional()` fields stay absent, not ""). */
-export function setPath(value: unknown, path: string[], next: string): unknown {
-  const [head, ...rest] = path;
-  if (head === undefined) {
-    return next;
-  }
-  const obj =
-    typeof value === "object" && value !== null
-      ? { ...(value as Record<string, unknown>) }
-      : {};
-  if (rest.length === 0) {
-    if (next === "") {
-      delete obj[head];
-    } else {
-      obj[head] = next;
-    }
-    return obj;
-  }
-  obj[head] = setPath(obj[head], rest, next);
-  return obj;
-}
-
-export function Field({
-  spec,
-  entity,
-  onChange,
-}: {
-  spec: FieldSpec;
-  entity: Entity;
-  onChange: (next: Entity) => void;
-}) {
-  const value = getPath(entity, spec.path);
-  const set = (next: string) =>
-    onChange(setPath(entity, spec.path, next) as Entity);
-  return (
-    <label className="field">
-      {spec.label}
-      {spec.options !== undefined ? (
-        <select value={value} onChange={(e) => set(e.target.value)}>
-          <option value="">(none)</option>
-          {spec.options.map((opt) => (
-            <option key={opt} value={opt}>
-              {opt}
-            </option>
-          ))}
-        </select>
-      ) : spec.multiline ? (
-        <textarea
-          value={value}
-          rows={3}
-          onChange={(e) => set(e.target.value)}
-        />
-      ) : (
-        <input
-          type="text"
-          value={value}
-          onChange={(e) => set(e.target.value)}
-        />
-      )}
-      {spec.hint !== undefined && <span className="status">{spec.hint}</span>}
-    </label>
-  );
-}
-
-export function EntityForm({
-  entity,
-  specs,
-  onChange,
-}: {
-  entity: Entity;
-  specs: FieldSpec[];
-  onChange: (next: Entity) => void;
-}) {
-  return (
-    <div className="editor-form">
-      {specs.map((spec) => (
-        <Field
-          key={spec.path.join(".")}
-          spec={spec}
-          entity={entity}
-          onChange={onChange}
-        />
-      ))}
-    </div>
-  );
-}
-
-/** Creates one new entity, id auto-generated (spec 0018 §1) — no more
- * hand-typed slugs. `makeId` lets each call site pick the right shape
- * (`${bookCode/domainCode}-${uuid}` for most entities, a bare uuid for a
- * note's stem — the call site already wraps that as
- * `${bookCode}-note-${stem}`), while `onAdd`'s signature stays the one
- * every call site already had. */
-export function AddEntityForm({
-  label,
-  makeId,
-  onAdd,
-}: {
-  label: string;
-  makeId: () => string;
-  onAdd: (id: string) => void;
-}) {
-  return (
-    <button
-      type="button"
-      className="editor-add"
-      onClick={() => onAdd(makeId())}
-    >
-      {label}
-    </button>
-  );
-}
+/**
+ * The editing controls the in-place surfaces share. What is left of the form
+ * editor's `fields.tsx` after slice 11 deleted it: the row actions, the
+ * reference picker and the asset-ref slot, each used by three or four of the
+ * Book / Lesson / Unit screens. The `FieldSpec` machinery above them —
+ * `Field`, `EntityForm`, `ITEM_FIELDS`, `getPath`/`setPath` — went with the
+ * forms it built, replaced by each screen's own layout.
+ */
 
 export function RowActions({
   onUp,
@@ -323,8 +149,10 @@ export function AssetRefPicker({
 /**
  * One component behind every id-reference field (spec 0018 §2): a search
  * box, optional filter chips, and a scrollable checkbox/radio list of
- * `options` — never raw id text, but the id is always shown as a muted
- * subtitle since that's what validation errors name. For `multiple`
+ * `options` — and since slice 11, never an id: plan 0021 §11 hides them
+ * everywhere, which slice 10's deep-linked publish errors made safe (they
+ * used to be the only way to locate the entity an error named). For
+ * `multiple`
  * pickers, the current selection also renders as its own reorderable list
  * (reusing `RowActions`, exactly as the pre-picker itemIds/taskIds/etc.
  * lists already did) so removal/reordering/navigation keep working
@@ -351,7 +179,6 @@ export function EntityPicker({
   onRemove,
   removeLabel,
   onOpen,
-  hideIds = false,
 }: {
   label: string;
   options: PickerOption[];
@@ -371,12 +198,6 @@ export function EntityPicker({
    * `undefined` when this row isn't separately editable (e.g. a lexicon
    * entry referenced from a unit's items — edited in its own domain). */
   onOpen?: (id: string) => (() => void) | undefined;
-  /** Hides the raw id shown beside every title. In-place editing shows no
-   * entity ids at all (plan 0021 §11) — but the form editor still must,
-   * because its validation errors name ids and spec 0018 made those
-   * generated UUIDs, so hiding them there without slice 10's deep-linking
-   * would make an error unlocatable. Hence opt-in, not the default. */
-  hideIds?: boolean;
 }) {
   const [search, setSearch] = useState("");
   const [activeFilterKey, setActiveFilterKey] = useState(defaultFilterKey);
@@ -418,7 +239,6 @@ export function EntityPicker({
                   {option?.title ?? id}
                   {option === undefined && " · unresolved"}
                   {option?.kind !== undefined && ` · ${option.kind}`}
-                  {!hideIds && <span className="status"> {id}</span>}
                 </span>
                 <RowActions
                   onUp={
@@ -498,7 +318,6 @@ export function EntityPicker({
                     {row.title}
                     {row.unresolved && " · unresolved"}
                     {row.kind !== undefined && ` · ${row.kind}`}
-                    {!hideIds && <span className="status"> {row.id}</span>}
                   </label>
                 </li>
               ))}

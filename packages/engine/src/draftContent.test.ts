@@ -183,7 +183,7 @@ describe("draftContent", () => {
   });
 
   it("does not throw when a document's list fields are missing or not arrays", () => {
-    // The reachable case, not a hypothetical: `MaintainEditScreen` restores
+    // The reachable case, not a hypothetical: the session restores
     // its working document with `JSON.parse(localStorage)`, whose try/catch
     // guards the parse but not the shape. A truncated or stale-schema draft
     // is valid JSON with a missing `lessons`, and that document is what the
