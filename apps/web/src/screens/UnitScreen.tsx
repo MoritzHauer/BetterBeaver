@@ -1,6 +1,11 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import type { Content, Item } from "@betterbeaver/schema";
-import { stripClozeMarkup } from "@betterbeaver/schema";
+import {
+  TASK_ALLOWED_ITEM_KINDS,
+  TASK_TYPES,
+  stripClozeMarkup,
+} from "@betterbeaver/schema";
+import { ConfirmSheet } from "../components/Sheet";
 import { countUnitQuestions } from "@betterbeaver/engine";
 import type { TapLookup } from "../components/TappableText";
 import { TappableText } from "../components/TappableText";
@@ -15,7 +20,15 @@ import {
   withPayload,
   withOptionalKey,
 } from "./edit/inPlace";
-import { EntityPicker, RowActions } from "./edit/fields";
+import { AssetRefPicker, EntityPicker, RowActions } from "./edit/fields";
+import {
+  type ExerciseOffer,
+  exerciseLabel,
+  exerciseOffers,
+  exerciseTypeLabel,
+  itemLabel,
+  validTypesFor,
+} from "./edit/exerciseOffers";
 import { unitPoolOptionsGroupedByLesson } from "./entityPicker";
 import { getLexiconAssetUrl } from "../content/bundled";
 import { getNoteMarkdown } from "../content/source";
@@ -39,7 +52,16 @@ const EXAMPLE_CHUNK_SIZE = 4;
  * out of the unit's practice session feels the same as the trail's. */
 export const SWIPE_THRESHOLD = 40;
 
-type PageKind = "overview" | "theory" | "vocabulary" | "concepts" | "examples";
+type PageKind =
+  | "overview"
+  | "theory"
+  | "vocabulary"
+  | "concepts"
+  | "examples"
+  // Edit-only (spec 0021-8 §3): a task has no learner surface — it only
+  // exists inside a running session — so this dot appears after the content
+  // pages, and only while a session is open.
+  | "exercises";
 
 /** Plan 0021 decision 12, worded for someone who has never heard the word
  * "domain": this Book points at a lexicon somebody else maintains. */
@@ -100,6 +122,81 @@ function SubPager({
   );
 }
 
+/**
+ * What every item row hides behind its expand (spec 0021-8 §2b, §2c): the
+ * source it came from, and its asset refs. **This is the only surface that
+ * can set `audioRef`/`imageRef` at all** once slice 11 deletes the form
+ * editor — without it Listen, Dictation, Shadowing and Picture become
+ * permanently unreachable, since §1a greys them for exactly these refs.
+ */
+function RowExtras({ item, edit }: { item: Item; edit: UnitEditOps }) {
+  const raw = edit.raw(item.id) ?? { id: item.id };
+  const ref = (
+    label: string,
+    kind: "audio" | "image",
+    path: [string] | [string, string],
+    required = false,
+  ) => (
+    <AssetRefPicker
+      label={label}
+      assets={edit.assetsFor(item.id, kind)}
+      selected={edit.payloadValue(item.id, ...path)}
+      // Through `withPayload`, so clearing **deletes the key**: `slugSchema`
+      // rejects `""`, and an emptied ref left as `""` is unpublishable.
+      onChange={(stem) => edit.patchEntity(withPayload(raw, path, stem))}
+      {...(() => {
+        const upload = edit.uploadAssetFor(item.id);
+        return upload !== undefined ? { onUpload: upload } : {};
+      })()}
+      required={required}
+    />
+  );
+  return (
+    <>
+      {/* No `freeTextWhenEmpty` (§2b): slice 10 seeds a resource at Book
+          creation, so an escape hatch that lets an author type a stem would
+          outlive the problem it exists for. */}
+      {edit.resources.length === 0 ? (
+        <p className="status">add a source first — Sources, on the Book</p>
+      ) : (
+        <label className="field">
+          Source
+          <select
+            value={typeof raw.sourceRef === "string" ? raw.sourceRef : ""}
+            onChange={(e) =>
+              edit.patchEntity({ ...raw, sourceRef: e.target.value })
+            }
+          >
+            <option value="">(none)</option>
+            {edit.resources.map((resource) => (
+              <option key={resource.id} value={resource.id}>
+                {typeof resource.title === "string" && resource.title !== ""
+                  ? resource.title
+                  : resource.id}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      <ProblemMarker problems={edit.fieldProblems(item.id, "sourceRef")} />
+      {item.kind === "pair" ? (
+        <>
+          {/* The only mandatory slugs in the schema (§2c). */}
+          {ref("First audio", "audio", ["a", "audioRef"], true)}
+          {ref("Second audio", "audio", ["b", "audioRef"], true)}
+        </>
+      ) : (
+        <>
+          {ref("Audio", "audio", ["audioRef"])}
+          {/* A sentence has no `imageRef`: the validator exempts it from the
+              image check (`validate.ts:635`) because the field isn't there. */}
+          {item.kind !== "sentence" && ref("Image", "image", ["imageRef"])}
+        </>
+      )}
+    </>
+  );
+}
+
 /** An "Examples" card: `sentence` and `pair` items only (kind-partitioned
  * unit restructure) — `lexeme`/`concept` now render as table rows instead.
  * The target-language script is wrapped in `TappableText` (full-string
@@ -111,11 +208,15 @@ function ExampleCard({
   lookup,
   bookDocId,
   edit,
+  expanded,
+  onToggle,
 }: {
   item: ExampleItem;
   lookup: TapLookup;
   bookDocId: string;
   edit?: UnitEditOps;
+  expanded?: boolean;
+  onToggle?: () => void;
 }) {
   const [showTranslation, setShowTranslation] = useState(false);
 
@@ -174,6 +275,12 @@ function ExampleCard({
           onRemove={() => edit.removeRow(item.id)}
           removeLabel={edit.removeLabel(item.id)}
         />
+        {editable && onToggle !== undefined && (
+          <button type="button" className="plain" onClick={onToggle}>
+            {expanded === true ? "Less" : "More"}
+          </button>
+        )}
+        {editable && expanded === true && <RowExtras item={item} edit={edit} />}
       </li>
     );
   }
@@ -289,6 +396,121 @@ function NoteCard({
   );
 }
 
+/**
+ * One existing exercise (spec 0021-8 §1b). Every control here is a picker
+ * over what the unit already holds — there is no free-text id field, and the
+ * type `<select>` lists only types this exercise's current items support.
+ */
+function ExerciseCard({
+  taskId,
+  edit,
+  itemById,
+  unitItems,
+  onDelete,
+}: {
+  taskId: string;
+  edit: UnitEditOps;
+  itemById: Map<string, Item>;
+  unitItems: Item[];
+  onDelete: (label: string) => void;
+}) {
+  const raw = edit.rawTask(taskId);
+  if (raw === undefined) {
+    // A `taskIds` entry pointing at no task — routine mid-edit, and
+    // `checkReferences` already names it on the unit.
+    return <li className="card status">an exercise that no longer exists</li>;
+  }
+  const itemIds = Array.isArray(raw.itemIds) ? (raw.itemIds as string[]) : [];
+  const items = itemIds.flatMap((id) => {
+    const item = itemById.get(id);
+    return item !== undefined ? [item] : [];
+  });
+  const type = TASK_TYPES.find((t) => t === raw.type) ?? TASK_TYPES[0];
+  // The current type is always offered, even when the items no longer
+  // support it: dropping it would leave the `<select>` showing blank and
+  // silently rewrite the exercise on the next change. The marker below says
+  // what is wrong with it.
+  const typeOptions = [...new Set([type, ...validTypesFor(items, unitItems)])];
+  const allowed = TASK_ALLOWED_ITEM_KINDS[type];
+  return (
+    <li className="card">
+      <strong>{exerciseLabel(type, items)}</strong>
+      <label className="field">
+        Type
+        <select
+          value={type}
+          onChange={(e) => edit.patchTask({ ...raw, type: e.target.value })}
+        >
+          {typeOptions.map((option) => (
+            <option key={option} value={option}>
+              {exerciseTypeLabel(option)}
+            </option>
+          ))}
+        </select>
+      </label>
+      <EntityPicker
+        label="Items"
+        options={unitItems
+          .filter((item) => allowed.includes(item.kind))
+          .map((item) => ({ id: item.id, title: itemLabel(item) }))}
+        selected={itemIds}
+        onChange={(ids) => edit.patchTask({ ...raw, itemIds: ids })}
+        multiple
+        ordered
+        hideIds
+        // Taking a word out of an exercise leaves the word alone — the
+        // picker's default "Delete" would say otherwise.
+        removeLabel={() => "Remove"}
+      />
+      <label className="field">
+        Instructions
+        <textarea
+          rows={2}
+          value={typeof raw.instructions === "string" ? raw.instructions : ""}
+          onChange={(e) =>
+            // Optional, so an emptied box **deletes** the key rather than
+            // leaving `""` behind (same rule as every other optional field).
+            edit.patchTask(withOptionalKey(raw, "instructions", e.target.value))
+          }
+        />
+      </label>
+      <ProblemMarker problems={edit.problemsFor(taskId)} />
+      <RowActions onRemove={() => onDelete(exerciseLabel(type, items))} />
+    </li>
+  );
+}
+
+/** One row of the `+ add an exercise` list (§1a): a tap that builds a valid
+ * exercise, or a greyed line saying why it cannot. */
+function OfferRow({
+  offer,
+  itemById,
+  onAdd,
+}: {
+  offer: ExerciseOffer;
+  itemById: Map<string, Item>;
+  onAdd: () => void;
+}) {
+  if (offer.reason !== null) {
+    return (
+      <li className="status">
+        {exerciseTypeLabel(offer.type)} — {offer.reason}
+      </li>
+    );
+  }
+  const items = offer.itemIds.flatMap((id) => {
+    const item = itemById.get(id);
+    return item !== undefined ? [item] : [];
+  });
+  return (
+    <li>
+      <button type="button" className="editor-add" onClick={onAdd}>
+        + {exerciseLabel(offer.type, items)}
+      </button>
+    </li>
+  );
+}
+
 export function UnitScreen({
   content,
   unitId,
@@ -346,6 +568,13 @@ export function UnitScreen({
   // the previous unit simply matches no row here, so the only effect is that
   // coming back re-opens the row you left open.
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
+  // Exercises page (spec 0021-8 §1): whether the offer list is open, and
+  // which exercise is awaiting a delete confirmation.
+  const [showOffers, setShowOffers] = useState(false);
+  const [pendingTask, setPendingTask] = useState<{
+    id: string;
+    label: string;
+  } | null>(null);
 
   // Trail page index, plus each section's own sub-pager index (plan 0010
   // design section 4: no shared pagination abstraction — one useState each).
@@ -431,6 +660,7 @@ export function UnitScreen({
     ...(lexemes.length > 0 || edit !== null ? (["vocabulary"] as const) : []),
     ...(concepts.length > 0 || edit !== null ? (["concepts"] as const) : []),
     ...(examples.length > 0 || edit !== null ? (["examples"] as const) : []),
+    ...(edit !== null ? (["exercises"] as const) : []),
   ];
   // Never read `page` directly below: it may still hold `startAtEnd`'s
   // sentinel, which no arithmetic would ever walk back into range.
@@ -874,6 +1104,7 @@ export function UnitScreen({
                               "payload.transliteration",
                             )}
                           />
+                          <RowExtras item={item} edit={edit} />
                         </td>
                       </tr>
                     ) : null}
@@ -937,77 +1168,99 @@ export function UnitScreen({
               {conceptRows.map((item) => {
                 const editable = edit !== null && edit.canEditRow(item.id);
                 return (
-                  <tr key={item.id}>
-                    <td>
-                      {editable ? (
-                        <>
-                          <input
-                            type="text"
-                            aria-label="Term"
-                            value={edit.payloadValue(item.id, "term")}
-                            onChange={(e) =>
-                              edit.patchEntity(
-                                withPayload(
-                                  edit.raw(item.id) ?? { id: item.id },
-                                  ["term"],
-                                  e.target.value,
-                                ),
-                              )
-                            }
-                          />
-                          <ProblemMarker
-                            problems={edit.fieldProblems(
-                              item.id,
-                              "payload.term",
-                            )}
-                          />
-                        </>
-                      ) : (
-                        item.payload.term
-                      )}
-                    </td>
-                    <td>
-                      {editable ? (
-                        <>
-                          <input
-                            type="text"
-                            aria-label="Definition"
-                            value={edit.payloadValue(item.id, "definition")}
-                            onChange={(e) =>
-                              edit.patchEntity(
-                                withPayload(
-                                  edit.raw(item.id) ?? { id: item.id },
-                                  ["definition"],
-                                  e.target.value,
-                                ),
-                              )
-                            }
-                          />
-                          <ProblemMarker
-                            problems={edit.fieldProblems(
-                              item.id,
-                              "payload.definition",
-                            )}
-                          />
-                        </>
-                      ) : (
-                        item.payload.definition
-                      )}
-                    </td>
-                    {edit !== null ? (
+                  <Fragment key={item.id}>
+                    <tr>
                       <td>
-                        <RowActions
-                          onUp={() => edit.moveRow(item.id, -1)}
-                          onDown={() => edit.moveRow(item.id, 1)}
-                          onRemove={() => edit.removeRow(item.id)}
-                          removeLabel={edit.removeLabel(item.id)}
-                        />
-                        <ProblemMarker
-                          problems={edit.entityProblems(item.id)}
-                        />
+                        {editable ? (
+                          <>
+                            <input
+                              type="text"
+                              aria-label="Term"
+                              value={edit.payloadValue(item.id, "term")}
+                              onChange={(e) =>
+                                edit.patchEntity(
+                                  withPayload(
+                                    edit.raw(item.id) ?? { id: item.id },
+                                    ["term"],
+                                    e.target.value,
+                                  ),
+                                )
+                              }
+                            />
+                            <ProblemMarker
+                              problems={edit.fieldProblems(
+                                item.id,
+                                "payload.term",
+                              )}
+                            />
+                          </>
+                        ) : (
+                          item.payload.term
+                        )}
                       </td>
+                      <td>
+                        {editable ? (
+                          <>
+                            <input
+                              type="text"
+                              aria-label="Definition"
+                              value={edit.payloadValue(item.id, "definition")}
+                              onChange={(e) =>
+                                edit.patchEntity(
+                                  withPayload(
+                                    edit.raw(item.id) ?? { id: item.id },
+                                    ["definition"],
+                                    e.target.value,
+                                  ),
+                                )
+                              }
+                            />
+                            <ProblemMarker
+                              problems={edit.fieldProblems(
+                                item.id,
+                                "payload.definition",
+                              )}
+                            />
+                          </>
+                        ) : (
+                          item.payload.definition
+                        )}
+                      </td>
+                      {edit !== null ? (
+                        <td>
+                          <RowActions
+                            onUp={() => edit.moveRow(item.id, -1)}
+                            onDown={() => edit.moveRow(item.id, 1)}
+                            onRemove={() => edit.removeRow(item.id)}
+                            removeLabel={edit.removeLabel(item.id)}
+                          />
+                          {editable && (
+                            <button
+                              type="button"
+                              className="plain"
+                              onClick={() =>
+                                setExpandedRow((open) =>
+                                  open === item.id ? null : item.id,
+                                )
+                              }
+                            >
+                              {expandedRow === item.id ? "Less" : "More"}
+                            </button>
+                          )}
+                          <ProblemMarker
+                            problems={edit.entityProblems(item.id)}
+                          />
+                        </td>
+                      ) : null}
+                    </tr>
+                    {editable && expandedRow === item.id ? (
+                      <tr>
+                        <td colSpan={3}>
+                          <RowExtras item={item} edit={edit} />
+                        </td>
+                      </tr>
                     ) : null}
-                  </tr>
+                  </Fragment>
                 );
               })}
             </tbody>
@@ -1069,6 +1322,10 @@ export function UnitScreen({
                 lookup={lookup}
                 bookDocId={`topic:${content.topic.id}`}
                 {...(edit !== null ? { edit } : {})}
+                expanded={expandedRow === item.id}
+                onToggle={() =>
+                  setExpandedRow((open) => (open === item.id ? null : item.id))
+                }
               />
             ))}
           </ul>
@@ -1092,6 +1349,77 @@ export function UnitScreen({
           )}
         </>
       ) : null}
+
+      {currentPage === "exercises" && edit !== null ? (
+        <>
+          <p className="eyebrow">
+            <img
+              className="icon-glyph"
+              src={`${import.meta.env.BASE_URL}art/icons/beaver_pencil.png`}
+              alt=""
+            />{" "}
+            Exercises
+          </p>
+          <ul className="card-list">
+            {edit.taskIds.map((taskId) => (
+              <ExerciseCard
+                key={taskId}
+                taskId={taskId}
+                edit={edit}
+                itemById={itemById}
+                unitItems={items}
+                onDelete={(label) => setPendingTask({ id: taskId, label })}
+              />
+            ))}
+          </ul>
+          {/* Unit-level problems land on Overview, but "unit has zero tasks"
+              is only actionable here, so it is repeated beside the list it
+              is about. */}
+          <ProblemMarker problems={edit.entityProblems(unit.id)} />
+          <button
+            type="button"
+            className="editor-add"
+            onClick={() => setShowOffers((open) => !open)}
+          >
+            + add an exercise
+          </button>
+          {showOffers && (
+            <ul className="editor-list">
+              {/* Nothing here can produce a publish error (§1a): each row is
+                  pre-filled with the items its type accepts, and a type this
+                  unit cannot support is greyed with the reason rather than
+                  hidden — hiding it would leave the author guessing why
+                  Listen never appears. */}
+              {exerciseOffers(unit.itemIds, itemById).map((offer, index) => (
+                <OfferRow
+                  key={`${offer.type}-${offer.kind ?? index}`}
+                  offer={offer}
+                  itemById={itemById}
+                  onAdd={() => {
+                    edit.addTask(offer.type, offer.itemIds);
+                    setShowOffers(false);
+                  }}
+                />
+              ))}
+            </ul>
+          )}
+        </>
+      ) : null}
+
+      {pendingTask !== null && (
+        <ConfirmSheet
+          icon="lock_key"
+          title="Delete this exercise?"
+          body={`“${pendingTask.label}” will be removed from this unit.`}
+          cancelLabel="Keep it"
+          confirmLabel="Delete"
+          onCancel={() => setPendingTask(null)}
+          onConfirm={() => {
+            setPendingTask(null);
+            edit?.removeTask(pendingTask.id);
+          }}
+        />
+      )}
 
       {/* One bar, two jobs (owner request): it walks the trail forward until
           the last content page, where it becomes the Practice launcher —

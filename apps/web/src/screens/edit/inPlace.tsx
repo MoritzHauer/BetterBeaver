@@ -1,4 +1,4 @@
-import type { Item, ItemKind } from "@betterbeaver/schema";
+import type { Item, ItemKind, TaskType } from "@betterbeaver/schema";
 import { DOMAIN_ENTRY_KIND, domainSchema } from "@betterbeaver/schema";
 import type { Problem } from "@betterbeaver/engine";
 import {
@@ -12,6 +12,7 @@ import {
 import { newEntityId } from "../../content/entity-ids";
 import { newPrivateId } from "../../content/private-ids";
 import type { LexiconAccess, NoteAsset } from "../../components/NoteEditor";
+import type { AssetView } from "./AssetsManager";
 import type { EditSessionValue } from "./EditSessionContext";
 import { type Entity, firstResourceId } from "./types";
 
@@ -112,6 +113,28 @@ export interface UnitEditOps extends ProblemViews {
    * validates against `imageStemSet` (spec 0021-2 §2d). */
   imageAssets: NoteAsset[];
   uploadAsset: ((file: File) => Promise<void>) | undefined;
+  /** The Book's `resources`, raw — the pool behind every row's Source
+   * control, and behind a lexicon entry's too (`validate.ts:785` resolves an
+   * entry's `sourceRef` against the *Book's* resources, spec 0021-8 §2b). */
+  resources: Entity[];
+  /** The asset pool this row's refs validate against (§2c): the Book's for a
+   * book item, the lexicon's for a lexicon entry. Offering the wrong one
+   * authors a ref that passes the picker and fails publish. */
+  assetsFor: (id: string, kind: "audio" | "image") => AssetView[];
+  /** Uploads land in the **Book's** prefix, so a lexicon entry's row gets no
+   * uploader — only the lexicon's already-uploaded assets. */
+  uploadAssetFor: (id: string) => ((file: File) => Promise<void>) | undefined;
+  /** Read raw, not off `draftContent`'s unit: a task the adapter dropped for
+   * being unparseable still has to be reachable on the page that exists to
+   * fix or delete it. */
+  taskIds: string[];
+  rawTask: (id: string) => Entity | undefined;
+  patchTask: (next: Entity) => void;
+  /** Creates the exercise and appends it to `unit.taskIds` in one change
+   * (§1a) — two `changeBook`s would drop the first. */
+  addTask: (type: TaskType, itemIds: string[]) => void;
+  /** `removeEntity` strips it from `unit.taskIds` too (§1b). */
+  removeTask: (id: string) => void;
 }
 
 /**
@@ -269,6 +292,27 @@ export function unitEditOps(
     canEditLexicon: session.canEditLexicon,
     imageAssets: session.assets.filter((asset) => asset.kind === "image"),
     uploadAsset: session.uploadAsset,
+    resources: (book.resources as Entity[] | undefined) ?? [],
+    assetsFor: (id, kind) =>
+      (isLexiconEntry(id) ? session.lexiconAssets : session.assets).filter(
+        (asset) => asset.kind === kind,
+      ),
+    uploadAssetFor: (id) =>
+      isLexiconEntry(id) ? undefined : session.uploadAsset,
+    taskIds: list(rawUnit.taskIds),
+    rawTask: (id) => (book.tasks as Entity[]).find((t) => t.id === id),
+    patchTask: (next) => session.changeBook(upsertEntity(book, "tasks", next)),
+    addTask: (type, itemIds) => {
+      const id = newEntityId(bookCode);
+      const withTask = upsertEntity(book, "tasks", { id, type, itemIds });
+      session.changeBook(
+        upsertEntity(withTask, "units", {
+          ...rawUnit,
+          taskIds: [...list(rawUnit.taskIds), id],
+        }),
+      );
+    },
+    removeTask: (id) => session.changeBook(removeEntity(book, "tasks", id)),
   };
 }
 
@@ -284,6 +328,17 @@ export interface BookEditOps extends ProblemViews {
   moveLesson: (id: string, delta: -1 | 1) => void;
   removeLesson: (id: string) => void;
   addLesson: () => void;
+  /** Spec 0021-8 §2a. `resources` is a field of the Book, shared across
+   * every unit, which is why Sources lives here and not on the Unit trail. */
+  resources: Entity[];
+  patchResource: (next: Entity) => void;
+  addResource: () => void;
+  removeResource: (id: string) => void;
+  /** How many items and lexicon entries point at this resource — the count
+   * the delete confirm warns with (§2a). Entries count too: an entry's
+   * `sourceRef` resolves against the *Book's* resources
+   * (`validate.ts:785`), a genuine cross-document coupling. */
+  sourceRefCount: (id: string) => number;
 }
 
 /** The Book screen's half of §1, or `null` in learner mode. */
@@ -333,6 +388,27 @@ export function bookEditOps(
         topic: { ...topic, lessonIds: [...list(topic.lessonIds), id] },
       });
     },
+    resources: (book.resources as Entity[] | undefined) ?? [],
+    patchResource: (next) =>
+      session.changeBook(upsertEntity(book, "resources", next)),
+    addResource: () =>
+      session.changeBook(
+        upsertEntity(book, "resources", {
+          id: newEntityId(bookCode),
+          title: "",
+          path: "",
+        }),
+      ),
+    // Not cascaded on purpose (§2a): `removeEntity` strips id *arrays*, and
+    // a `sourceRef` is a scalar, so the items pointing here keep pointing
+    // here and fail at publish. Silently repointing them would be worse.
+    removeResource: (id) =>
+      session.changeBook(removeEntity(book, "resources", id)),
+    sourceRefCount: (id) =>
+      [
+        ...((book.items as Entity[] | undefined) ?? []),
+        ...((session.domain.entries as Entity[] | undefined) ?? []),
+      ].filter((entity) => entity.sourceRef === id).length,
   };
 }
 

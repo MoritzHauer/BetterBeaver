@@ -74,6 +74,7 @@ function makeSession(overrides: Partial<EditSessionValue> = {}) {
     readOnly: false,
     canEditLexicon: true,
     assets: [],
+    lexiconAssets: [],
     save: "saved",
     publish: { s: "idle" },
     ...overrides,

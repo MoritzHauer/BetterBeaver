@@ -7,6 +7,7 @@ import {
   visiblePickerRows,
 } from "../entityPicker";
 import { type Entity } from "./types";
+import type { AssetView } from "./AssetsManager";
 
 export interface FieldSpec {
   label: string;
@@ -234,6 +235,88 @@ export function RowActions({
         </button>
       )}
     </span>
+  );
+}
+
+/**
+ * One asset ref slot — `audioRef`, `imageRef`, or a pair side's — picked
+ * from what is already uploaded (spec 0021-8 §2c). A stem is never typed,
+ * which is the whole point: `slugPattern` rejects most filenames, and a
+ * hand-typed stem that resolves to nothing fails at publish.
+ *
+ * A native `<select>` over asset *names* rather than slice 2's toggled
+ * thumbnail grid: these render inside a table row, and the grid's job there
+ * (browse a pool of images) is not this control's (fill one slot). The image
+ * thumbnail below keeps the one thing the grid gave that a name does not.
+ *
+ * Clearing sends `""`, which every caller routes through `withPayload` —
+ * so the key is deleted, never left as `""`, which `slugSchema` rejects.
+ */
+export function AssetRefPicker({
+  label,
+  assets,
+  selected,
+  onChange,
+  onUpload,
+  required = false,
+}: {
+  label: string;
+  /** Already filtered to this slot's kind, and to the pool belonging to
+   * whichever document owns the row (§2c's two pools). */
+  assets: AssetView[];
+  selected: string;
+  onChange: (stem: string) => void;
+  /** Absent on a lexicon entry's row: uploads land in the Book's prefix. */
+  onUpload?: (file: File) => Promise<void>;
+  /** A `pair` side's audio is the only mandatory slug in the schema, so its
+   * "(none)" option would author an unpublishable item. */
+  required?: boolean;
+}) {
+  const chosen = assets.find((asset) => asset.stem === selected);
+  return (
+    <label className="field">
+      {label}
+      <select value={selected} onChange={(e) => onChange(e.target.value)}>
+        {/* Kept even when required and unset: dropping it would silently
+            select the first asset for a row the author never touched. */}
+        {(!required || selected === "") && <option value="">(none)</option>}
+        {assets.map((asset) => (
+          <option key={asset.stem} value={asset.stem}>
+            {asset.name}
+          </option>
+        ))}
+        {/* A ref pointing at something not in this pool — a lexicon entry
+            borrowed from elsewhere, or an asset since deleted — would
+            otherwise render as "(none)" and be silently overwritten on the
+            next change. */}
+        {selected !== "" && chosen === undefined && (
+          <option value={selected}>{selected} · not in this pool</option>
+        )}
+      </select>
+      {chosen?.kind === "image" && chosen.url !== "" && (
+        <img className="asset-thumb" src={chosen.url} alt="" />
+      )}
+      {assets.length === 0 && (
+        <span className="status">
+          {onUpload !== undefined
+            ? "Nothing uploaded yet."
+            : "This lexicon has no assets — they are uploaded where it is maintained."}
+        </span>
+      )}
+      {onUpload !== undefined && (
+        <input
+          type="file"
+          aria-label={`Upload ${label}`}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (file !== undefined) {
+              void onUpload(file);
+            }
+          }}
+        />
+      )}
+    </label>
   );
 }
 

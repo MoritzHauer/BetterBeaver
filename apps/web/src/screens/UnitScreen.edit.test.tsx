@@ -142,6 +142,7 @@ function makeSession(overrides: Partial<EditSessionValue> = {}): {
     readOnly: false,
     canEditLexicon: true,
     assets: [],
+    lexiconAssets: [],
     save: "saved",
     publish: { s: "idle" },
     ...overrides,
@@ -291,7 +292,7 @@ describe("UnitScreen in edit mode", () => {
     expect(screen.getByLabelText("Term")).toBeTruthy();
   });
 
-  it("shows all five pages so an empty one can still be filled", () => {
+  it("shows every page so an empty one can still be filled", () => {
     const bare: BookDocument = {
       ...BOOK,
       units: [{ ...(BOOK.units[0] as object), itemIds: [] }],
@@ -315,8 +316,9 @@ describe("UnitScreen in edit mode", () => {
         />
       </EditSessionProvider>,
     );
+    // The five content pages plus slice 8's edit-only Exercises dot.
     expect(
       screen.getAllByRole("button", { name: /^Page \d+ of/ }),
-    ).toHaveLength(5);
+    ).toHaveLength(6);
   });
 });

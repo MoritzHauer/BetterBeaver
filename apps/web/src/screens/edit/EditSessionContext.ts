@@ -52,7 +52,16 @@ export interface EditSessionValue {
   readOnly: boolean;
   /** False when the signed-in user does not maintain the lexicon (§4). */
   canEditLexicon: boolean;
+  /** The **Book's** Storage objects. A book item's `audioRef`/`imageRef`
+   * validates against these (`validate.ts:601`). */
   assets: AssetView[];
+  /** The **lexicon's** own, which a lexicon entry's refs validate against
+   * instead (`validate.ts:768`). Two pools, not one (spec 0021-8 §2c):
+   * offering the Book's images for a lexicon entry authors a ref that passes
+   * the picker and fails publish. */
+  lexiconAssets: AssetView[];
+  /** Uploads into the **Book's** prefix, so it is offered on a book item's
+   * row and never on a lexicon entry's (§2c). */
   uploadAsset?: (file: File) => Promise<void>;
   save: SaveState;
   publish: PublishState;

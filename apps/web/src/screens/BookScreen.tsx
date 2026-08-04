@@ -98,6 +98,9 @@ export function BookScreen({
   // learner mode, and every editable surface is `edit === null ? … : …`.
   const edit = bookEditOps(useEditSession());
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [pendingResourceId, setPendingResourceId] = useState<string | null>(
+    null,
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -150,6 +153,20 @@ export function BookScreen({
   // Named by title, never by id — the id is a UUID and means nothing.
   const pendingDelete =
     pendingDeleteId !== null ? lessonById.get(pendingDeleteId) : undefined;
+  // Named by title in the confirm, and counted across both documents — a
+  // lexicon entry's `sourceRef` resolves against the *Book's* resources too.
+  const pendingResource =
+    pendingResourceId !== null
+      ? edit?.resources.find((r) => r.id === pendingResourceId)
+      : undefined;
+  const resourceRefCount =
+    pendingResourceId !== null
+      ? (edit?.sourceRefCount(pendingResourceId) ?? 0)
+      : 0;
+  const pendingResourceTitle =
+    typeof pendingResource?.title === "string" && pendingResource.title !== ""
+      ? pendingResource.title
+      : "this source";
   const blockingLesson =
     pendingLesson?.unlocksAfterLessonId !== undefined
       ? lessonById.get(pendingLesson.unlocksAfterLessonId)
@@ -449,6 +466,61 @@ export function BookScreen({
           <button type="button" className="editor-add" onClick={edit.addLesson}>
             + lesson
           </button>
+          {/* Sources (spec 0021-8 §2a). On the Book, not the Unit trail:
+              `resources` is a field of the Book, shared across every unit.
+              Edit-only — a resource is never shown to a learner. */}
+          <h2>Sources</h2>
+          <p className="status">
+            Where this Book&rsquo;s content comes from. Every word, concept and
+            example points at one.
+          </p>
+          <ul className="editor-list">
+            {edit.resources.map((resource) => (
+              <li key={resource.id}>
+                <label className="field">
+                  Title
+                  <input
+                    type="text"
+                    value={
+                      typeof resource.title === "string" ? resource.title : ""
+                    }
+                    onChange={(e) =>
+                      edit.patchResource({ ...resource, title: e.target.value })
+                    }
+                  />
+                </label>
+                <ProblemMarker
+                  problems={edit.fieldProblems(resource.id, "title")}
+                />
+                <label className="field">
+                  Link
+                  <input
+                    type="text"
+                    value={
+                      typeof resource.path === "string" ? resource.path : ""
+                    }
+                    onChange={(e) =>
+                      edit.patchResource({ ...resource, path: e.target.value })
+                    }
+                  />
+                </label>
+                <ProblemMarker
+                  problems={edit.fieldProblems(resource.id, "path")}
+                />
+                <ProblemMarker problems={edit.entityProblems(resource.id)} />
+                <RowActions
+                  onRemove={() => setPendingResourceId(resource.id)}
+                />
+              </li>
+            ))}
+          </ul>
+          <button
+            type="button"
+            className="editor-add"
+            onClick={edit.addResource}
+          >
+            + source
+          </button>
         </>
       )}
       {/* ponytail: chat deactivated per owner call, not removed — code
@@ -467,6 +539,27 @@ export function BookScreen({
           onConfirm={() => {
             setPendingDeleteId(null);
             edit?.removeLesson(pendingDelete.id);
+          }}
+        />
+      )}
+      {pendingResource !== undefined && (
+        <ConfirmSheet
+          icon="lock_key"
+          title="Delete this source?"
+          // Not cascaded (§2a): the items keep pointing at it and say so at
+          // publish. Silently rewriting somebody's `sourceRef` to a source
+          // they did not choose is the worse outcome.
+          body={
+            resourceRefCount === 0
+              ? `“${pendingResourceTitle}” is not used by anything yet.`
+              : `${resourceRefCount} ${resourceRefCount === 1 ? "entry points" : "entries point"} at “${pendingResourceTitle}”. They will need a new source before this Book can be published.`
+          }
+          cancelLabel="Keep it"
+          confirmLabel="Delete"
+          onCancel={() => setPendingResourceId(null)}
+          onConfirm={() => {
+            setPendingResourceId(null);
+            edit?.removeResource(pendingResource.id);
           }}
         />
       )}

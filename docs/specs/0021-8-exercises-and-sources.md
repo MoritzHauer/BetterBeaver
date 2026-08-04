@@ -19,6 +19,12 @@ The two things with no learner surface at all. A task only exists inside a runni
 
 Plan §9 says "the Unit trail grows edit-only pages (Exercises, Sources)". **Sources belongs to the Book, not the unit** — `resources` is a field of `BookDocument`, shared across every unit. So: **Exercises** is a unit-trail page; **Sources** is a Book-screen edit-only section, with a per-item source control on the Unit rows. The plan has been amended to match.
 
+**Three checks §1a's list missed**, found while implementing and enforced by `exerciseOffers.ts` because §1a's own contract ("no publish error can originate here") requires them:
+
+- class (q) — `scramble` / `build` need a sentence of **>= 3 tokens** (`validate.ts:530`).
+- class (m) — a `cloze` item needs **>= 1 blank** and well-formed markup (`:545`).
+- class (p) — the 2..5 bound and prompt-uniqueness must be applied to the **pre-fill**, not only to whether the row is offered. A unit of six words would otherwise create an invalid `matching` task on the first tap.
+
 ---
 
 ## 1. Exercises

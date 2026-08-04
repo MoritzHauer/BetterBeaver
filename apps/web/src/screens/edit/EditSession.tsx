@@ -797,19 +797,24 @@ export function useEditSessionState(args: {
     });
   }, [mode, bookId, domainId, remoteAssets, remoteLexiconAssets]);
 
+  const viewsOf = (list: RemoteAsset[]): AssetView[] =>
+    list.map((asset) => ({
+      stem: asset.stem,
+      name: asset.name,
+      kind: asset.kind === "img" ? "image" : "audio",
+      // `list()`'s `metadata.size` isn't guaranteed present (spec
+      // 0012-B §3), so an unreported size shows as 0 B rather than
+      // losing the card.
+      size: asset.size ?? 0,
+      url: asset.url,
+    }));
   const assetViews: AssetView[] =
-    mode === "private"
-      ? priv.assets
-      : remoteAssets.map((asset) => ({
-          stem: asset.stem,
-          name: asset.name,
-          kind: asset.kind === "img" ? "image" : "audio",
-          // `list()`'s `metadata.size` isn't guaranteed present (spec
-          // 0012-B §3), so an unreported size shows as 0 B rather than
-          // losing the card.
-          size: asset.size ?? 0,
-          url: asset.url,
-        }));
+    mode === "private" ? priv.assets : viewsOf(remoteAssets);
+  // A private Book keeps one blob pool for both its documents —
+  // `registerPrivateAssets` registers every stem under the Book id *and* the
+  // domain id — so the two pools are genuinely the same list there.
+  const lexiconAssetViews: AssetView[] =
+    mode === "private" ? priv.assets : viewsOf(remoteLexiconAssets);
 
   const publishedBook =
     (bookSlot.published as BookDocument | null) ?? EMPTY_BOOK;
@@ -864,6 +869,7 @@ export function useEditSessionState(args: {
           readOnly,
           canEditLexicon,
           assets: assetViews,
+          lexiconAssets: lexiconAssetViews,
           uploadAsset: readOnly ? undefined : uploadFile,
           save: mode === "private" ? priv.saveState : bookSlot.saveState,
           publish: publishState,

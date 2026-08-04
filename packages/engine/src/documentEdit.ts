@@ -10,7 +10,8 @@ import type { DomainDocument, BookDocument } from "@betterbeaver/schema";
 
 type Entity = { id: string } & Record<string, unknown>;
 
-export type BookCollection = "lessons" | "units" | "items" | "tasks";
+export type BookCollection =
+  "lessons" | "units" | "items" | "tasks" | "resources";
 
 function asEntities(list: unknown[]): Entity[] {
   return list as Entity[];
@@ -56,6 +57,11 @@ export function upsertEntity(
  * and `tasks[].itemIds`. (Notes are separate — see `removeNote`.) A task
  * left with zero items, or a unit with no tasks, surfaces as a validation
  * error at publish; the op itself never cascades deletes.
+ *
+ * A deleted `resource` is the same story deliberately (spec 0021-8 §2a):
+ * `sourceRef` is a scalar field, not an id array, so nothing here rewrites
+ * it — the items pointing at the removed resource fail at publish, which is
+ * the existing validator rule and better than silently repointing them.
  */
 export function removeEntity(
   doc: BookDocument,
@@ -77,6 +83,9 @@ export function removeEntity(
     tasks: asEntities(doc.tasks)
       .filter((e) => collection !== "tasks" || e.id !== id)
       .map((e) => stripIdFrom(e, "itemIds", id)),
+    resources: doc.resources.filter(
+      (e) => collection !== "resources" || entityId(e) !== id,
+    ),
   };
 }
 
