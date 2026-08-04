@@ -419,7 +419,10 @@ describe("What changed", () => {
     expect(screen.getByRole("heading", { name: "First" })).toBeTruthy();
 
     fireEvent.click(screen.getByText("Lodge"));
-    expect(opened).toEqual([{ lessonId: "bk-l1", unitId: "bk-u1" }]);
+    // Down to the page the row lives on, not just its unit (spec 0021-10 §3).
+    expect(opened).toEqual([
+      { lessonId: "bk-l1", unitId: "bk-u1", page: "concepts" },
+    ]);
   });
 
   it("says so plainly when nothing has changed", () => {

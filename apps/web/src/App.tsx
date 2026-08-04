@@ -107,6 +107,9 @@ type Screen =
       /** Open the trail on its last content page rather than the Overview —
        * set only by the practice session's back-swipe. */
       atEnd?: boolean;
+      /** Open on a named trail page — set by a What-changed row or a publish
+       * error deep-link (spec 0021-10 §3). */
+      atPage?: string;
       editing?: boolean;
     }
   | {
@@ -1489,6 +1492,10 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           setNamingBook(true);
         }}
         onOpenDocument={(docId, mode) => setScreen(editorRouteFor(docId, mode))}
+        orphanedLexicon={(docId) =>
+          docId.startsWith("domain:") &&
+          !books.some((book) => book.domainId === contentIdOf(docId))
+        }
         // Pinned back: the note is read from the sign-in form, and losing a
         // half-typed email to a Back tap would be its own little betrayal.
         onPrivacy={() =>
@@ -1744,6 +1751,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
                 bookId: editingBookId,
                 lessonId: target.lessonId,
                 unitId: target.unitId,
+                atPage: target.page,
                 editing: true,
               });
             } else if (target.lessonId !== undefined) {
@@ -1915,6 +1923,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           }
           onBack={onBack}
           startAtEnd={screen.atEnd}
+          startAtPage={screen.atPage}
         />,
         {
           screen: "unit",

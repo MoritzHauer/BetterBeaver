@@ -25,12 +25,16 @@ import {
 export function AuthorScreen({
   onCreateBook,
   onOpenDocument,
+  orphanedLexicon = () => false,
   onPrivacy,
   onBack,
 }: {
   /** Starts the private-Book naming flow, which lives on the home screen. */
   onCreateBook: () => void;
   onOpenDocument: (docId: string, mode?: "maintain" | "propose") => void;
+  /** True for a lexicon document whose Book is not on this device — it has
+   * no screen to open (spec 0021-10 §2). */
+  orphanedLexicon?: (docId: string) => boolean;
   onPrivacy: () => void;
   onBack: () => void;
 }) {
@@ -193,11 +197,20 @@ export function AuthorScreen({
                   <button onClick={() => onOpenDocument(doc.id)}>
                     <strong>{doc.id}</strong>
                     <span className="status">
-                      {doc.kind === "topic" ? "Book" : "Domain lexicon"} ·
-                      version {doc.published_version}
+                      {doc.kind === "topic" ? "Book" : "The words a Book uses"}{" "}
+                      · version {doc.published_version}
                       {doc.listed ? "" : " · not listed yet"}
                     </span>
                   </button>
+                  {/* A lexicon has no learner screen of its own: it is edited
+                      on the Book that uses it (spec 0021-10 §2). Say so when
+                      that Book isn't on this device, rather than dead-ending
+                      on a screen with no words in context. */}
+                  {doc.kind === "domain" && orphanedLexicon(doc.id) && (
+                    <span className="status">
+                      add the Book that uses these words to edit them
+                    </span>
+                  )}
                 </li>
               ))}
             </ul>

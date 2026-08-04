@@ -619,6 +619,7 @@ export function UnitScreen({
   onEdit,
   onBack,
   startAtEnd,
+  startAtPage,
   noteMarkdown = (stem) => getNoteMarkdown(content.topic.id, stem),
 }: {
   content: Content;
@@ -643,6 +644,10 @@ export function UnitScreen({
   /** Opens on the last content page instead of the Overview — how the
    * practice session's back-swipe returns you to where you left the trail. */
   startAtEnd?: boolean;
+  /** Opens on a named page: how a publish error lands on the row that caused
+   * it rather than on the unit's Overview (spec 0021-10 §3). Ignored when the
+   * page isn't in this trail. */
+  startAtPage?: string;
   /** Raw note markdown by stem. Defaults to the module-global
    * `getNoteMarkdown`, which only knows published text — edit mode passes
    * the draft's own instead (spec 0021-5 §2d). */
@@ -683,6 +688,10 @@ export function UnitScreen({
   // which pages exist isn't known until `pages` is built further down, and
   // everything below reads the clamped `pageIndex` anyway.
   const [page, setPage] = useState(startAtEnd ? Number.MAX_SAFE_INTEGER : 0);
+  // Seeded once from `startAtPage`, then owned by the trail: `pages` isn't
+  // built yet here, so the index is resolved in an effect below rather than
+  // guessed.
+  const startedAtPageRef = useRef(startAtPage);
   const [conceptPage, setConceptPage] = useState(0);
   const [examplePage, setExamplePage] = useState(0);
 
@@ -785,6 +794,20 @@ export function UnitScreen({
     }
     setPage(pageIndex + 1);
   }
+
+  useEffect(() => {
+    const target = startedAtPageRef.current;
+    startedAtPageRef.current = undefined;
+    if (target === undefined) {
+      return;
+    }
+    const index = pages.indexOf(target as PageKind);
+    if (index !== -1) {
+      setPage(index);
+    }
+    // Once, on the render that mounted with a target — a later navigation
+    // inside the trail must not be yanked back.
+  }, [pages.length]);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {

@@ -14,7 +14,14 @@ import { noteTitle } from "../../content/noteTitle";
  * respectively, linking to slice 8's pages.
  */
 
-export type ChangedTarget = { lessonId?: string; unitId?: string };
+export type ChangedTarget = {
+  lessonId?: string;
+  unitId?: string;
+  /** Which of the Unit trail's pages to open on — the difference between
+   * "one tap from the thing that caused it" and "one tap from its unit"
+   * (spec 0021-10 §3). */
+  page?: string;
+};
 
 interface Row {
   key: string;
@@ -125,11 +132,17 @@ function rowsOf(
     return { ...(lessonId !== undefined ? { lessonId } : {}), unitId };
   };
   for (const item of content.items) {
-    push(item.id, itemTitle(item), "Word", unitTarget(item.id));
+    push(item.id, itemTitle(item), "Word", {
+      ...unitTarget(item.id),
+      page: pageForKind(item.kind),
+    });
   }
   for (const task of content.tasks) {
     // Exercises group under their unit and link to slice 8's page.
-    push(task.id, `${task.type} exercise`, "Exercise", unitTarget(task.id));
+    push(task.id, `${task.type} exercise`, "Exercise", {
+      ...unitTarget(task.id),
+      page: "exercises",
+    });
   }
   for (const note of content.notes) {
     // `Content.notes` carries only `{id, stem}`; a note's name is its `# `
@@ -140,14 +153,66 @@ function rowsOf(
       String(
         (diff.before.get(note.stem) as { markdown?: unknown })?.markdown ?? "",
       );
-    push(
-      note.stem,
-      noteTitle(markdown, "Untitled note"),
-      "Note",
-      unitTarget(note.stem),
-    );
+    push(note.stem, noteTitle(markdown, "Untitled note"), "Note", {
+      ...unitTarget(note.stem),
+      page: "theory",
+    });
   }
   return rows;
+}
+
+/** Which Unit-trail page a row of this kind lives on (spec 0021-10 §3). */
+function pageForKind(kind: Content["items"][number]["kind"]): string {
+  return kind === "lexeme"
+    ? "vocabulary"
+    : kind === "concept"
+      ? "concepts"
+      : "examples";
+}
+
+/**
+ * The screen that owns `id`, or `null` when nothing does — a dangling
+ * reference to something already deleted. Shared by the What-changed rows
+ * and by publish-error deep-linking (spec 0021-10 §3), so an error and its
+ * index row always land in the same place.
+ */
+export function entityTarget(
+  content: Content,
+  id: string,
+): ChangedTarget | null {
+  const { lessonOfUnit, unitOfEntity } = ownership(content);
+  if (id === "topic" || id === "domain" || id === content.topic.id) {
+    return {};
+  }
+  if (content.resources.some((resource) => resource.id === id)) {
+    return {};
+  }
+  const lesson = content.lessons.find((l) => l.id === id);
+  if (lesson !== undefined) {
+    return { lessonId: lesson.id };
+  }
+  const unitTargetOf = (unitId: string): ChangedTarget => {
+    const lessonId = lessonOfUnit.get(unitId);
+    return { ...(lessonId !== undefined ? { lessonId } : {}), unitId };
+  };
+  if (content.units.some((unit) => unit.id === id)) {
+    return unitTargetOf(id);
+  }
+  const unitId = unitOfEntity.get(id);
+  if (unitId === undefined) {
+    return null;
+  }
+  const item = content.items.find((i) => i.id === id);
+  if (item !== undefined) {
+    return { ...unitTargetOf(unitId), page: pageForKind(item.kind) };
+  }
+  if (content.tasks.some((task) => task.id === id)) {
+    return { ...unitTargetOf(unitId), page: "exercises" };
+  }
+  if (content.notes.some((note) => note.stem === id)) {
+    return { ...unitTargetOf(unitId), page: "theory" };
+  }
+  return unitTargetOf(unitId);
 }
 
 /** A title for an item without touching `itemDisplayText`, which throws on

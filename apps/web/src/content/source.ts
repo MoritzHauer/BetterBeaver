@@ -33,6 +33,7 @@ import {
   deletePrivateBook,
   type PrivateBookRecord,
 } from "./private-store";
+import { newEntityId } from "./entity-ids";
 import { newPrivateId } from "./private-ids";
 import { registerPrivateAssets, privateAssetStems } from "./private-assets";
 import { registerRemoteAssets } from "./remote-assets";
@@ -920,7 +921,13 @@ export async function initContentSource(): Promise<ContentInit> {
         units: [],
         items: [],
         tasks: [],
-        resources: [],
+        // One seeded resource (spec 0021-10 §1d). Every item and every
+        // lexicon entry requires a `sourceRef` that resolves, so without
+        // this the very first word an author adds is invalid — the error
+        // wave the plan's §1 names, and the only reason
+        // `EntityPicker.freeTextWhenEmpty` ever existed. New items default
+        // to it (slice 8 §2b), so a new Book is valid from its first word.
+        resources: [{ id: newEntityId(code), title, path: "" }],
         notes: [],
       };
       const domain: DomainDocument = {

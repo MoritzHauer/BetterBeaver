@@ -351,7 +351,6 @@ export function EntityPicker({
   onRemove,
   removeLabel,
   onOpen,
-  freeTextWhenEmpty = false,
   hideIds = false,
 }: {
   label: string;
@@ -372,15 +371,6 @@ export function EntityPicker({
    * `undefined` when this row isn't separately editable (e.g. a lexicon
    * entry referenced from a unit's items — edited in its own domain). */
   onOpen?: (id: string) => (() => void) | undefined;
-  /**
-   * Single-select only: fall back to a text input when the pool is empty, so
-   * the field never becomes unsettable. `sourceRef` is REQUIRED on every item
-   * and lexicon entry (`entities.ts:182-203`), but its pool is a Book's
-   * `resources` — empty on a freshly-created Book, and absent entirely from a
-   * `DomainDocument`, which has no resources field at all. Without this an
-   * author could not produce one valid item.
-   */
-  freeTextWhenEmpty?: boolean;
   /** Hides the raw id shown beside every title. In-place editing shows no
    * entity ids at all (plan 0021 §11) — but the form editor still must,
    * because its validation errors name ids and spec 0018 made those
@@ -393,25 +383,6 @@ export function EntityPicker({
   const activeFilter = filters?.find(
     (filter) => filter.key === activeFilterKey,
   );
-  if (freeTextWhenEmpty && !multiple && options.length === 0) {
-    return (
-      <label className="field">
-        {label}
-        <input
-          type="text"
-          pattern="[a-z0-9]+(-[a-z0-9]+)*"
-          value={selected[0] ?? ""}
-          onChange={(e) =>
-            onChange(e.target.value === "" ? [] : [e.target.value])
-          }
-        />
-        <span className="status">
-          Nothing to pick from yet — add a resource to this Book, or type its
-          id.
-        </span>
-      </label>
-    );
-  }
   const rows = visiblePickerRows(options, selected, search, activeFilter);
   const groups = groupBy ? groupPickerRows(rows) : [{ group: undefined, rows }];
   const selectedSet = new Set(selected);

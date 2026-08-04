@@ -47,28 +47,16 @@ export function DomainEditor({
           specs={ITEM_FIELDS[String(entry.kind)] ?? []}
           onChange={(next) => onChange(upsertDomainEntry(doc, next))}
         />
-        {/* A DomainDocument carries no `resources` of its own (only a Book
-         * does — validate.ts's ValidateContentInput.resources is a Book
-         * field, shared with its entries at validation time). So this
-         * picker's pool is always empty here; see spec 0018 implementation
-         * report for the gap this opens (sourceRef becomes unsettable for a
-         * domain entry via the UI). */}
-        <EntityPicker
-          label="Source ref"
-          freeTextWhenEmpty
-          options={[]}
-          selected={
-            typeof entry.sourceRef === "string" && entry.sourceRef !== ""
-              ? [entry.sourceRef]
-              : []
-          }
-          onChange={(ids) =>
-            onChange(
-              upsertDomainEntry(doc, { ...entry, sourceRef: ids[0] ?? "" }),
-            )
-          }
-          multiple={false}
-        />
+        {/* A `DomainDocument` carries no `resources` of its own — only a
+         * Book does, and an entry's `sourceRef` resolves against the *Book's*
+         * resources (`validate.ts:785`). This form has no Book in hand, so
+         * the pool is empty by construction and the picker had nothing to
+         * offer; `freeTextWhenEmpty` is gone with spec 0021-10 §1d, so say
+         * where the field can actually be set instead of showing an empty
+         * control. The in-place Vocabulary row is that place. */}
+        <p className="status">
+          Source: set on the word&rsquo;s own row, in the Book that uses it.
+        </p>
         <button
           className="plain danger"
           onClick={() => {

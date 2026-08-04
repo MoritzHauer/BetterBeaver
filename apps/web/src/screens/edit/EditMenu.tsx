@@ -57,6 +57,7 @@ export function EditMenu({
   canDiff,
   diffHere,
   changedCount,
+  onOpenError,
 }: {
   mode: EditMode;
   panel: EditPanel;
@@ -87,6 +88,9 @@ export function EditMenu({
    * unchanged screen. */
   diffHere: boolean;
   changedCount: number;
+  /** A handler that navigates to whatever this publish error names, or
+   * `null` when nothing owns it (spec 0021-10 §3). */
+  onOpenError: (error: string) => (() => void) | null;
 }) {
   const [open, setOpen] = useState(false);
   const busy = publishState.s === "checking" || publishState.s === "publishing";
@@ -174,7 +178,28 @@ export function EditMenu({
           {publishState.s === "errors" && (
             <ul className="error-text">
               {publishState.errors.slice(0, 20).map((error) => (
-                <li key={error}>{error}</li>
+                <li key={error}>
+                  {/* Every error is one tap from the thing that caused it
+                      (spec 0021-10 §3). Ids are hidden everywhere by now, so
+                      an error nobody can locate would make hiding them a net
+                      loss. An id that resolves to nothing — a reference to
+                      something already deleted — stays plain text with the
+                      id showing, which is the one place an id may still
+                      appear: there is nothing else to name it by. */}
+                  {onOpenError(error) === null ? (
+                    error
+                  ) : (
+                    <button
+                      className="plain"
+                      onClick={() => {
+                        setOpen(false);
+                        onOpenError(error)?.();
+                      }}
+                    >
+                      {error}
+                    </button>
+                  )}
+                </li>
               ))}
               {publishState.errors.length > 20 && (
                 <li>…and {publishState.errors.length - 20} more</li>

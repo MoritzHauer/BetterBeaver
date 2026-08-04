@@ -54,7 +54,12 @@ import { BookEditor } from "./BookEditor";
 import { DomainEditor } from "./DomainEditor";
 import { EditMenu, type EditPanel } from "./EditMenu";
 import { ProposalReview, emptyDocFor } from "./ProposalReview";
-import { WhatChanged, changedCount } from "./WhatChanged";
+import {
+  type ChangedTarget,
+  WhatChanged,
+  changedCount,
+  entityTarget,
+} from "./WhatChanged";
 import {
   type EditMode,
   EditSessionProvider,
@@ -1138,8 +1143,9 @@ export function EditSession({
   /** Whether the screen underneath has anything to diff (spec 0021-9 §3a) —
    * only App knows which screen that is. */
   diffHere?: boolean;
-  /** Deep-links a What-changed row to the screen that owns the entity (§4). */
-  onNavigate?: (target: { lessonId?: string; unitId?: string }) => void;
+  /** Deep-links a What-changed row, or a publish error, to the screen that
+   * owns the entity it names (spec 0021-9 §4, spec 0021-10 §3). */
+  onNavigate?: (target: ChangedTarget) => void;
 }) {
   const [panel, setPanel] = useState<EditPanel>(null);
   const [view, setView] = useState<View>({ v: "root" });
@@ -1420,6 +1426,25 @@ export function EditSession({
         onView={value?.setView ?? (() => {})}
         canDiff={value?.canDiff ?? false}
         diffHere={diffHere}
+        onOpenError={(error) => {
+          if (value === null) {
+            return null;
+          }
+          // The message may carry two prefixes (`<doc>: <entity>: …`) and
+          // may name an id mid-sentence, so scan for the first id anything
+          // in this Book actually owns rather than parsing a shape.
+          const searched = value.diff?.content ?? value.content;
+          const target = firstOwnedId(searched, error);
+          if (target === null) {
+            return null;
+          }
+          return () => {
+            // Diff when there is a base to compare against (§3), Edit when
+            // there is not — a private Book has no "before".
+            value.setView(value.canDiff ? "diff" : "edit");
+            onNavigate?.(target);
+          };
+        }}
         changedCount={changedCount(
           value?.diff ?? null,
           value?.noteMarkdown ?? (() => undefined),
@@ -1427,6 +1452,26 @@ export function EditSession({
       />
     </EditSessionProvider>
   );
+}
+
+/**
+ * The first entity id in `message` that this Book owns, resolved to the
+ * screen that owns it (spec 0021-10 §3). Publish errors arrive doubly
+ * prefixed (`<docId>: <entityId>: …`) and some name an id mid-sentence
+ * ("item \"bk-i9\" is not owned by …"), so this scans rather than parses.
+ */
+function firstOwnedId(content: Content, message: string): ChangedTarget | null {
+  const words = message.split(/[^A-Za-z0-9-]+/);
+  for (const word of words) {
+    if (word === "") {
+      continue;
+    }
+    const target = entityTarget(content, word);
+    if (target !== null) {
+      return target;
+    }
+  }
+  return null;
 }
 
 /** `DomainDocument.domain` is `unknown` at rest, so a fresh or half-edited

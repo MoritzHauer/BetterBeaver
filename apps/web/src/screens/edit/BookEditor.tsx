@@ -167,7 +167,6 @@ export function BookEditor({
             />
             <EntityPicker
               label="Source ref"
-              freeTextWhenEmpty
               options={optionsFrom(doc.resources as Entity[])}
               selected={
                 typeof entity.sourceRef === "string" && entity.sourceRef !== ""

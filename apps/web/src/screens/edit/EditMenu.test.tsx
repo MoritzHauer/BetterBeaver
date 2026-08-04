@@ -39,6 +39,7 @@ async function open(
       canDiff={mode !== "private"}
       diffHere={false}
       changedCount={0}
+      onOpenError={() => null}
       {...extra}
     />,
   );
