@@ -137,12 +137,24 @@ function SheetBody({
     );
   }
 
-  if (item === undefined || !edit.canEditRow(entityId)) {
+  if (item === undefined) {
+    // The Book's own slot settles before the lexicon's, so a word opens here
+    // at least once before its entry exists — saying it is gone would be a
+    // lie for exactly as long as the second fetch takes.
     return (
       <p className="status">
-        {item === undefined
+        {session.lexiconLoaded
           ? "This isn’t part of this Book any more."
-          : "These words come from somewhere else — you can use them, but not change them."}
+          : "Loading…"}
+      </p>
+    );
+  }
+
+  if (!edit.canEditRow(entityId)) {
+    return (
+      <p className="status">
+        These words come from somewhere else — you can use them, but not change
+        them.
       </p>
     );
   }

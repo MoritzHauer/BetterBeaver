@@ -62,6 +62,11 @@ export interface EditSessionValue {
   readOnly: boolean;
   /** False when the signed-in user does not maintain the lexicon (§4). */
   canEditLexicon: boolean;
+  /** Whether the lexicon document is in hand at all. Distinct from
+   * `canEditLexicon`, which is also false while it is still loading — the
+   * Book's own slot settles first, so a surface that reads a lexicon entry
+   * renders at least once before the entry exists (spec 0021-11 §3). */
+  lexiconLoaded: boolean;
   /** The **Book's** Storage objects. A book item's `audioRef`/`imageRef`
    * validates against these (`validate.ts:601`). */
   assets: AssetView[];

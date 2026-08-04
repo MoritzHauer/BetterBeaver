@@ -990,6 +990,7 @@ export function useEditSessionState(args: {
           problemsByEntity: drafted.problemsByEntity,
           readOnly,
           canEditLexicon,
+          lexiconLoaded: domain !== null,
           assets: assetViews,
           lexiconAssets: lexiconAssetViews,
           uploadAsset: readOnly ? undefined : uploadFile,

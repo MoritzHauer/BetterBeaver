@@ -129,6 +129,7 @@ function makeSession(
     problemsByEntity: new Map(),
     readOnly: false,
     canEditLexicon: true,
+    lexiconLoaded: true,
     assets: [],
     lexiconAssets: [],
     view: "edit",

@@ -127,13 +127,18 @@ describe("session Edit button", () => {
     const sheet = await screen.findByRole("dialog");
 
     // Scoped (decision 13): the tapped entity's own fields, and none of the
-    // navigable document tree the form editor put here.
-    expect(sheet.querySelector("input, textarea")).not.toBeNull();
+    // navigable document tree the form editor put here. Awaited, not read
+    // once: the Book's slot settles before the lexicon's, so a word's fields
+    // arrive a commit after the sheet does.
+    const field = await waitFor(() => {
+      const found = sheet.querySelector<HTMLInputElement>('input[type="text"]');
+      expect(found).not.toBeNull();
+      return found!;
+    });
     expect(
       screen.queryByRole("button", { name: "Validate & publish" }),
     ).toBeNull();
 
-    const field = sheet.querySelector<HTMLInputElement>('input[type="text"]')!;
     fireEvent.change(field, { target: { value: "edited in the sheet" } });
     expect(field.value).toBe("edited in the sheet");
   });

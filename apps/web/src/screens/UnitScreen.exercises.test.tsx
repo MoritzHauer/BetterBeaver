@@ -179,6 +179,7 @@ function makeSession(
       problemsByEntity: new Map(),
       readOnly: false,
       canEditLexicon: true,
+      lexiconLoaded: true,
       // The Book's pool, matching `STEMS` — an asset picker offers exactly
       // what the validator will accept for a book-owned item.
       assets: [
