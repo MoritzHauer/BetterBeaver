@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import type { Content, Lesson } from "@betterbeaver/schema";
 import type { ProgressStore, Streak } from "@betterbeaver/engine";
 import {
@@ -17,6 +17,7 @@ import { ChatThread } from "../components/ChatThread";
 import { BookWatermark } from "../components/BookWatermark";
 import { useEditSession } from "./edit/EditSessionContext";
 import { ProblemMarker, bookEditOps, withOptionalKey } from "./edit/inPlace";
+import { diffView } from "./edit/diffView";
 import { RowActions } from "./edit/fields";
 
 const CHAT_ENABLED = false;
@@ -96,7 +97,12 @@ export function BookScreen({
   const [pendingLessonId, setPendingLessonId] = useState<string | null>(null);
   // Edit mode (plan 0021 §1), same shape as the Unit screen: `null` in
   // learner mode, and every editable surface is `edit === null ? … : …`.
-  const edit = bookEditOps(useEditSession());
+  const session = useEditSession();
+  const edit = bookEditOps(session);
+  // Diff renders the union read-only with per-element tints (spec 0021-9
+  // §3); Preview renders the learner screen for real.
+  const diff = diffView(session);
+  const previewing = session?.view === "preview";
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [pendingResourceId, setPendingResourceId] = useState<string | null>(
     null,
@@ -207,16 +213,37 @@ export function BookScreen({
       </header>
       {edit === null ? (
         <>
-          <h1>{content.topic.title}</h1>
-          {unpublishedChanges && <p className="status">unpublished changes</p>}
-          <p>{content.topic.description}</p>
+          {/* The Book's own fields, old above new when they changed (§3). */}
+          {diff?.changedFrom<{ title?: string; description?: string }>(
+            "topic",
+          ) !== undefined && (
+            <div className="diff-old">
+              <h1>
+                {diff.changedFrom<{ title?: string }>("topic")?.title ?? ""}
+              </h1>
+              <p>
+                {diff.changedFrom<{ description?: string }>("topic")
+                  ?.description ?? ""}
+              </p>
+            </div>
+          )}
+          <div className={diff?.className("topic")}>
+            <h1>{content.topic.title}</h1>
+            {unpublishedChanges && diff === null && (
+              <p className="status">unpublished changes</p>
+            )}
+            <p>{content.topic.description}</p>
+          </div>
           {/* Reporting a problem in content you are editing is a loop, so
-              this and the chat block below are hidden in edit mode. */}
-          <FeedbackWidget
-            docId={`topic:${content.topic.id}`}
-            contentKind="topic"
-            contentId={content.topic.id}
-          />
+              this and the chat block below are hidden in edit mode — and in
+              Preview and Diff, which are the same content. */}
+          {session === null && (
+            <FeedbackWidget
+              docId={`topic:${content.topic.id}`}
+              contentKind="topic"
+              contentId={content.topic.id}
+            />
+          )}
         </>
       ) : (
         <>
@@ -289,11 +316,16 @@ export function BookScreen({
         </>
       )}
       <ul className="card-list">
-        {/* Progress affordances, not content (§1c): all four are hidden in
-            edit mode. Play in particular derives from `nextUnit`/`dueUnits`
-            over the *published* content while you are looking at a draft, so
-            it would be actively misleading. */}
-        {edit === null && (
+        {/* Progress affordances, not content (§1c): hidden in edit mode.
+            Play in particular derives from `nextUnit`/`dueUnits` over the
+            *published* content while you are looking at a draft, so it would
+            be actively misleading.
+            Hidden in Preview too, and this is required rather than tidy
+            (spec 0021-9 §1b): Preview passes a full attempted-task set, so
+            `nextUnit` returns null and `dueUnits` nothing — Play would show
+            the "Book complete" trophy and Daily Review would be permanently
+            disabled, which looks like a broken Preview. */}
+        {session === null && (
           <>
             <li className={"card" + (playDisabled ? "" : " primary")}>
               <button onClick={onPlay} disabled={playDisabled}>
@@ -322,6 +354,13 @@ export function BookScreen({
                 </p>
               </button>
             </li>
+          </>
+        )}
+        {/* Practice stays in Preview (§1b): it shuffles over unlocked
+            lessons, which with everything unlocked is exactly what Preview
+            is for. */}
+        {(session === null || previewing) && (
+          <>
             <li className={`card${practicePool.length > 0 ? " primary" : ""}`}>
               <button
                 disabled={practicePool.length === 0}
@@ -429,6 +468,29 @@ export function BookScreen({
                   Open &rsaquo;
                 </button>
               </li>
+            );
+          }
+          if (diff !== null) {
+            // The old card sits directly above the new one; a removed lesson
+            // is in the union with only its base card, tinted red.
+            const was = diff.changedFrom<{ title?: string; goal?: string }>(
+              lesson.id,
+            );
+            return (
+              <Fragment key={lesson.id}>
+                {was !== undefined && (
+                  <li className="card diff-old">
+                    <strong>{was.title}</strong>
+                    <p>{was.goal}</p>
+                  </li>
+                )}
+                <li className={`card ${diff.className(lesson.id) ?? ""}`}>
+                  <button onClick={() => onSelectLesson(lesson.id)}>
+                    <strong>{lesson.title}</strong>
+                    <p>{lesson.goal}</p>
+                  </button>
+                </li>
+              </Fragment>
             );
           }
           return (

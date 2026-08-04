@@ -1,12 +1,26 @@
 import { useState } from "react";
 import { Sheet } from "../../components/Sheet";
-import type { EditMode, PublishState, SaveState } from "./EditSessionContext";
+import type {
+  EditMode,
+  EditView,
+  PublishState,
+  SaveState,
+} from "./EditSessionContext";
 
 /** Which full-screen editing panel is open over the learner screen, if any.
  * `forms`/`lexicon` are the transitional form tree (spec 0021-5 §0) — slices
  * 6-8 move their fields onto the screens and slice 11 deletes them. */
 export type EditPanel =
-  null | "forms" | "lexicon" | "assets" | "proposals" | "feedback";
+  | null
+  | "forms"
+  | "lexicon"
+  | "assets"
+  | "proposals"
+  | "feedback"
+  // The What-changed index (spec 0021-9 §4). A panel, not a tab: it has to
+  // be reachable from a screen with no Diff tab, which is exactly where you
+  // most need to find the changes.
+  | "changed";
 
 /**
  * The `[⋮]` menu (spec 0021-5 §1c): everything edit mode needs that has no
@@ -38,6 +52,11 @@ export function EditMenu({
   proposalCount,
   problemCount,
   hasLexicon,
+  view,
+  onView,
+  canDiff,
+  diffHere,
+  changedCount,
 }: {
   mode: EditMode;
   panel: EditPanel;
@@ -58,6 +77,16 @@ export function EditMenu({
   proposalCount: number;
   problemCount: number;
   hasLexicon: boolean;
+  view: EditView;
+  onView: (view: EditView) => void;
+  /** False for a private Book (spec 0021-9 §3b): no published "before", so
+   * no Diff at all. */
+  canDiff: boolean;
+  /** Whether *this* screen has anything to diff (§3a). The slot keeps its
+   * width either way, or the bar jumps as you walk between a changed and an
+   * unchanged screen. */
+  diffHere: boolean;
+  changedCount: number;
 }) {
   const [open, setOpen] = useState(false);
   const busy = publishState.s === "checking" || publishState.s === "publishing";
@@ -93,9 +122,43 @@ export function EditMenu({
             />
           </button>
         )}
+        {panel === null && (
+          <span className="edit-view-tabs">
+            <button
+              type="button"
+              className={view === "edit" ? "active" : undefined}
+              onClick={() => onView("edit")}
+            >
+              Edit
+            </button>
+            <button
+              type="button"
+              className={view === "preview" ? "active" : undefined}
+              onClick={() => onView("preview")}
+            >
+              Preview
+            </button>
+            {/* The slot is always here; only its contents come and go. */}
+            <span className="edit-view-diff-slot">
+              {canDiff && diffHere && (
+                <button
+                  type="button"
+                  className={view === "diff" ? "active" : undefined}
+                  onClick={() => onView("diff")}
+                >
+                  Diff
+                </button>
+              )}
+            </span>
+          </span>
+        )}
         <span className="status">
-          Editing · {status}
-          {problemCount > 0 && ` · ${problemCount} to fix`}
+          {view === "preview"
+            ? "Preview · nothing you do here is recorded"
+            : view === "diff"
+              ? "What publishing would change"
+              : `Editing · ${status}`}
+          {view === "edit" && problemCount > 0 && ` · ${problemCount} to fix`}
         </span>
         <button
           className="plain edit-bar-menu"
@@ -149,6 +212,21 @@ export function EditMenu({
             </button>
           )}
           <ul className="card-list">
+            {canDiff && (
+              <li className="card">
+                <button className="plain" onClick={() => choose("changed")}>
+                  What changed
+                  {changedCount > 0 && (
+                    <span className="badge">{changedCount}</span>
+                  )}
+                  <span className="status">
+                    {changedCount === 0
+                      ? "nothing yet"
+                      : "everything publishing would change"}
+                  </span>
+                </button>
+              </li>
+            )}
             <li className="card">
               <button className="plain" onClick={() => choose("forms")}>
                 Edit all fields

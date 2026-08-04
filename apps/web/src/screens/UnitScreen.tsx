@@ -6,7 +6,7 @@ import {
   stripClozeMarkup,
 } from "@betterbeaver/schema";
 import { ConfirmSheet } from "../components/Sheet";
-import { countUnitQuestions } from "@betterbeaver/engine";
+import { countUnitQuestions, diffNoteBlocks } from "@betterbeaver/engine";
 import type { TapLookup } from "../components/TappableText";
 import { TappableText } from "../components/TappableText";
 import { NoteView } from "../components/NoteView";
@@ -29,6 +29,7 @@ import {
   itemLabel,
   validTypesFor,
 } from "./edit/exerciseOffers";
+import { type DiffView, diffView } from "./edit/diffView";
 import { unitPoolOptionsGroupedByLesson } from "./entityPicker";
 import { getLexiconAssetUrl } from "../content/bundled";
 import { getNoteMarkdown } from "../content/source";
@@ -51,6 +52,11 @@ const EXAMPLE_CHUNK_SIZE = 4;
  * delta check, no swipe library). Exported so `SessionScreen`'s back-swipe
  * out of the unit's practice session feels the same as the trail's. */
 export const SWIPE_THRESHOLD = 40;
+
+/** A loosely-typed value as display text. The diff renders base-side
+ * entities, which arrive as `unknown` off a stored document. */
+const text = (value: unknown): string =>
+  typeof value === "string" ? value : "";
 
 type PageKind =
   | "overview"
@@ -210,6 +216,7 @@ function ExampleCard({
   edit,
   expanded,
   onToggle,
+  diff,
 }: {
   item: ExampleItem;
   lookup: TapLookup;
@@ -217,8 +224,41 @@ function ExampleCard({
   edit?: UnitEditOps;
   expanded?: boolean;
   onToggle?: () => void;
+  diff?: DiffView;
 }) {
   const [showTranslation, setShowTranslation] = useState(false);
+
+  if (diff !== undefined) {
+    // Read-only, tinted, with the base card directly above a changed one.
+    const was = diff.changedFrom<{ payload?: Record<string, unknown> }>(
+      item.id,
+    );
+    const body = (payload: Record<string, unknown> | undefined) =>
+      item.kind === "sentence" ? (
+        <>
+          <p>{stripClozeMarkup(text(payload?.text))}</p>
+          <strong>{text(payload?.translation)}</strong>
+        </>
+      ) : (
+        <>
+          <strong>
+            {text((payload?.a as { script?: unknown } | undefined)?.script)} /{" "}
+            {text((payload?.b as { script?: unknown } | undefined)?.script)}
+          </strong>
+          <p>{text(payload?.contrast)}</p>
+        </>
+      );
+    return (
+      <>
+        {was !== undefined && (
+          <li className="card diff-old">{body(was.payload)}</li>
+        )}
+        <li className={`card ${diff.className(item.id) ?? ""}`}>
+          {body(item.payload)}
+        </li>
+      </>
+    );
+  }
 
   if (edit !== undefined) {
     const raw = edit.raw(item.id) ?? { id: item.id };
@@ -332,6 +372,49 @@ function ExampleCard({
 /** One Theory note plus its pin control: no grade buttons here — pinning
  * schedules the note into the review queue (its first SRS state), where it
  * then behaves as a flashcard via `SessionScreen`'s `NoteReview`. */
+/**
+ * One note, diffed **by block** (spec 0021-9 §2a). `documentDiff` compares
+ * whole fields, so a note's entire markdown is one field and a one-word edit
+ * would read as "the whole note changed".
+ *
+ * Each block renders through the same `NoteView` the learner sees, from its
+ * verbatim `raw` — so a tinted block looks like the note it came from.
+ */
+function NoteDiff({
+  before,
+  after,
+  lookup,
+  bookId,
+}: {
+  before: string;
+  after: string;
+  lookup: TapLookup;
+  bookId: string;
+}) {
+  return (
+    <section className="note">
+      {diffNoteBlocks(before, after).map((entry, index) => (
+        <div
+          key={index}
+          className={
+            entry.status === "added"
+              ? "diff-new"
+              : entry.status === "removed"
+                ? "diff-old"
+                : undefined
+          }
+        >
+          <NoteView
+            markdown={entry.block.raw}
+            lookup={lookup}
+            bookId={bookId}
+          />
+        </div>
+      ))}
+    </section>
+  );
+}
+
 function NoteCard({
   markdown,
   lookup,
@@ -342,6 +425,7 @@ function NoteCard({
   noteId,
   edit,
   stem,
+  inSession,
 }: {
   markdown: string;
   lookup: TapLookup;
@@ -354,6 +438,8 @@ function NoteCard({
   noteId: string;
   edit?: UnitEditOps;
   stem: string;
+  /** True in Preview: the learner tree renders, but nothing writes. */
+  inSession?: boolean;
 }) {
   if (edit !== undefined) {
     return (
@@ -381,17 +467,28 @@ function NoteCard({
   return (
     <section className="note">
       <NoteView markdown={markdown} lookup={lookup} bookId={bookId} />
-      {/* ponytail: pin is one-way — unpinning means removing SRS state,
+      {/* Preview plays the draft but **records nothing** (spec 0021-9 §1):
+          pinning a draft note into your own review queue is a write, and
+          reporting a problem in content you are drafting is a loop. */}
+      {inSession ? null : (
+        <>
+          {/* ponytail: pin is one-way — unpinning means removing SRS state,
           add when someone actually asks for it */}
-      <button className="plain" disabled={pinned} onClick={onPin}>
-        <img
-          className="icon-glyph"
-          src={`${import.meta.env.BASE_URL}art/icons/pin.png`}
-          alt=""
-        />{" "}
-        {pinned ? "Pinned for review" : "Pin for review"}
-      </button>
-      <FeedbackWidget docId={bookDocId} contentKind="note" contentId={noteId} />
+          <button className="plain" disabled={pinned} onClick={onPin}>
+            <img
+              className="icon-glyph"
+              src={`${import.meta.env.BASE_URL}art/icons/pin.png`}
+              alt=""
+            />{" "}
+            {pinned ? "Pinned for review" : "Pin for review"}
+          </button>
+          <FeedbackWidget
+            docId={bookDocId}
+            contentKind="note"
+            contentId={noteId}
+          />
+        </>
+      )}
     </section>
   );
 }
@@ -560,7 +657,11 @@ export function UnitScreen({
   // surface below is `edit === null ? <text> : <input>`. One implementation,
   // never a parallel edit view — two trees of the same screen is exactly the
   // duplication this plan exists to remove.
-  const edit = unitEditOps(useEditSession(), unitId);
+  const session = useEditSession();
+  const edit = unitEditOps(session, unitId);
+  // Diff renders the union read-only with per-element tints (spec 0021-9
+  // §3); Preview plays the draft for real, so it keeps the Practice bar.
+  const diff = diffView(session);
   // Which vocabulary row has its secondary fields open (transliteration
   // today; slice 8 §2c adds the source and asset controls to the same row).
   // Deliberately not reset when `unitId` changes — `App.tsx` reuses this
@@ -660,7 +761,7 @@ export function UnitScreen({
     ...(lexemes.length > 0 || edit !== null ? (["vocabulary"] as const) : []),
     ...(concepts.length > 0 || edit !== null ? (["concepts"] as const) : []),
     ...(examples.length > 0 || edit !== null ? (["examples"] as const) : []),
-    ...(edit !== null ? (["exercises"] as const) : []),
+    ...(edit !== null || diff !== null ? (["exercises"] as const) : []),
   ];
   // Never read `page` directly below: it may still hold `startAtEnd`'s
   // sentinel, which no arithmetic would ever walk back into range.
@@ -813,13 +914,29 @@ export function UnitScreen({
       {currentPage === "overview" ? (
         edit === null ? (
           <>
-            <h1>{unit.title}</h1>
-            <p>{unit.goal}</p>
-            <FeedbackWidget
-              docId={`topic:${content.topic.id}`}
-              contentKind="unit"
-              contentId={unit.id}
-            />
+            {diff?.changedFrom<{ title?: string; goal?: string }>(unit.id) !==
+              undefined && (
+              <div className="diff-old">
+                <h1>
+                  {diff.changedFrom<{ title?: string }>(unit.id)?.title ?? ""}
+                </h1>
+                <p>
+                  {diff.changedFrom<{ goal?: string }>(unit.id)?.goal ?? ""}
+                </p>
+              </div>
+            )}
+            <div className={diff?.className(unit.id)}>
+              <h1>{unit.title}</h1>
+              <p>{unit.goal}</p>
+            </div>
+            {/* Reporting a problem in your own draft is a loop. */}
+            {session === null && (
+              <FeedbackWidget
+                docId={`topic:${content.topic.id}`}
+                contentKind="unit"
+                contentId={unit.id}
+              />
+            )}
             {(unit.recallUnitIds ?? []).flatMap((id) => {
               const linkedUnit = content.units.find((u) => u.id === id);
               if (linkedUnit === undefined) {
@@ -911,23 +1028,48 @@ export function UnitScreen({
           </p>
           {/* All of a unit's notes share one trail dot — stacked here
               rather than paginated into subscreens. */}
-          {notes.map((note) => (
-            <NoteCard
-              key={note.noteId}
-              markdown={note.markdown}
-              lookup={lookup}
-              pinned={pinnedNoteIds.has(note.noteId)}
-              onPin={() => {
-                onPinNote(note.noteId);
-                setPinnedNoteIds(new Set([...pinnedNoteIds, note.noteId]));
-              }}
-              bookDocId={`topic:${content.topic.id}`}
-              bookId={content.topic.id}
-              noteId={note.noteId}
-              stem={note.stem}
-              {...(edit !== null ? { edit } : {})}
-            />
-          ))}
+          {diff !== null &&
+            notes.map((note) => (
+              <div
+                key={note.noteId}
+                className={diff.className(note.stem) ?? undefined}
+              >
+                <NoteDiff
+                  before={text(
+                    (
+                      diff.changedFrom<{ markdown?: unknown }>(note.stem) ??
+                      // A note the draft removed is in the union as its base
+                      // copy, so its "before" is the text on screen.
+                      (diff.status(note.stem) === "removed"
+                        ? { markdown: note.markdown }
+                        : {})
+                    ).markdown,
+                  )}
+                  after={note.markdown}
+                  lookup={lookup}
+                  bookId={content.topic.id}
+                />
+              </div>
+            ))}
+          {diff === null &&
+            notes.map((note) => (
+              <NoteCard
+                key={note.noteId}
+                markdown={note.markdown}
+                lookup={lookup}
+                pinned={pinnedNoteIds.has(note.noteId)}
+                onPin={() => {
+                  onPinNote(note.noteId);
+                  setPinnedNoteIds(new Set([...pinnedNoteIds, note.noteId]));
+                }}
+                bookDocId={`topic:${content.topic.id}`}
+                bookId={content.topic.id}
+                noteId={note.noteId}
+                stem={note.stem}
+                inSession={session !== null}
+                {...(edit !== null ? { edit } : {})}
+              />
+            ))}
           {edit !== null && (
             <button type="button" className="editor-add" onClick={edit.addNote}>
               + note
@@ -1172,9 +1314,18 @@ export function UnitScreen({
                   unit-level widget on Overview still covers reports. */}
               {conceptRows.map((item) => {
                 const editable = edit !== null && edit.canEditRow(item.id);
+                const was = diff?.changedFrom<{
+                  payload?: { term?: string; definition?: string };
+                }>(item.id);
                 return (
                   <Fragment key={item.id}>
-                    <tr>
+                    {was !== undefined && (
+                      <tr className="diff-old">
+                        <td>{was.payload?.term}</td>
+                        <td>{was.payload?.definition}</td>
+                      </tr>
+                    )}
+                    <tr className={diff?.className(item.id)}>
                       <td>
                         {editable ? (
                           <>
@@ -1327,6 +1478,7 @@ export function UnitScreen({
                 lookup={lookup}
                 bookDocId={`topic:${content.topic.id}`}
                 {...(edit !== null ? { edit } : {})}
+                {...(diff !== null ? { diff } : {})}
                 expanded={expandedRow === item.id}
                 onToggle={() =>
                   setExpandedRow((open) => (open === item.id ? null : item.id))
@@ -1352,6 +1504,36 @@ export function UnitScreen({
               </button>
             </>
           )}
+        </>
+      ) : null}
+
+      {currentPage === "exercises" && diff !== null ? (
+        <>
+          <p className="eyebrow">Exercises</p>
+          {/* Read-only and tinted. An exercise has no screen of its own, so
+              this is where What-changed lands a changed one (spec 0021-9
+              §4). */}
+          <ul className="card-list">
+            {unit.taskIds.map((taskId) => {
+              const task = content.tasks.find((t) => t.id === taskId);
+              const items = (task?.itemIds ?? []).flatMap((id) => {
+                const item = itemById.get(id);
+                return item !== undefined ? [item] : [];
+              });
+              return (
+                <li
+                  key={taskId}
+                  className={`card ${diff.className(taskId) ?? ""}`}
+                >
+                  <strong>
+                    {task === undefined
+                      ? "an exercise that no longer exists"
+                      : exerciseLabel(task.type, items)}
+                  </strong>
+                </li>
+              );
+            })}
+          </ul>
         </>
       ) : null}
 
@@ -1432,7 +1614,7 @@ export function UnitScreen({
           Hidden in edit mode (spec 0021-6 §1): practising a draft is what
           Preview is for (slice 9), and a Practice button that starts a
           session over half-typed content is a trap. */}
-      {edit === null && (
+      {(session === null || session.view === "preview") && (
         <div className="action-bar unit-practice-bar">
           <div className="action-bar-inner unit-practice-bar-inner">
             <button className="unit-practice-button" onClick={goNext}>

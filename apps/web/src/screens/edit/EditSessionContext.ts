@@ -4,7 +4,7 @@ import type {
   Content,
   DomainDocument,
 } from "@betterbeaver/schema";
-import type { Problem } from "@betterbeaver/engine";
+import type { ContentDiff, Problem } from "@betterbeaver/engine";
 import type { AssetView } from "./AssetsManager";
 
 /** Which lifecycle a document is edited through (plan 0012 §5, plan 0017
@@ -13,6 +13,11 @@ import type { AssetView } from "./AssetsManager";
 export type EditMode = "maintain" | "propose" | "private";
 
 export type SaveState = "saved" | "saving" | "error";
+
+/** Edit / Preview / Diff are modes on the same three screens (spec 0021-9
+ * §1, §3), never separate routes — which is why this lives on the session
+ * the screens already read rather than in the route. */
+export type EditView = "edit" | "preview" | "diff";
 
 export type PublishState =
   | { s: "idle" }
@@ -65,6 +70,23 @@ export interface EditSessionValue {
   uploadAsset?: (file: File) => Promise<void>;
   save: SaveState;
   publish: PublishState;
+  /** Which of the three modes this screen is showing (spec 0021-9). */
+  view: EditView;
+  setView: (view: EditView) => void;
+  /** False for a private Book (§3b): it has no published "before", so there
+   * is no Diff tab and the diff is never computed. */
+  canDiff: boolean;
+  /** The union content, per-entity status and base-side values — `null`
+   * whenever `canDiff` is false. */
+  diff: ContentDiff | null;
+  /** The draft assembled as a real, validated `ContentSource` (§1), or the
+   * errors that stopped it. Preview of an invalid draft is undefined, so the
+   * errors are rendered instead — the same list the publish panel shows. */
+  preview: {
+    content: Content;
+    noteMarkdown: (stem: string) => string | undefined;
+  } | null;
+  previewErrors: string[];
 }
 
 const EditSessionContext = createContext<EditSessionValue | null>(null);

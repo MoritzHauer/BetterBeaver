@@ -16,7 +16,7 @@ import type { AssetView } from "./AssetsManager";
 import type { EditSessionValue } from "./EditSessionContext";
 import { type Entity, firstResourceId } from "./types";
 
-/** Shared support for editing the learner screens in place (plan 0021 §3).
+/** Shared support for editing the learner screens in place (plan 0021 �§3).
  * The mutations live here, not in the screens: every one of them has to pick
  * the right document and go through `documentEdit`'s ops, and none of that
  * is presentation. Slice 7 extends this for Book and Lesson. */
@@ -28,7 +28,7 @@ const list = (v: unknown): string[] =>
   Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
 
 /**
- * A quiet marker, never an error dialog (spec 0021-6 §3). No `aria-invalid`:
+ * A quiet marker, never an error dialog (spec 0021-6 �§3). No `aria-invalid`:
  * a field the author is still filling in is not invalid, it is unfinished,
  * and announcing it as an error on every keystroke would be worse than
  * saying nothing.
@@ -45,7 +45,7 @@ export function ProblemMarker({ problems }: { problems: Problem[] }) {
   );
 }
 
-/** The two marker lookups every in-place screen needs (§3): field-level
+/** The two marker lookups every in-place screen needs (�§3): field-level
  * problems carry a dotted `path`, entity-level ones carry none. */
 interface ProblemViews {
   fieldProblems: (id: string, path: string) => Problem[];
@@ -146,7 +146,10 @@ export function unitEditOps(
   session: EditSessionValue | null,
   unitId: string,
 ): UnitEditOps | null {
-  if (session === null) {
+  // Preview and Diff render the learner screens read-only (spec 0021-9
+  // §1, §3): returning null here is what makes every editable surface fall
+  // back to its learner branch, without a third branch in any screen.
+  if (session === null || session.view !== "edit") {
     return null;
   }
   const book = session.book;
@@ -341,11 +344,14 @@ export interface BookEditOps extends ProblemViews {
   sourceRefCount: (id: string) => number;
 }
 
-/** The Book screen's half of §1, or `null` in learner mode. */
+/** The Book screen's half of �§1, or `null` in learner mode. */
 export function bookEditOps(
   session: EditSessionValue | null,
 ): BookEditOps | null {
-  if (session === null) {
+  // Preview and Diff render the learner screens read-only (spec 0021-9
+  // §1, §3): returning null here is what makes every editable surface fall
+  // back to its learner branch, without a third branch in any screen.
+  if (session === null || session.view !== "edit") {
     return null;
   }
   const book = session.book;
@@ -427,7 +433,10 @@ export function lessonEditOps(
   session: EditSessionValue | null,
   lessonId: string,
 ): LessonEditOps | null {
-  if (session === null) {
+  // Preview and Diff render the learner screens read-only (spec 0021-9
+  // §1, §3): returning null here is what makes every editable surface fall
+  // back to its learner branch, without a third branch in any screen.
+  if (session === null || session.view !== "edit") {
     return null;
   }
   const book = session.book;

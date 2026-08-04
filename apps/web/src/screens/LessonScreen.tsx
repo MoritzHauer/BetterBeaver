@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import type { Content } from "@betterbeaver/schema";
 import { isUnitComplete, isUnitUnlocked } from "@betterbeaver/engine";
 import { ConfirmSheet } from "../components/Sheet";
@@ -7,6 +7,7 @@ import { FeedbackWidget } from "../components/FeedbackWidget";
 import { BookWatermark } from "../components/BookWatermark";
 import { useEditSession } from "./edit/EditSessionContext";
 import { ProblemMarker, lessonEditOps, withOptionalKey } from "./edit/inPlace";
+import { diffView } from "./edit/diffView";
 import { EntityPicker, RowActions } from "./edit/fields";
 import { optionsFrom } from "./entityPicker";
 import type { PracticeTarget } from "./BookScreen";
@@ -40,7 +41,10 @@ export function LessonScreen({
   const [pendingUnitId, setPendingUnitId] = useState<string | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   // Edit mode (plan 0021 §2), same shape as the Book and Unit screens.
-  const edit = lessonEditOps(useEditSession(), lessonId);
+  const session = useEditSession();
+  const edit = lessonEditOps(session, lessonId);
+  // Diff renders the union read-only with per-element tints (spec 0021-9 §3).
+  const diff = diffView(session);
 
   const lesson = content.lessons.find((l) => l.id === lessonId);
   if (lesson === undefined) {
@@ -103,13 +107,31 @@ export function LessonScreen({
       </header>
       {edit === null ? (
         <>
-          <h1>{lesson.title}</h1>
-          <p>{lesson.goal}</p>
-          <FeedbackWidget
-            docId={`topic:${content.topic.id}`}
-            contentKind="lesson"
-            contentId={lesson.id}
-          />
+          {/* The lesson's own fields, old above new when they changed. */}
+          {diff?.changedFrom<{ title?: string; goal?: string }>(lesson.id) !==
+            undefined && (
+            <div className="diff-old">
+              <h1>
+                {diff.changedFrom<{ title?: string }>(lesson.id)?.title ?? ""}
+              </h1>
+              <p>
+                {diff.changedFrom<{ goal?: string }>(lesson.id)?.goal ?? ""}
+              </p>
+            </div>
+          )}
+          <div className={diff?.className(lesson.id)}>
+            <h1>{lesson.title}</h1>
+            <p>{lesson.goal}</p>
+          </div>
+          {/* Reporting a problem in content you are looking at as a draft is
+              a loop — hidden in Preview and Diff as well as in Edit. */}
+          {session === null && (
+            <FeedbackWidget
+              docId={`topic:${content.topic.id}`}
+              contentKind="lesson"
+              contentId={lesson.id}
+            />
+          )}
         </>
       ) : (
         <>
@@ -160,8 +182,10 @@ export function LessonScreen({
       )}
       <ul className="card-list">
         {/* A progress affordance over published content, meaningless while
-            you are looking at a draft (§2b). */}
-        {edit === null && (
+            you are looking at a draft (§2b) — and over the union content a
+            Diff renders. Preview keeps it: with everything unlocked it
+            shuffles the whole lesson, which is what Preview is for. */}
+        {(session === null || session.view === "preview") && (
           <li className={`card${practicePool.length > 0 ? " primary" : ""}`}>
             <button
               disabled={practicePool.length === 0}
@@ -229,6 +253,27 @@ export function LessonScreen({
                   Open &rsaquo;
                 </button>
               </li>
+            );
+          }
+          if (diff !== null) {
+            const was = diff.changedFrom<{ title?: string; goal?: string }>(
+              unit.id,
+            );
+            return (
+              <Fragment key={unit.id}>
+                {was !== undefined && (
+                  <li className="card diff-old">
+                    <strong>{was.title}</strong>
+                    <p>{was.goal}</p>
+                  </li>
+                )}
+                <li className={`card ${diff.className(unit.id) ?? ""}`}>
+                  <button onClick={() => onSelectUnit(unit.id)}>
+                    <strong>{unit.title}</strong>
+                    <p>{unit.goal}</p>
+                  </button>
+                </li>
+              </Fragment>
             );
           }
           return (

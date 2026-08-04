@@ -83,6 +83,11 @@ import {
 } from "./screens/edit/types";
 import { EditSession, useEditSessionState } from "./screens/edit/EditSession";
 import type { EditMode } from "./screens/edit/EditSessionContext";
+import {
+  bookScopeChanged,
+  lessonScopeChanged,
+  unitScopeChanged,
+} from "./screens/edit/diffView";
 
 // Edit mode is a flag on the three learner routes, not a screen of its own
 // (plan 0021 §8): `✎` sets `editing` on the screen you are already reading,
@@ -167,6 +172,21 @@ type Screen =
 type ContentSourceResult = { source: ContentSource } | { errors: string[] };
 
 const progressStore = createLocalStorageProgressStore();
+
+/** Preview plays the draft's exercises for real and **records nothing**
+ * (spec 0021-9 §1) — inspecting your own draft must not schedule half of it
+ * into your review queue. Reads are empty rather than delegating: a state
+ * read from the real store would show a card as "seen" in a preview of
+ * content nobody has published yet. */
+const PREVIEW_STORE: ProgressStore = {
+  getItemState: async () => null,
+  setItemState: async () => {},
+  getAttemptedTaskIds: async () => [],
+  markTaskAttempted: async () => {},
+  getStreak: async () => null,
+  setStreak: async () => {},
+  incrementReps: async () => {},
+};
 const vocabListStore = createLocalStorageVocabListStore();
 const userEntryStore = createLocalStorageUserEntryStore();
 
@@ -1641,14 +1661,68 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     // `draftContent`, which cannot fail on a mid-edit document, instead of
     // the validated published content. One conditional, here at the
     // resolution point; the screens themselves are unchanged.
-    const shown = editSession.value?.content ?? content;
+    const editView = editSession.value?.view ?? "edit";
+    const preview =
+      editView === "preview" ? (editSession.value?.preview ?? null) : null;
+    const shown =
+      preview !== null
+        ? preview.content
+        : editView === "diff" && editSession.value?.diff != null
+          ? // The **union** — base ∪ draft (spec 0021-9 §2) — so an entity
+            // the draft removed still has a row to tint red.
+            editSession.value.diff.content
+          : (editSession.value?.content ?? content);
+    // Preview opens everything (§1b): inspecting unit 12 must not cost
+    // eleven skip-ahead confirms, and a bad unlock chain is caught
+    // structurally anyway. A prop swap, deliberately, not a store change.
+    const shownAttempted =
+      preview !== null
+        ? new Set(shown.tasks.map((task) => task.id))
+        : attemptedTaskIds;
+    const shownStore = preview !== null ? PREVIEW_STORE : progressStore;
+    const shownNoteMarkdown =
+      preview !== null ? preview.noteMarkdown : editSession.value?.noteMarkdown;
     /** Wraps a learner screen in the session while `editing` is set. Exiting
      * clears the flag and leaves you exactly where you were. */
-    const inSession = (node: ReactElement, exitTo: Screen): ReactElement =>
+    const inSession = (
+      node: ReactElement,
+      exitTo: Screen,
+      // Whether *this* screen has anything to diff (spec 0021-9 §3a) — only
+      // App knows which screen is under the session.
+      diffHere = false,
+    ): ReactElement =>
       editingBookId === null ? (
         node
       ) : (
-        <EditSession session={editSession} onExit={() => setScreen(exitTo)}>
+        <EditSession
+          session={editSession}
+          onExit={() => setScreen(exitTo)}
+          diffHere={diffHere}
+          onNavigate={(target) => {
+            if (target.unitId !== undefined && target.lessonId !== undefined) {
+              setScreen({
+                screen: "unit",
+                bookId: editingBookId,
+                lessonId: target.lessonId,
+                unitId: target.unitId,
+                editing: true,
+              });
+            } else if (target.lessonId !== undefined) {
+              setScreen({
+                screen: "lesson",
+                bookId: editingBookId,
+                lessonId: target.lessonId,
+                editing: true,
+              });
+            } else {
+              setScreen({
+                screen: "book",
+                bookId: editingBookId,
+                editing: true,
+              });
+            }
+          }}
+        >
           {node}
         </EditSession>
       );
@@ -1660,8 +1734,8 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
         <BookScreen
           content={shown}
           unpublishedChanges={unpublishedBookIds.has(screen.bookId)}
-          attemptedTaskIds={attemptedTaskIds}
-          store={progressStore}
+          attemptedTaskIds={shownAttempted}
+          store={shownStore}
           epoch={bookEpoch}
           onSelectLesson={(lessonId) =>
             setScreen({
@@ -1694,6 +1768,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           onBack={onBack}
         />,
         { screen: "book", bookId: screen.bookId },
+        editSession.value !== null && bookScopeChanged(editSession.value),
       );
     }
 
@@ -1704,7 +1779,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
         <LessonScreen
           content={shown}
           lessonId={screen.lessonId}
-          attemptedTaskIds={attemptedTaskIds}
+          attemptedTaskIds={shownAttempted}
           onSelectUnit={(unitId) =>
             setScreen({
               screen: "unit",
@@ -1733,6 +1808,8 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           bookId: screen.bookId,
           lessonId: screen.lessonId,
         },
+        editSession.value !== null &&
+          lessonScopeChanged(editSession.value, screen.lessonId),
       );
     }
 
@@ -1752,7 +1829,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           lookup={lookup}
           // Draft note text in edit mode; the module-global `getNoteMarkdown`
           // only knows what has been published (spec 0021-5 §2d).
-          noteMarkdown={editSession.value?.noteMarkdown}
+          noteMarkdown={shownNoteMarkdown}
           onPractice={() =>
             setScreen({
               screen: "unit-session",
@@ -1800,6 +1877,8 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           lessonId: screen.lessonId,
           unitId: screen.unitId,
         },
+        editSession.value !== null &&
+          unitScopeChanged(editSession.value, screen.unitId),
       );
     }
 

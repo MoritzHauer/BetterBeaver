@@ -423,6 +423,73 @@ section.card {
   background: var(--incorrect-bg);
 }
 
+/* Diff tints (spec 0021-9 §3): old in red, new in green, at the granularity
+ * of a field or a note block — no word-level diffing. Built on the same
+ * custom properties `.card.correct`/`.card.incorrect` use, so light and dark
+ * both work without a second palette. A `<tr>` cannot take a border the way a
+ * card does, so the tint is the background plus a left rule. */
+.diff-old,
+.diff-new {
+  border-left: 3px solid transparent;
+  padding-left: 0.5rem;
+}
+
+.diff-old,
+tr.diff-old > td {
+  background: var(--incorrect-bg);
+  border-left-color: var(--incorrect-border);
+}
+
+.diff-new,
+tr.diff-new > td {
+  background: var(--correct-bg);
+  border-left-color: var(--correct-border);
+}
+
+/* The old half of a pair reads as superseded, not as an error. */
+.diff-old {
+  opacity: 0.75;
+}
+
+.card.diff-row.added {
+  border-color: var(--correct-border);
+}
+
+.card.diff-row.removed,
+.card.diff-row.changed {
+  border-color: var(--incorrect-border);
+}
+
+/* Edit / Preview / Diff, in the edit bar. The Diff slot keeps its width when
+ * the current screen has nothing to diff (§3a), or the bar jumps as you walk
+ * between a changed and an unchanged screen. */
+.edit-view-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.edit-view-tabs button {
+  min-height: 0;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.8rem;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: inherit;
+}
+
+.edit-view-tabs button.active {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.edit-view-diff-slot {
+  display: inline-flex;
+  justify-content: center;
+  min-width: 3.5rem;
+}
+
 /* Cross-unit "Remember: …" recall card — a filled, tappable button styled as
  * a card, distinct from --primary (Practice) and correct/incorrect (plan 0016). */
 .card.recall {

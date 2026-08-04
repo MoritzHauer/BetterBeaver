@@ -3,12 +3,15 @@ import type { ReactNode } from "react";
 import {
   type BookDocument,
   CONTENT_SCHEMA_VERSION,
+  type Content,
   type DomainDocument,
   documentId,
   domainSchema,
 } from "@betterbeaver/schema";
 import {
   type AssetStems,
+  createDocumentContentSource,
+  diffContent,
   diffDomainDocument,
   documentProblems,
   draftContent,
@@ -51,10 +54,12 @@ import { BookEditor } from "./BookEditor";
 import { DomainEditor } from "./DomainEditor";
 import { EditMenu, type EditPanel } from "./EditMenu";
 import { ProposalReview, emptyDocFor } from "./ProposalReview";
+import { WhatChanged, changedCount } from "./WhatChanged";
 import {
   type EditMode,
   EditSessionProvider,
   type EditSessionValue,
+  type EditView,
   type PublishState,
   type SaveState,
 } from "./EditSessionContext";
@@ -735,6 +740,9 @@ export function useEditSessionState(args: {
       : (domainSlot.doc as DomainDocument | null);
 
   const [publishState, setPublishState] = useState<PublishState>({ s: "idle" });
+  // Edit / Preview / Diff (spec 0021-9 §1, §3): modes on the same screens,
+  // so this is session state, not a route.
+  const [editView, setEditView] = useState<EditView>("edit");
   const [proposals, setProposals] = useState<Proposal[] | null>(null);
 
   const refreshProposals = useCallback(() => {
@@ -852,6 +860,78 @@ export function useEditSessionState(args: {
           }
         : undefined;
 
+  // --- Preview and Diff (spec 0021-9) ---------------------------------
+
+  // A private Book has no published "before" (§3b), so it gets Edit and
+  // Preview only — and the diff is not computed at all rather than computed
+  // and hidden, or a lexicon-only change would light a badge for a screen
+  // with no Diff to open.
+  const canDiff = mode !== "private";
+  const diff = useMemo(
+    () =>
+      !enabled || book === null || !canDiff
+        ? null
+        : diffContent(
+            publishedBook,
+            book,
+            publishedDomain,
+            domain ?? EMPTY_DOMAIN,
+          ),
+    [enabled, book, domain, canDiff, publishedBook, publishedDomain],
+  );
+
+  /**
+   * Preview builds a **real** `ContentSource` over the working documents
+   * (§1) — the same assembly `publishCheck` does — so the exercises play for
+   * real rather than being rendered by the draft adapter.
+   *
+   * `assetStems` is the live inventory, not the boot-time overlay (§1a):
+   * `registerRemoteAssets` populates that overlay from *cached* documents,
+   * so an image uploaded for an unpublished draft is in Storage and in the
+   * session's asset list but not in the overlay — and Preview would report a
+   * dangling ref for a file that plainly exists.
+   */
+  const previewBuild = useMemo(() => {
+    if (!enabled || book === null) {
+      return null;
+    }
+    const withDomain = domain ?? EMPTY_DOMAIN;
+    return createDocumentContentSource(
+      new Map([[bookId, book]]),
+      new Map([[domainId, withDomain]]),
+      assetStems,
+    );
+  }, [enabled, book, domain, bookId, domainId, assetStems]);
+
+  const [previewContent, setPreviewContent] = useState<Content | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    if (previewBuild === null || previewBuild.broken.length > 0) {
+      setPreviewContent(null);
+      return;
+    }
+    // Already built synchronously above; `loadBook` only re-wraps it, and
+    // cannot reject for a book absent from `broken`.
+    void previewBuild.source.loadBook(bookId).then(
+      (content) => {
+        if (!cancelled) {
+          setPreviewContent(content);
+        }
+      },
+      () => {
+        if (!cancelled) {
+          setPreviewContent(null);
+        }
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [previewBuild, bookId]);
+
+  const previewErrors =
+    previewBuild?.broken.flatMap((entry) => entry.errors) ?? [];
+
   const value: EditSessionValue | null =
     book === null || drafted === null
       ? null
@@ -873,6 +953,19 @@ export function useEditSessionState(args: {
           uploadAsset: readOnly ? undefined : uploadFile,
           save: mode === "private" ? priv.saveState : bookSlot.saveState,
           publish: publishState,
+          view: canDiff || editView !== "diff" ? editView : "edit",
+          setView: setEditView,
+          canDiff,
+          diff,
+          preview:
+            previewContent === null
+              ? null
+              : {
+                  content: previewContent,
+                  noteMarkdown: (stem: string) =>
+                    previewBuild?.noteMarkdown(bookId, stem),
+                },
+          previewErrors,
         };
 
   /** One Publish covering both documents (§1d). Book first, then lexicon: if
@@ -1024,10 +1117,17 @@ export function EditSession({
   session,
   onExit,
   children,
+  diffHere = false,
+  onNavigate,
 }: {
   session: EditSessionState;
   onExit: () => void;
   children: ReactNode;
+  /** Whether the screen underneath has anything to diff (spec 0021-9 §3a) —
+   * only App knows which screen that is. */
+  diffHere?: boolean;
+  /** Deep-links a What-changed row to the screen that owns the entity (§4). */
+  onNavigate?: (target: { lessonId?: string; unitId?: string }) => void;
 }) {
   const [panel, setPanel] = useState<EditPanel>(null);
   const [view, setView] = useState<View>({ v: "root" });
@@ -1110,7 +1210,39 @@ export function EditSession({
       : (session.proposals?.find((p) => p.id === reviewing) ?? null);
 
   let body: ReactNode = children;
-  if (panel === "assets") {
+  if (value !== null && panel === null && value.view === "preview") {
+    // Preview of an invalid draft is undefined (spec 0021-9 §1), so the
+    // errors are rendered instead — the same list the publish panel shows.
+    if (value.preview === null) {
+      body = (
+        <main className="editor">
+          <h2>Preview</h2>
+          <p className="status">
+            This draft does not build yet, so there is nothing to preview.
+          </p>
+          <ul className="error-text">
+            {value.previewErrors.slice(0, 20).map((error) => (
+              <li key={error}>{error}</li>
+            ))}
+          </ul>
+        </main>
+      );
+    }
+  } else if (panel === "changed" && value?.diff != null) {
+    body = (
+      <main className="editor">
+        <WhatChanged
+          diff={value.diff}
+          noteMarkdown={value.noteMarkdown}
+          onOpen={(target) => {
+            setPanel(null);
+            value.setView("diff");
+            onNavigate?.(target);
+          }}
+        />
+      </main>
+    );
+  } else if (panel === "assets") {
     body = (
       <main className="editor">
         {/* Which pair of documents depends on the mode, and it is not
@@ -1272,6 +1404,11 @@ export function EditSession({
         proposalCount={session.proposals?.length ?? 0}
         problemCount={value?.problems.length ?? 0}
         hasLexicon={domain !== null}
+        view={value?.view ?? "edit"}
+        onView={value?.setView ?? (() => {})}
+        canDiff={value?.canDiff ?? false}
+        diffHere={diffHere}
+        changedCount={changedCount(value?.diff ?? null)}
       />
     </EditSessionProvider>
   );

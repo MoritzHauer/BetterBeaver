@@ -1,4 +1,5 @@
 export * from "./adhoc.js";
+export * from "./diffContent.js";
 export * from "./documentDiff.js";
 export * from "./documentEdit.js";
 export * from "./documentProblems.js";

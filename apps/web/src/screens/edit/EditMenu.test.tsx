@@ -34,6 +34,11 @@ async function open(
       proposalCount={2}
       problemCount={0}
       hasLexicon
+      view="edit"
+      onView={() => {}}
+      canDiff={mode !== "private"}
+      diffHere={false}
+      changedCount={0}
       {...extra}
     />,
   );
