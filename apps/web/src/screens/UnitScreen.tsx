@@ -757,7 +757,11 @@ export function UnitScreen({
   // you can never put the first word, concept or example on.
   const pages: PageKind[] = [
     "overview",
-    ...(notes.length > 0 || edit !== null ? (["theory"] as const) : []),
+    // `diff !== null` too: a unit whose only change is a deleted note has
+    // no draft notes at all, and without the dot the deletion is unreachable.
+    ...(notes.length > 0 || edit !== null || diff !== null
+      ? (["theory"] as const)
+      : []),
     ...(lexemes.length > 0 || edit !== null ? (["vocabulary"] as const) : []),
     ...(concepts.length > 0 || edit !== null ? (["concepts"] as const) : []),
     ...(examples.length > 0 || edit !== null ? (["examples"] as const) : []),

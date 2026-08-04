@@ -31,19 +31,20 @@ const WORD: Record<DiffStatus, string> = {
   unchanged: "",
 };
 
-/** How many entities publishing would touch — the badge on the menu entry,
- * which doubles as the answer to "is there anything to review?". */
-export function changedCount(diff: ContentDiff | null): number {
-  if (diff === null) {
-    return 0;
-  }
-  let count = 0;
-  for (const status of diff.status.values()) {
-    if (status !== "unchanged") {
-      count++;
-    }
-  }
-  return count;
+/**
+ * How many entities publishing would touch — the badge on the menu entry,
+ * which doubles as the answer to "is there anything to review?".
+ *
+ * Counts **rows**, not raw status entries. The status map also holds
+ * `families`, which no screen in this plan surfaces, so counting it would
+ * put a 3 on a list of 2. (Lexicon *entries* do have rows: `draftContent`
+ * merges them into `Content.items`.)
+ */
+export function changedCount(
+  diff: ContentDiff | null,
+  noteMarkdown: (stem: string) => string | undefined,
+): number {
+  return diff === null ? 0 : rowsOf(diff, noteMarkdown).length;
 }
 
 /** The lesson a unit belongs to, and the unit an item/task/note belongs to,
@@ -93,6 +94,10 @@ function rowsOf(
   };
 
   push("topic", content.topic.title || "This Book", "Book", {});
+  // The lexicon publishes with the Book (slice 5 §1d) and is edited through
+  // `[⋮] → Words`, so a change to it belongs in this list — under the Book,
+  // since it has no screen of its own. The word "domain" appears nowhere.
+  push("domain", "The words this Book uses", "Lexicon", {});
   for (const resource of content.resources) {
     // No screen of its own: Sources lives on the Book (spec 0021-8 §2a).
     push(resource.id, resource.title || "Untitled source", "Source", {});

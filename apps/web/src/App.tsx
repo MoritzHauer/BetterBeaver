@@ -1703,8 +1703,24 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
         ? new Set(shown.tasks.map((task) => task.id))
         : attemptedTaskIds;
     const shownStore = preview !== null ? PREVIEW_STORE : progressStore;
+    // In Diff the draft has no copy of a note it deleted, and `UnitScreen`
+    // drops any note whose markdown is undefined — so without this fallback
+    // the one entity a diff most needs to show never reaches the screen.
+    const diffBefore = editSession.value?.diff?.before;
     const shownNoteMarkdown =
-      preview !== null ? preview.noteMarkdown : editSession.value?.noteMarkdown;
+      preview !== null
+        ? preview.noteMarkdown
+        : editView === "diff" && diffBefore !== undefined
+          ? (stem: string) => {
+              const draft = editSession.value?.noteMarkdown(stem);
+              if (draft !== undefined) {
+                return draft;
+              }
+              const base = (diffBefore.get(stem) as { markdown?: unknown })
+                ?.markdown;
+              return typeof base === "string" ? base : undefined;
+            }
+          : editSession.value?.noteMarkdown;
     /** Wraps a learner screen in the session while `editing` is set. Exiting
      * clears the flag and leaves you exactly where you were. */
     const inSession = (

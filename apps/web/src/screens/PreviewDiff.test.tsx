@@ -8,6 +8,8 @@ import {
   draftContent,
 } from "@betterbeaver/engine";
 import { BookScreen } from "./BookScreen";
+import { UnitScreen } from "./UnitScreen";
+import type { TapLookup } from "../components/TappableText";
 import { EditSessionProvider } from "./edit/EditSessionContext";
 import type { EditSessionValue } from "./edit/EditSessionContext";
 import { WhatChanged, changedCount } from "./edit/WhatChanged";
@@ -323,6 +325,64 @@ describe("Diff", () => {
   });
 });
 
+describe("a deleted note in Diff", () => {
+  afterEach(cleanup);
+
+  const lookup = {
+    domainContent: {
+      domain: { id: "dm", code: "dm", readAloudLang: "en" },
+      entries: [],
+      families: [],
+      linksByEntryId: new Map(),
+    },
+    listStore: {} as TapLookup["listStore"],
+    userEntryStore: {} as TapLookup["userEntryStore"],
+    onWordsChanged: () => {},
+  } as unknown as TapLookup;
+
+  it("still has a page and a red row", () => {
+    // The one a diff most needs to show, and the easiest to lose: the draft
+    // has no copy of a note it deleted, and `UnitScreen` drops any note
+    // whose markdown is undefined. App falls back to `diff.before`; this
+    // pins the screen's half of that contract.
+    const withNote = clone(BOOK);
+    withNote.notes = [{ stem: "n1", markdown: "# Old note\n\nGone now.\n" }];
+    (withNote.units[0] as { noteIds: string[] }).noteIds = ["bk-note-n1"];
+    const draft = clone(withNote);
+    draft.notes = [];
+    (draft.units[0] as { noteIds: string[] }).noteIds = [];
+
+    const diff = diffContent(withNote, draft, DOMAIN, DOMAIN);
+    render(
+      <EditSessionProvider
+        value={makeSession({ book: draft, view: "diff", diff })}
+      >
+        <UnitScreen
+          content={diff.content}
+          unitId="bk-u1"
+          lookup={lookup}
+          onPractice={() => {}}
+          onRecall={() => {}}
+          onPinNote={() => {}}
+          isNotePinned={async () => false}
+          onBack={() => {}}
+          // What App supplies in Diff: the draft's copy, falling back to the
+          // base one for a note the draft removed.
+          noteMarkdown={(stem) =>
+            stem === "n1" ? "# Old note\n\nGone now.\n" : undefined
+          }
+        />
+      </EditSessionProvider>,
+    );
+
+    // The Theory dot exists even though the draft has no notes at all.
+    const dots = screen.getAllByRole("button", { name: /^Page \d+ of/ });
+    fireEvent.click(dots[1]!);
+    const heading = screen.getByText("Old note");
+    expect(heading.closest(".diff-old")).not.toBeNull();
+  });
+});
+
 describe("What changed", () => {
   afterEach(cleanup);
 
@@ -332,10 +392,11 @@ describe("What changed", () => {
     (draft.items[0] as { payload: { term: string } }).payload.term = "Lodge";
     const diff = diffContent(BOOK, draft, DOMAIN, DOMAIN);
 
-    const touched = [...diff.status.values()].filter((s) => s !== "unchanged");
-    expect(changedCount(diff)).toBe(touched.length);
-    expect(changedCount(diff)).toBe(2);
-    expect(changedCount(null)).toBe(0);
+    const none = () => undefined;
+    // The badge counts **rows**, so it can never exceed the list it
+    // labels — `families` is in the status map and has no row anywhere.
+    expect(changedCount(diff, none)).toBe(2);
+    expect(changedCount(null, none)).toBe(0);
   });
 
   it("names rows by title and deep-links each to the screen that owns it", () => {

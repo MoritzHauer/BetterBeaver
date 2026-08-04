@@ -900,7 +900,11 @@ export function useEditSessionState(args: {
    * dangling ref for a file that plainly exists.
    */
   const previewBuild = useMemo(() => {
-    if (!enabled || book === null) {
+    // Gated on the view, not just on `enabled`: this runs the full
+    // `validateContent` + `validateContentSet` pass, and `documentProblems`
+    // already runs on every keystroke by design. Preview is entered by a
+    // tap, so building it lazily is invisible — and typing stays cheap.
+    if (!enabled || book === null || editView !== "preview") {
       return null;
     }
     const withDomain = domain ?? EMPTY_DOMAIN;
@@ -909,7 +913,7 @@ export function useEditSessionState(args: {
       new Map([[domainId, withDomain]]),
       assetStems,
     );
-  }, [enabled, book, domain, bookId, domainId, assetStems]);
+  }, [enabled, book, domain, bookId, domainId, assetStems, editView]);
 
   const [previewContent, setPreviewContent] = useState<Content | null>(null);
   useEffect(() => {
@@ -1416,7 +1420,10 @@ export function EditSession({
         onView={value?.setView ?? (() => {})}
         canDiff={value?.canDiff ?? false}
         diffHere={diffHere}
-        changedCount={changedCount(value?.diff ?? null)}
+        changedCount={changedCount(
+          value?.diff ?? null,
+          value?.noteMarkdown ?? (() => undefined),
+        )}
       />
     </EditSessionProvider>
   );
