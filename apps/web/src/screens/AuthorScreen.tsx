@@ -24,6 +24,7 @@ import {
  */
 export function AuthorScreen({
   onCreateBook,
+  onCreateHostedBook,
   onOpenDocument,
   orphanedLexicon = () => false,
   onPrivacy,
@@ -31,6 +32,9 @@ export function AuthorScreen({
 }: {
   /** Starts the private-Book naming flow, which lives on the home screen. */
   onCreateBook: () => void;
+  /** Creates a hosted Book **and its lexicon** for the signed-in account
+   * (spec 0021-10 §1), then opens it in edit mode. */
+  onCreateHostedBook: (title: string) => Promise<void>;
   onOpenDocument: (docId: string, mode?: "maintain" | "propose") => void;
   /** True for a lexicon document whose Book is not on this device — it has
    * no screen to open (spec 0021-10 §2). */
@@ -48,6 +52,10 @@ export function AuthorScreen({
   const [catalog, setCatalog] = useState<CatalogSummary[] | null>(null);
   const [proposals, setProposals] = useState<Proposal[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // New Book: a title, nothing else. Ids have been generated since spec
+  // 0018, so there is no slug to type.
+  const [newTitle, setNewTitle] = useState("");
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     void currentUser().then(setUser);
@@ -182,6 +190,39 @@ export function AuthorScreen({
               Sign out
             </button>
           </p>
+          <form
+            className="card"
+            onSubmit={(event) => {
+              event.preventDefault();
+              setError(null);
+              setCreating(true);
+              void onCreateHostedBook(newTitle.trim()).catch((e: unknown) => {
+                setCreating(false);
+                setError(e instanceof Error ? e.message : String(e));
+              });
+            }}
+          >
+            <label className="field">
+              New Book
+              <input
+                type="text"
+                value={newTitle}
+                placeholder="What is it called?"
+                onChange={(e) => setNewTitle(e.target.value)}
+              />
+            </label>
+            <button
+              className="primary"
+              type="submit"
+              disabled={creating || newTitle.trim() === ""}
+            >
+              {creating ? "Creating…" : "Create"}
+            </button>
+            <span className="status">
+              Published for everyone once an admin lists it. Its words live with
+              it — you maintain both.
+            </span>
+          </form>
           {docs === null && <p>Loading your documents…</p>}
           {docs !== null && docs.length === 0 && (
             <p className="card">

@@ -4,6 +4,7 @@ import {
   type User,
 } from "@supabase/supabase-js";
 import type { DomainDocument, BookDocument } from "@betterbeaver/schema";
+import { CONTENT_SCHEMA_VERSION } from "@betterbeaver/schema";
 import { isOffline } from "../offline";
 
 /**
@@ -100,6 +101,65 @@ export async function loadDocument(id: string): Promise<AuthorDoc> {
     throw new Error(error.message);
   }
   return data;
+}
+
+/**
+ * Creates a Book **and its lexicon** as two `documents` rows (spec 0021-10
+ * §1). A Book always owns its own lexicon (plan 0021 §7), and the original
+ * long-tail spec created only the Book — leaving a creator pointing at a
+ * lexicon they had no way to make.
+ *
+ * **No migration was needed, and none was written** (§1a): `kind` is in the
+ * insert grant and unrestricted by `documents_insert`, the table's check
+ * constraint permits both values, and `documents_creator_maintainer` fires on
+ * any insert with `created_by` set — so the creator maintains both rows.
+ *
+ * The two inserts are not atomic, so the **lexicon goes first**: a lexicon
+ * with no Book is inert, while a Book pointing at a missing lexicon has every
+ * reference dangling. A failed Book insert is reported and the orphan is left
+ * alone — a rollback delete needs a `delete` grant this role does not have.
+ */
+export async function createBookDocuments(
+  bookDocId: string,
+  book: BookDocument,
+  domainDocId: string,
+  domain: DomainDocument,
+  // Injectable so the insert order and the error mapping — the two things
+  // that matter here — are testable without a backend.
+  client: SupabaseClient | null = getSupabase(),
+): Promise<void> {
+  const supabase = client;
+  if (supabase === null) {
+    throw new Error("backend not configured");
+  }
+  const { data: user } = await supabase.auth.getUser();
+  const createdBy = user.user?.id;
+  if (createdBy === undefined) {
+    throw new Error("sign in to create a Book");
+  }
+  const insert = async (
+    id: string,
+    kind: "topic" | "domain",
+    draft: BookDocument | DomainDocument,
+  ) => {
+    const { error } = await supabase.from("documents").insert({
+      id,
+      kind,
+      draft,
+      schema_version: CONTENT_SCHEMA_VERSION,
+      created_by: createdBy,
+    });
+    if (error) {
+      // 23505 is a PK violation: another document already has this id.
+      throw new Error(
+        error.code === "23505"
+          ? "that name is taken"
+          : `could not create this Book: ${error.message}`,
+      );
+    }
+  };
+  await insert(domainDocId, "domain", domain);
+  await insert(bookDocId, "topic", book);
 }
 
 export async function saveDraft(

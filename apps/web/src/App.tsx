@@ -42,6 +42,8 @@ import { resolvedLinksByEntryId } from "./content/links";
 import { readCachedDocuments } from "./content/cache";
 import { readPrivateBooks } from "./content/private-store";
 import { readArchived } from "./content/myBooks";
+import { newEntityId } from "./content/entity-ids";
+import { newPrivateId } from "./content/private-ids";
 import { createLocalStorageProgressStore } from "./progress/local-storage";
 import { createLocalStorageVocabListStore } from "./progress/vocab-lists";
 import { createLocalStorageUserEntryStore } from "./progress/user-entries";
@@ -69,6 +71,7 @@ import { SettingsScreen } from "./screens/SettingsScreen";
 import { StatsScreen } from "./screens/StatsScreen";
 import { LessonSummaryScreen } from "./screens/LessonSummaryScreen";
 import {
+  createBookDocuments,
   currentUser,
   getSupabase,
   listMyDocuments,
@@ -1490,6 +1493,53 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
         onCreateBook={() => {
           setScreen({ screen: "books" });
           setNamingBook(true);
+        }}
+        onCreateHostedBook={async (title) => {
+          // Ids first, codes derived from them (spec 0021-10 §1b):
+          // `validateContentSet` enforces globally unique *domain* codes but
+          // never Book codes, so a code derived from a user-chosen title can
+          // collide where a duplicate Book code would not — and the
+          // collision would surface in somebody else's Book at listing time.
+          const bookId = newPrivateId();
+          const domainId = newPrivateId();
+          const code = bookId.slice(0, 8);
+          await createBookDocuments(
+            documentId("topic", bookId),
+            {
+              topic: {
+                id: bookId,
+                code,
+                title,
+                domainId,
+                lessonIds: [],
+                description: "",
+              },
+              lessons: [],
+              units: [],
+              items: [],
+              tasks: [],
+              // §1d, same seed the private path gets: without it the first
+              // word an author adds is invalid.
+              resources: [{ id: newEntityId(code), title, path: "" }],
+              notes: [],
+            },
+            documentId("domain", domainId),
+            {
+              domain: {
+                id: domainId,
+                code,
+                kind: "general",
+                title,
+                glossLanguage: "en",
+              },
+              entries: [],
+              families: [],
+            },
+          );
+          // Adds it to this device so the Book route can resolve it — the
+          // same path the Library's Add uses.
+          await contentInit.addBook(bookId, domainId);
+          setScreen({ screen: "book", bookId, editing: true });
         }}
         onOpenDocument={(docId, mode) => setScreen(editorRouteFor(docId, mode))}
         orphanedLexicon={(docId) =>
