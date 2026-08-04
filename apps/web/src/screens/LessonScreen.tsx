@@ -107,22 +107,26 @@ export function LessonScreen({
       </header>
       {edit === null ? (
         <>
-          {/* The lesson's own fields, old above new when they changed. */}
-          {diff?.changedFrom<{ title?: string; goal?: string }>(lesson.id) !==
-            undefined && (
-            <div className="diff-old">
-              <h1>
-                {diff.changedFrom<{ title?: string }>(lesson.id)?.title ?? ""}
-              </h1>
-              <p>
-                {diff.changedFrom<{ goal?: string }>(lesson.id)?.goal ?? ""}
-              </p>
-            </div>
-          )}
-          <div className={diff?.className(lesson.id)}>
-            <h1>{lesson.title}</h1>
-            <p>{lesson.goal}</p>
-          </div>
+          {/* The lesson's own fields, old above new when *these two* changed
+              — a lesson whose `unitIds` changed shows them once (§3). */}
+          {(() => {
+            const shown = { title: lesson.title, goal: lesson.goal };
+            const was = diff?.changedFrom<typeof shown>(lesson.id, shown);
+            return (
+              <>
+                {was !== undefined && (
+                  <div className="diff-old">
+                    <h1>{was.title ?? ""}</h1>
+                    <p>{was.goal ?? ""}</p>
+                  </div>
+                )}
+                <div className={diff?.className(lesson.id, shown)}>
+                  <h1>{lesson.title}</h1>
+                  <p>{lesson.goal}</p>
+                </div>
+              </>
+            );
+          })()}
           {/* Reporting a problem in content you are looking at as a draft is
               a loop — hidden in Preview and Diff as well as in Edit. */}
           {session === null && (

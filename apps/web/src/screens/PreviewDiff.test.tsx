@@ -293,6 +293,42 @@ describe("Diff", () => {
     ).toBeTruthy();
   });
 
+  it("does not pair a block whose own fields did not change", () => {
+    // §3's granularity is the *field*. Adding a lesson makes `topic`
+    // `changed` (`lessonIds` lives there), but the Book's title and
+    // description are untouched — rendering them old-red above new-green
+    // would claim an edit nobody made.
+    const draft = clone(BOOK);
+    draft.lessons.push({
+      id: "bk-l3",
+      topicId: "bk",
+      title: "Third",
+      goal: "g3",
+      unitIds: [],
+    });
+    (draft.topic as { lessonIds: string[] }).lessonIds = [
+      "bk-l1",
+      "bk-l2",
+      "bk-l3",
+    ];
+    const diff = diffContent(BOOK, draft, DOMAIN, DOMAIN);
+    expect(diff.status.get("topic")).toBe("changed");
+    renderBook(
+      makeSession({ book: draft, view: "diff", diff }),
+      new Set(),
+      diff.content,
+    );
+
+    expect(screen.getAllByText("Book")).toHaveLength(1);
+    expect(screen.getByText("Book").closest("div")?.className).not.toContain(
+      "diff-",
+    );
+    // The lesson that *was* added still gets its tint.
+    expect(screen.getByText("Third").closest("li")?.className).toContain(
+      "diff-new",
+    );
+  });
+
   it("keeps a deleted lesson on screen so it has a row to tint", () => {
     const draft = clone(BOOK);
     draft.lessons = draft.lessons.filter(

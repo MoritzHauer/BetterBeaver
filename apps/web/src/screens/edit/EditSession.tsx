@@ -102,6 +102,19 @@ function differs(doc: AnyDoc | null, base: unknown): boolean {
   return doc !== null && JSON.stringify(doc) !== JSON.stringify(base ?? null);
 }
 
+type SyncState = "synced" | "unsynced" | "syncing" | "error";
+
+/** The session's sync state across both slots — worst wins, so a lexicon
+ * edit nobody has synced is not hidden by a Book that is up to date. */
+function mergedSyncState(book: SyncState, domain: SyncState): SyncState {
+  for (const state of ["error", "syncing", "unsynced"] as const) {
+    if (book === state || domain === state) {
+      return state;
+    }
+  }
+  return "synced";
+}
+
 // ---------------------------------------------------------------------------
 // One server-backed document (maintain or propose)
 // ---------------------------------------------------------------------------
@@ -985,6 +998,13 @@ export function useEditSessionState(args: {
           previewErrors,
         };
 
+  /** The lexicon's own Discard, gated the way its Publish is: only a document
+   * this account maintains has a server draft to drop. */
+  const domainDiscard =
+    domainDocId !== "" && domainMode === "maintain"
+      ? domainSlot.discardDraft
+      : null;
+
   /** One Publish covering both documents (§1d). Book first, then lexicon: if
    * the lexicon fails, the Book is already out and the failure is reported
    * honestly — the reverse order would leave content referencing entries
@@ -1006,14 +1026,35 @@ export function useEditSessionState(args: {
       ...(domainChanged ? [domainSlot] : []),
     ];
     setPublishState({ s: "checking" });
-    const errors: string[] = [];
-    for (const slot of targets) {
-      if (slot.doc !== null) {
-        errors.push(
-          ...(await validateForPublish(slot.docId, slot.kind, slot.doc)),
-        );
-      }
-    }
+    // ONE check over the whole pair, not one per changed slot. Deleting a
+    // word breaks the *task* that points at it, and the task lives in the
+    // Book — which is not a target when only the lexicon changed, so
+    // per-slot checking published the break and reported success. Each half
+    // is supplied at the version this publish would leave it at: its working
+    // copy when it is a target, its published copy when it is not.
+    const bookForCheck = (
+      bookChanged ? bookSlot.doc : bookSlot.published
+    ) as BookDocument | null;
+    const domainForCheck = (
+      domainChanged ? domainSlot.doc : domainSlot.published
+    ) as DomainDocument | null;
+    const errors =
+      bookForCheck === null
+        ? []
+        : await validateForPublish(
+            bookSlot.docId,
+            "topic",
+            bookForCheck,
+            domainDocId !== "" && domainForCheck !== null
+              ? [
+                  {
+                    docId: domainSlot.docId,
+                    kind: "domain" as const,
+                    doc: domainForCheck,
+                  },
+                ]
+              : [],
+          );
     if (errors.length > 0) {
       setPublishState({ s: "errors", errors });
       return;
@@ -1081,9 +1122,28 @@ export function useEditSessionState(args: {
     localChoice: bookSlot.localChoice,
     resumeLocal: bookSlot.resumeLocal,
     startOver: bookSlot.startOver,
-    syncState: bookSlot.syncState,
-    sync: mode === "maintain" && !readOnly ? bookSlot.sync : null,
-    discardDraft: readOnly ? null : bookSlot.discardDraft,
+    // All three cover BOTH slots, the way `runPublish` already does. One
+    // session owns the Book and its lexicon (spec 0021-5), so a Discard that
+    // dropped only the Book's draft left the lexicon's edits behind — a
+    // discarded gloss came back as an unexplained "1 change", and Sync left
+    // them on the device.
+    syncState: mergedSyncState(bookSlot.syncState, domainSlot.syncState),
+    sync:
+      mode === "maintain" && !readOnly
+        ? async () => {
+            await bookSlot.sync();
+            if (domainDocId !== "" && domainMode === "maintain") {
+              await domainSlot.sync();
+            }
+          }
+        : null,
+    discardDraft:
+      readOnly || (bookSlot.discardDraft === null && domainDiscard === null)
+        ? null
+        : async () => {
+            await bookSlot.discardDraft?.();
+            await domainDiscard?.();
+          },
     runPublish,
     publishState,
     proposals,

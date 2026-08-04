@@ -213,27 +213,32 @@ export function BookScreen({
       </header>
       {edit === null ? (
         <>
-          {/* The Book's own fields, old above new when they changed (§3). */}
-          {diff?.changedFrom<{ title?: string; description?: string }>(
-            "topic",
-          ) !== undefined && (
-            <div className="diff-old">
-              <h1>
-                {diff.changedFrom<{ title?: string }>("topic")?.title ?? ""}
-              </h1>
-              <p>
-                {diff.changedFrom<{ description?: string }>("topic")
-                  ?.description ?? ""}
-              </p>
-            </div>
-          )}
-          <div className={diff?.className("topic")}>
-            <h1>{content.topic.title}</h1>
-            {unpublishedChanges && diff === null && (
-              <p className="status">unpublished changes</p>
-            )}
-            <p>{content.topic.description}</p>
-          </div>
+          {/* The Book's own fields, old above new when *these two* changed
+              — adding a lesson changes `topic` too, and shows them once. */}
+          {(() => {
+            const shown = {
+              title: content.topic.title,
+              description: content.topic.description,
+            };
+            const was = diff?.changedFrom<typeof shown>("topic", shown);
+            return (
+              <>
+                {was !== undefined && (
+                  <div className="diff-old">
+                    <h1>{was.title ?? ""}</h1>
+                    <p>{was.description ?? ""}</p>
+                  </div>
+                )}
+                <div className={diff?.className("topic", shown)}>
+                  <h1>{content.topic.title}</h1>
+                  {unpublishedChanges && diff === null && (
+                    <p className="status">unpublished changes</p>
+                  )}
+                  <p>{content.topic.description}</p>
+                </div>
+              </>
+            );
+          })()}
           {/* Reporting a problem in content you are editing is a loop, so
               this and the chat block below are hidden in edit mode — and in
               Preview and Diff, which are the same content. */}

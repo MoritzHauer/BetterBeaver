@@ -3,6 +3,7 @@ import type { ReactElement } from "react";
 import type {
   BookDocument,
   Content,
+  DomainDocument,
   Item,
   Task,
   Unit,
@@ -200,6 +201,15 @@ const PREVIEW_STORE: ProgressStore = {
 };
 const vocabListStore = createLocalStorageVocabListStore();
 const userEntryStore = createLocalStorageUserEntryStore();
+
+/** Set just before creating a Book adds it to this device (spec 0021-10 §1:
+ * "then routes to `{ screen: "book", bookId, editing: true }`"). Adding is a
+ * membership change, and every membership change ends in a full
+ * `window.location.reload()` — that reload is what makes the new Book
+ * resolvable at all, and it throws away any `setScreen` that follows it. So
+ * the destination crosses the reload in sessionStorage, the same hand-off
+ * `SKIP_COVER_KEY` already makes across the same reload. */
+const OPEN_EDITING_KEY = "bb.openEditing";
 
 /** Resolves the author Edit button's `EditScreen` deep-link target for one
  * non-matching question's scheduling unit, shared by `TaskSession`,
@@ -725,7 +735,17 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     await acceptUpdateNow(update);
   }
 
-  const [screen, setScreen] = useState<Screen>({ screen: "books" });
+  const [screen, setScreen] = useState<Screen>(() => {
+    try {
+      const bookId = sessionStorage.getItem(OPEN_EDITING_KEY);
+      if (bookId !== null) {
+        return { screen: "book", bookId, editing: true };
+      }
+    } catch {
+      // Same private-mode-webview throw the cover flag below guards against.
+    }
+    return { screen: "books" };
+  });
   // The ✎ Edit button *inside* a practice session opens the editor over the
   // running session instead of navigating to `screen: "edit"`: the session
   // subtree stays mounted (hidden — see `withSessionEdit`), so closing the
@@ -812,6 +832,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   useEffect(() => {
     try {
       sessionStorage.removeItem(SKIP_COVER_KEY);
+      sessionStorage.removeItem(OPEN_EDITING_KEY);
     } catch {
       // Nothing was stored either, so nothing to clear.
     }
@@ -1503,43 +1524,53 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           const bookId = newPrivateId();
           const domainId = newPrivateId();
           const code = bookId.slice(0, 8);
+          const book: BookDocument = {
+            topic: {
+              id: bookId,
+              code,
+              title,
+              domainId,
+              lessonIds: [],
+              description: "",
+            },
+            lessons: [],
+            units: [],
+            items: [],
+            tasks: [],
+            // §1d, same seed the private path gets: without it the first
+            // word an author adds is invalid.
+            resources: [{ id: newEntityId(code), title, path: "" }],
+            notes: [],
+          };
+          const domain: DomainDocument = {
+            domain: {
+              id: domainId,
+              code,
+              kind: "general",
+              title,
+              glossLanguage: "en",
+            },
+            entries: [],
+            families: [],
+          };
           await createBookDocuments(
             documentId("topic", bookId),
-            {
-              topic: {
-                id: bookId,
-                code,
-                title,
-                domainId,
-                lessonIds: [],
-                description: "",
-              },
-              lessons: [],
-              units: [],
-              items: [],
-              tasks: [],
-              // §1d, same seed the private path gets: without it the first
-              // word an author adds is invalid.
-              resources: [{ id: newEntityId(code), title, path: "" }],
-              notes: [],
-            },
+            book,
             documentId("domain", domainId),
-            {
-              domain: {
-                id: domainId,
-                code,
-                kind: "general",
-                title,
-                glossLanguage: "en",
-              },
-              entries: [],
-              families: [],
-            },
+            domain,
           );
-          // Adds it to this device so the Book route can resolve it — the
-          // same path the Library's Add uses.
-          await contentInit.addBook(bookId, domainId);
-          setScreen({ screen: "book", bookId, editing: true });
+          // Where to land after the reload `addCreatedBook` ends in. Written
+          // first: that reload is synchronous with the call.
+          try {
+            sessionStorage.setItem(OPEN_EDITING_KEY, bookId);
+          } catch {
+            // Storage denied — the Book is still created and still added;
+            // the author just arrives on My Books and taps it.
+          }
+          // Adds it to this device so the Book route can resolve it. Not the
+          // Library's Add: that reads the catalog, which a Book created a
+          // second ago (unlisted, unpublished) is not in.
+          await contentInit.addCreatedBook(bookId, book, domainId, domain);
         }}
         onOpenDocument={(docId, mode) => setScreen(editorRouteFor(docId, mode))}
         orphanedLexicon={(docId) =>

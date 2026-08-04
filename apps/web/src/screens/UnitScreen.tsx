@@ -230,8 +230,12 @@ function ExampleCard({
 
   if (diff !== undefined) {
     // Read-only, tinted, with the base card directly above a changed one.
+    // The card renders the payload only, so a change confined to `sourceRef`
+    // is not a pair (§3: the field is the granularity).
+    const shown = { payload: item.payload };
     const was = diff.changedFrom<{ payload?: Record<string, unknown> }>(
       item.id,
+      shown,
     );
     const body = (payload: Record<string, unknown> | undefined) =>
       item.kind === "sentence" ? (
@@ -253,7 +257,7 @@ function ExampleCard({
         {was !== undefined && (
           <li className="card diff-old">{body(was.payload)}</li>
         )}
-        <li className={`card ${diff.className(item.id) ?? ""}`}>
+        <li className={`card ${diff.className(item.id, shown) ?? ""}`}>
           {body(item.payload)}
         </li>
       </>
@@ -941,21 +945,26 @@ export function UnitScreen({
       {currentPage === "overview" ? (
         edit === null ? (
           <>
-            {diff?.changedFrom<{ title?: string; goal?: string }>(unit.id) !==
-              undefined && (
-              <div className="diff-old">
-                <h1>
-                  {diff.changedFrom<{ title?: string }>(unit.id)?.title ?? ""}
-                </h1>
-                <p>
-                  {diff.changedFrom<{ goal?: string }>(unit.id)?.goal ?? ""}
-                </p>
-              </div>
-            )}
-            <div className={diff?.className(unit.id)}>
-              <h1>{unit.title}</h1>
-              <p>{unit.goal}</p>
-            </div>
+            {/* Old above new only when *these two* changed — a unit whose
+                `itemIds` changed shows its title and goal once (§3). */}
+            {(() => {
+              const shown = { title: unit.title, goal: unit.goal };
+              const was = diff?.changedFrom<typeof shown>(unit.id, shown);
+              return (
+                <>
+                  {was !== undefined && (
+                    <div className="diff-old">
+                      <h1>{was.title ?? ""}</h1>
+                      <p>{was.goal ?? ""}</p>
+                    </div>
+                  )}
+                  <div className={diff?.className(unit.id, shown)}>
+                    <h1>{unit.title}</h1>
+                    <p>{unit.goal}</p>
+                  </div>
+                </>
+              );
+            })()}
             {/* Reporting a problem in your own draft is a loop. */}
             {session === null && (
               <FeedbackWidget
@@ -1059,7 +1068,15 @@ export function UnitScreen({
             notes.map((note) => (
               <div
                 key={note.noteId}
-                className={diff.className(note.stem) ?? undefined}
+                className={
+                  // A *changed* note is diffed by block inside `NoteDiff`
+                  // (§2a), so tinting the wrapper too would paint the whole
+                  // note the colour of its one edited paragraph. An added or
+                  // removed note has no blocks to distinguish and keeps it.
+                  diff.status(note.stem) === "changed"
+                    ? undefined
+                    : (diff.className(note.stem) ?? undefined)
+                }
               >
                 <NoteDiff
                   before={text(
@@ -1341,9 +1358,18 @@ export function UnitScreen({
                   unit-level widget on Overview still covers reports. */}
               {conceptRows.map((item) => {
                 const editable = edit !== null && edit.canEditRow(item.id);
+                // These two columns only: a concept whose `sourceRef` or an
+                // unrendered payload field changed is not a pair (§3).
+                const shownConcept = {
+                  payload: {
+                    term: (item.payload as { term?: string }).term,
+                    definition: (item.payload as { definition?: string })
+                      .definition,
+                  },
+                };
                 const was = diff?.changedFrom<{
                   payload?: { term?: string; definition?: string };
-                }>(item.id);
+                }>(item.id, shownConcept);
                 return (
                   <Fragment key={item.id}>
                     {was !== undefined && (
@@ -1352,7 +1378,7 @@ export function UnitScreen({
                         <td>{was.payload?.definition}</td>
                       </tr>
                     )}
-                    <tr className={diff?.className(item.id)}>
+                    <tr className={diff?.className(item.id, shownConcept)}>
                       <td>
                         {editable ? (
                           <>

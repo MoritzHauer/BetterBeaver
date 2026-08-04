@@ -108,6 +108,19 @@ export interface ContentInit {
   acceptUpdate(update: ContentUpdate): Promise<void>;
   /** Fetches a Book from the Library, validates it against the current My Books set, caches it, and reloads. Throws a human-readable message on failure; membership is untouched on failure. */
   addBook(bookId: string, domainId: string): Promise<void>;
+  /** Adds a hosted Book the signed-in author just created (spec 0021-10 §1)
+   * to this device, so its Book screen can resolve. NOT `addBook`: that
+   * fetches through the catalog view, which carries only listed+published
+   * documents — a Book created a second ago is neither, so creation reported
+   * "could not add this book — it may no longer be available" and dropped
+   * the author back on the author screen. The documents are already in hand
+   * here; there is nothing to fetch. */
+  addCreatedBook(
+    bookId: string,
+    book: BookDocument,
+    domainId: string,
+    domain: DomainDocument,
+  ): Promise<void>;
   /** Book ids currently in the private store (plan 0017 §3) — lets the view
    * layer ungate the ✎ Edit buttons and route to the private editor for a
    * private Book without re-reading IndexedDB itself. */
@@ -894,6 +907,40 @@ export async function initContentSource(): Promise<ContentInit> {
       }
 
       await putCachedDocuments(newDocs);
+      addToMyBooks(bookId);
+      reloadAfterMembershipChange();
+    },
+
+    async addCreatedBook(
+      bookId: string,
+      book: BookDocument,
+      domainId: string,
+      domain: DomainDocument,
+    ): Promise<void> {
+      // Version 0: nothing is published yet. `planUpdate` only considers
+      // catalog rows, and an unlisted document has none, so this pair is
+      // simply invisible to update checks until the author publishes and an
+      // admin lists it — at which point version 1 vs. 0 offers the update
+      // through the normal path.
+      //
+      // No dry run, for `createPrivateBook`'s reason: both codes derive from
+      // freshly generated UUIDs, so there is nothing they can collide with.
+      await putCachedDocuments([
+        {
+          id: documentId("topic", bookId),
+          kind: "topic",
+          version: 0,
+          schemaVersion: CONTENT_SCHEMA_VERSION,
+          doc: book,
+        },
+        {
+          id: documentId("domain", domainId),
+          kind: "domain",
+          version: 0,
+          schemaVersion: CONTENT_SCHEMA_VERSION,
+          doc: domain,
+        },
+      ]);
       addToMyBooks(bookId);
       reloadAfterMembershipChange();
     },

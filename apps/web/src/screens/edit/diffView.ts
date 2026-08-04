@@ -1,5 +1,31 @@
-import { type DiffStatus, anyChanged } from "@betterbeaver/engine";
+import {
+  type DiffStatus,
+  anyChanged,
+  canonicalJson,
+} from "@betterbeaver/engine";
 import type { EditSessionValue } from "./EditSessionContext";
+
+/**
+ * True when every field `shown` renders holds the same value in `base` — the
+ * entity changed, but somewhere this block does not show.
+ *
+ * `diffContent` classifies whole entities, while §3's granularity is the
+ * *field*: a lesson whose only change is its `unitIds` is `changed`, and
+ * without this its untouched title and goal would render twice, once red and
+ * once green, claiming an edit that never happened (the deletion is already
+ * red in the unit list below). Only the keys present in `shown` are compared,
+ * recursively, so a concept row passing `{ payload: { term, definition } }`
+ * ignores payload fields its two columns never render.
+ */
+function sameWhereShown(base: unknown, shown: unknown): boolean {
+  if (shown !== null && typeof shown === "object" && !Array.isArray(shown)) {
+    const from = (base ?? {}) as Record<string, unknown>;
+    return Object.entries(shown).every(([key, value]) =>
+      sameWhereShown(from[key], value),
+    );
+  }
+  return canonicalJson(base) === canonicalJson(shown);
+}
 
 /**
  * What a screen needs to render the diff (spec 0021-9 §3), or `null` in
@@ -9,12 +35,16 @@ import type { EditSessionValue } from "./EditSessionContext";
  */
 export interface DiffView {
   status: (id: string) => DiffStatus;
-  /** The tint class for a row, or `undefined` when nothing changed. */
-  className: (id: string) => string | undefined;
+  /** The tint class for a row, or `undefined` when nothing changed. `shown`
+   * narrows a `changed` entity to the fields this row renders — pass the
+   * same object given to `changedFrom`, or omit it for a row that renders
+   * the whole entity. */
+  className: (id: string, shown?: object) => string | undefined;
   /** The base-side entity for a `changed` id — the old row that renders
    * directly above the new one. `undefined` for anything else, including
-   * `removed`, whose only row *is* the base one (it is in the union). */
-  changedFrom: <T>(id: string) => T | undefined;
+   * `removed`, whose only row *is* the base one (it is in the union), and
+   * including a change confined to fields outside `shown`. */
+  changedFrom: <T>(id: string, shown?: object) => T | undefined;
 }
 
 export function diffView(session: EditSessionValue | null): DiffView | null {
@@ -23,24 +53,29 @@ export function diffView(session: EditSessionValue | null): DiffView | null {
   }
   const { status, before } = session.diff;
   const of = (id: string) => status.get(id) ?? "unchanged";
+  const changedHere = (id: string, shown?: object) =>
+    of(id) === "changed" &&
+    (shown === undefined || !sameWhereShown(before.get(id), shown));
   return {
     status: of,
-    className: (id) => {
+    className: (id, shown) => {
       switch (of(id)) {
         case "added":
           return "diff-new";
         case "removed":
           return "diff-old";
         // A `changed` row is the *new* half of an old/new pair; its partner
-        // carries `.diff-old` and is rendered from `changedFrom`.
+        // carries `.diff-old` and is rendered from `changedFrom`. No pair
+        // where the change is in a field this row does not show, and so no
+        // tint either.
         case "changed":
-          return "diff-new";
+          return changedHere(id, shown) ? "diff-new" : undefined;
         case "unchanged":
           return undefined;
       }
     },
-    changedFrom: <T>(id: string) =>
-      of(id) === "changed" ? (before.get(id) as T) : undefined,
+    changedFrom: <T>(id: string, shown?: object) =>
+      changedHere(id, shown) ? (before.get(id) as T) : undefined,
   };
 }
 
