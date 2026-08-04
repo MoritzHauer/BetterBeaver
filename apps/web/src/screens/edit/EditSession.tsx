@@ -820,9 +820,12 @@ export function useEditSessionState(args: {
   // Plan decision 12: a Book pointing at a lexicon this user does not
   // maintain renders its words read-only. A lexicon that failed to load is
   // read-only for the same reason it is unpublishable — writing to the empty
-  // stand-in would clobber it.
+  // stand-in would clobber it. The schema-skew guard is per document (§1a),
+  // so a lexicon written by a newer build stays read-only even when the Book
+  // this build does understand is not.
   const canEditLexicon =
-    mode === "private" || (domainMode !== "propose" && domain !== null);
+    mode === "private" ||
+    (domainMode !== "propose" && domain !== null && !domainSlot.readOnly);
 
   const drafted = useMemo(() => {
     if (!enabled || book === null) {
@@ -1104,9 +1107,23 @@ export function EditSession({
   if (panel === "assets") {
     body = (
       <main className="editor">
+        {/* Which pair of documents depends on the mode, and it is not
+            cosmetic. Maintain blocks a delete against the *published* pair
+            (spec 0012-C §4: a published object another learner's Add would
+            404 on). Private has no published copy and warns against the
+            *working* pair instead — handed the empty stand-ins it finds no
+            references and deletes in silence, which is exactly what plan
+            0017 §4 ("the author should hear that before it happens, not
+            after") forbids. Verified in a browser both ways. */}
         <AssetsManager
-          book={session.publishedBook}
-          domain={session.publishedDomain}
+          book={
+            mode === "private" ? (book ?? EMPTY_BOOK) : session.publishedBook
+          }
+          domain={
+            mode === "private"
+              ? (domain ?? EMPTY_DOMAIN)
+              : session.publishedDomain
+          }
           bookId={bookDocId}
           assets={value?.assets ?? []}
           onAdd={value?.uploadAsset ?? (() => Promise.resolve())}
