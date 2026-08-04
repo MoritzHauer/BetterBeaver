@@ -772,7 +772,12 @@ export function UnitScreen({
             <button
               key={pageKind}
               type="button"
-              className={`dot${index === pageIndex ? " active" : ""}`}
+              // Exercises is marked out from the content pages (spec 0021-8
+              // §3): it is edit-only, and a dot identical to its neighbours
+              // would read as one more thing the learner will see.
+              className={`dot${pageKind === "exercises" ? " exercises" : ""}${
+                index === pageIndex ? " active" : ""
+              }`}
               aria-label={`Page ${index + 1} of ${pages.length}`}
               onClick={() => setPage(index)}
             />

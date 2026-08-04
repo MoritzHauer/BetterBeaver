@@ -178,7 +178,12 @@ function makeSession(
       problemsByEntity: new Map(),
       readOnly: false,
       canEditLexicon: true,
-      assets: [],
+      // The Book's pool, matching `STEMS` — an asset picker offers exactly
+      // what the validator will accept for a book-owned item.
+      assets: [
+        { stem: "a1", name: "beaver.wav", kind: "audio", size: 0, url: "" },
+        { stem: "i1", name: "beaver.png", kind: "image", size: 0, url: "" },
+      ],
       lexiconAssets: [],
       save: "saved",
       publish: { s: "idle" },
@@ -371,6 +376,13 @@ describe("the Exercises page", () => {
   afterEach(cleanup);
 
   const FOUR_WORDS = ["bk-w1", "bk-w2", "bk-w3", "bk-w4"];
+  const VOCABULARY = 2;
+  const EXAMPLES = 4;
+
+  const goToPage = (index: number) =>
+    fireEvent.click(
+      screen.getAllByRole("button", { name: /^Page \d+ of/ })[index]!,
+    );
 
   /** The trail's last dot in edit mode; learner mode does not have one. */
   function goToExercises() {
@@ -386,6 +398,15 @@ describe("the Exercises page", () => {
       fireEvent.click(dot);
       expect(screen.queryByText("+ add an exercise")).toBeNull();
     }
+  });
+
+  it("marks the Exercises dot out from the content pages", () => {
+    const book = unitOf(fullBook(), FOUR_WORDS);
+    renderUnit(makeSession(book).session, book);
+    const dots = screen.getAllByRole("button", { name: /^Page \d+ of/ });
+    // Edit-only, so it cannot look like one more page a learner will see.
+    expect(dots.at(-1)!.className).toContain("exercises");
+    expect(dots[0]!.className).not.toContain("exercises");
   });
 
   it("creates an exercise from the offered list and lists it", () => {
@@ -439,6 +460,44 @@ describe("the Exercises page", () => {
       "Recognize",
       "Shadowing",
     ]);
+  });
+
+  it('clears an asset ref by deleting the key, not by leaving ""', () => {
+    // §2c: `slugSchema` rejects `""`, so an emptied ref that stays as `""`
+    // is unpublishable — the same trap slice 6 records for
+    // `unlocksAfterUnitId`, which is why this asserts with `in`.
+    const book = unitOf(fullBook(), FOUR_WORDS);
+    const { session, books } = makeSession(book);
+    renderUnit(session, book);
+    goToPage(VOCABULARY);
+    fireEvent.click(screen.getAllByRole("button", { name: "More" })[0]!);
+
+    const audio = screen.getByLabelText("Audio");
+    expect(audio.querySelector("option[value='a1']")).not.toBeNull();
+    fireEvent.change(audio, { target: { value: "" } });
+
+    const payload = (books.at(-1)!.items[0] as { payload: object }).payload;
+    expect("audioRef" in payload).toBe(false);
+  });
+
+  it("gives a pair its two required audio slots", () => {
+    // The only mandatory slugs in the schema, and the reason `RowExtras`
+    // branches on kind at all.
+    const book = unitOf(fullBook(), ["bk-p1"]);
+    const { session } = makeSession(book);
+    renderUnit(session, book);
+    goToPage(EXAMPLES);
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+
+    for (const label of ["First audio", "Second audio"]) {
+      const slot = screen.getByLabelText(label);
+      expect(slot.querySelector("option[value='a1']")).not.toBeNull();
+      // Required and already set: offering "(none)" would author an item
+      // that cannot be published.
+      expect(slot.querySelector("option[value='']")).toBeNull();
+    }
+    // A pair has no image slot at all.
+    expect(screen.queryByLabelText("Image")).toBeNull();
   });
 
   it("deletes an exercise behind a confirm that names it, stripping taskIds", () => {

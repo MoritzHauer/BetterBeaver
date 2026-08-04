@@ -1007,6 +1007,14 @@ main.unit-screen {
   opacity: 0.55;
 }
 
+/* Exercises is an edit-only stop (spec 0021-8 §3): it is authoring, not
+   learner content, so it reads as a hollow square rather than one more
+   filled dot on the same trail. */
+.trail .dot.exercises {
+  border-radius: 2px;
+  border-style: dashed;
+}
+
 .screen-header .trail {
   flex: 1;
   margin: 0;
