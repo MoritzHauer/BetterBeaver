@@ -59,6 +59,29 @@ Unset → the app runs bundled-only (dev convenience and the permanent escape ha
 
 The `service_role` key bypasses everything — it is used only by `scripts/migrate-content.ts`, run locally, never committed, never in CI.
 
+## Testing the authoring flow as a signed-in account
+
+Sign-in is magic-link only, so testing it normally needs an inbox. `admin/generate_link` hands back the same link instead of mailing it, which makes the real flow scriptable — no dev-only sign-in path in the app, and nothing to reverse-engineer about session storage:
+
+```sh
+SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... node scripts/test-session.ts
+```
+
+It creates `claude-test@example.com` on first run and prints a one-shot sign-in link (open it and you land in the app signed in as that account) plus the raw access token (for curling the RPCs as an authenticated author). `http://localhost:5173` is already in the project's allowed redirect URLs; any other origin has to be added under Auth → URL Configuration first, or the link silently bounces to the site URL.
+
+For clicking through the UI, `playwright` is a root dev dependency (`corepack pnpm exec playwright install chromium` once per machine). Throwaway browser scripts go in `scratch.local/` — git-, prettier- and eslint-ignored, so they never reach the gate:
+
+```ts
+import { chromium } from "playwright";
+import { mintTestSession } from "../scripts/test-session.ts";
+
+const { actionLink } = await mintTestSession();
+const page = await (await chromium.launch()).newPage();
+await page.goto(actionLink); // lands on the app, already signed in
+```
+
+**This is production.** The test account owns nothing — give it maintainer rights by having it create its own Book in the app, never by granting it rows on a real document. Cleanup command (and the caveat that its documents outlive it) is in the script's header comment.
+
 ## Publishing local content/ edits (ingest, schema bumps)
 
 Content authored locally in the `content/` tree (an `/ingest` run, or the admin republish step of a `CONTENT_SCHEMA_VERSION` bump) ships with:
