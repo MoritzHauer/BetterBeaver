@@ -1384,7 +1384,7 @@ export function UnitScreen({
             + add an exercise
           </button>
           {showOffers && (
-            <ul className="editor-list">
+            <ul className="editor-list exercise-offers">
               {/* Nothing here can produce a publish error (§1a): each row is
                   pre-filled with the items its type accepts, and a type this
                   unit cannot support is greyed with the reason rather than
