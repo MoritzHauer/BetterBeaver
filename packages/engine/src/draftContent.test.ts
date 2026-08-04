@@ -232,3 +232,47 @@ describe("draftContent", () => {
     expect(errors.length).toBeGreaterThan(0);
   });
 });
+
+describe("draftContent: the Book's optional display fields", () => {
+  it("carries icon and hasCoverArt through, and leaves them absent otherwise", () => {
+    // Edit mode renders *this* Book, so a dropped field reads as a control
+    // that does nothing (plan 0021 §1a).
+    const withBoth = draftContent(
+      {
+        topic: {
+          id: "b",
+          code: "b",
+          domainId: "d",
+          icon: "\u{1F9AB}",
+          hasCoverArt: true,
+        },
+        lessons: [],
+        units: [],
+        items: [],
+        tasks: [],
+        resources: [],
+        notes: [],
+      },
+      { domain: {}, entries: [], families: [] },
+      emptyAssets,
+    ).content.topic;
+    expect(withBoth.icon).toBe("\u{1F9AB}");
+    expect(withBoth.hasCoverArt).toBe(true);
+
+    const without = draftContent(
+      {
+        topic: { id: "b", code: "b", domainId: "d" },
+        lessons: [],
+        units: [],
+        items: [],
+        tasks: [],
+        resources: [],
+        notes: [],
+      },
+      { domain: {}, entries: [], families: [] },
+      emptyAssets,
+    ).content.topic;
+    expect("icon" in without).toBe(false);
+    expect("hasCoverArt" in without).toBe(false);
+  });
+});

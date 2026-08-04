@@ -233,6 +233,16 @@ function draftBook(raw: unknown): Book {
     description: str(e.description),
     lessonIds: ids(e.lessonIds),
     domainId: str(e.domainId),
+    // Both optional, and both are edited in place (plan 0021 §1a) — dropping
+    // them here left their controls showing "(none)" and unchecked no matter
+    // what the author picked, since edit mode renders *this* Book, not the
+    // stored one. Kept absent rather than coerced, the way the document
+    // stores them: `icon` is a `z.enum(...).optional()`, so "" is not a
+    // member, and `hasCoverArt: false` is written as no key at all.
+    ...(typeof e.icon === "string" && e.icon !== ""
+      ? { icon: e.icon as Book["icon"] }
+      : {}),
+    ...(e.hasCoverArt === true ? { hasCoverArt: true } : {}),
   };
 }
 
