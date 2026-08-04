@@ -705,9 +705,11 @@ export function UnitScreen({
             />{" "}
             Vocabulary
           </p>
-          {edit !== null && !edit.canEditLexicon && (
-            <p className="status">{SHARED_LEXICON_NOTE}</p>
-          )}
+          {edit !== null &&
+            !edit.canEditLexicon &&
+            lexemes.some((item) => edit.isLexiconEntry(item.id)) && (
+              <p className="status">{SHARED_LEXICON_NOTE}</p>
+            )}
           <table className="vocab-table">
             <thead>
               <tr>
@@ -872,13 +874,10 @@ export function UnitScreen({
           {edit !== null &&
             edit.entryKind === "lexeme" &&
             edit.canEditLexicon && (
-              // Only where a new entry of this domain's kind belongs (§2e): a
-              // `general` domain holds concepts, and an entry added here would
-              // land on the Concepts page instead of the one that was tapped.
               <button
                 type="button"
                 className="editor-add"
-                onClick={() => edit.addItem("lexeme")}
+                onClick={edit.addEntry}
               >
                 + word
               </button>
@@ -896,6 +895,11 @@ export function UnitScreen({
             />{" "}
             Concepts
           </p>
+          {edit !== null &&
+            !edit.canEditLexicon &&
+            conceptRows.some((item) => edit.isLexiconEntry(item.id)) && (
+              <p className="status">{SHARED_LEXICON_NOTE}</p>
+            )}
           {conceptChunks.length > 1 ? (
             <SubPager
               index={conceptPage}
@@ -1006,6 +1010,22 @@ export function UnitScreen({
               + concept
             </button>
           )}
+          {/* `+ word` lives on whichever page this Book's lexicon actually
+              shows up on — a `general` lexicon holds concepts, so its words
+              are these rows, not the Vocabulary table's (§2e). Offering it
+              on Vocabulary regardless would add a row that vanishes from the
+              page you tapped. */}
+          {edit !== null &&
+            edit.entryKind === "concept" &&
+            edit.canEditLexicon && (
+              <button
+                type="button"
+                className="editor-add"
+                onClick={edit.addEntry}
+              >
+                + word
+              </button>
+            )}
         </>
       ) : null}
 

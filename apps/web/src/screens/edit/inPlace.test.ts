@@ -140,7 +140,9 @@ describe("unitEditOps", () => {
     const { session, written } = makeSession();
     const ops = unitEditOps(session, "bk-u1")!;
 
-    ops.addItem("lexeme");
+    // `addEntry`, never `addItem`: Concepts and Examples always create
+    // Book items, and a word always belongs to the lexicon (§2e).
+    ops.addEntry();
     const entries = written.domain[0]!.entries as { id: string }[];
     expect(entries).toHaveLength(2);
     expect(entries[1]!.id.startsWith("dm-")).toBe(true);

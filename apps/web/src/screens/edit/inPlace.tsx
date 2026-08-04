@@ -72,10 +72,15 @@ export interface UnitEditOps {
   removeRow: (id: string) => void;
   removeLabel: (id: string) => string;
   moveRow: (id: string, delta: -1 | 1) => void;
-  /** Creates an empty entity of `kind` and appends it to `unit.itemIds`.
-   * Empty on purpose (§2e): the new row carries problem markers straight
-   * away, which is the design, not a bug to pre-empt. */
+  /** Creates an empty **Book-owned** item of `kind` and appends it to
+   * `unit.itemIds`. Empty on purpose (§2e): the new row carries problem
+   * markers straight away, which is the design, not a bug to pre-empt. */
   addItem: (kind: ItemKind) => void;
+  /** Creates an empty **lexicon entry**, of whichever kind this domain
+   * holds, and references it from the unit. Two controls rather than one
+   * smart one (§2e): Concepts and Examples always create Book items, and a
+   * new word always belongs to the lexicon. */
+  addEntry: () => void;
   addNote: () => void;
   setNoteMarkdown: (stem: string, markdown: string) => void;
   removeNoteByStem: (stem: string) => void;
@@ -84,8 +89,9 @@ export interface UnitEditOps {
   lexicon: LexiconAccess | undefined;
   /** Which kind a new lexicon entry has to be — `validate.ts` enforces that
    * it matches the domain's own kind (lexeme for a language domain, concept
-   * for a general one). */
-  entryKind: ItemKind;
+   * for a general one). `undefined` when the lexicon could not be parsed, so
+   * no page offers `+ word` at all. */
+  entryKind: ItemKind | undefined;
   /** False when the Book points at a lexicon this user does not maintain
    * (slice 5 §4): its rows render read-only and no add control is offered. */
   canEditLexicon: boolean;
@@ -182,29 +188,6 @@ export function unitEditOps(
     moveRow: (id, delta) =>
       setItemIds(moveId(list(rawUnit.itemIds), id, delta)),
     addItem: (kind) => {
-      if (kind === "lexeme" || kind === "concept") {
-        // A lexicon entry when it is the kind this domain holds, otherwise a
-        // Book-owned item of the same kind. `validate.ts` requires every
-        // entry to match `DOMAIN_ENTRY_KIND[domain.kind]`, so there is no
-        // choice to offer here.
-        const asEntry =
-          domainEntity !== undefined &&
-          DOMAIN_ENTRY_KIND[domainEntity.kind] === kind &&
-          session.canEditLexicon;
-        if (asEntry) {
-          const id = newEntityId(domainEntity?.code ?? "");
-          session.changeDomain(
-            upsertDomainEntry(domain, {
-              id,
-              kind,
-              sourceRef: firstResourceId(book),
-              payload: {},
-            }),
-          );
-          setItemIds([...list(rawUnit.itemIds), id]);
-          return;
-        }
-      }
       // One `changeBook`, not two: the second would start from the stale
       // `book` this closure captured and drop the item the first just added.
       const id = newEntityId(bookCode);
@@ -220,6 +203,25 @@ export function unitEditOps(
           itemIds: [...list(rawUnit.itemIds), id],
         }),
       );
+    },
+    addEntry: () => {
+      if (domainEntity === undefined || !session.canEditLexicon) {
+        return;
+      }
+      // `validate.ts` requires every entry to match
+      // `DOMAIN_ENTRY_KIND[domain.kind]`, so there is no kind to offer.
+      const id = newEntityId(domainEntity.code);
+      session.changeDomain(
+        upsertDomainEntry(domain, {
+          id,
+          kind: DOMAIN_ENTRY_KIND[domainEntity.kind],
+          sourceRef: firstResourceId(book),
+          payload: {},
+        }),
+      );
+      // A different document, so this second write is independent — unlike
+      // `addItem`, where both halves land in the Book.
+      setItemIds([...list(rawUnit.itemIds), id]);
     },
     addNote: () => {
       const stem = newPrivateId();
@@ -257,7 +259,7 @@ export function unitEditOps(
     entryKind:
       domainEntity !== undefined
         ? DOMAIN_ENTRY_KIND[domainEntity.kind]
-        : "lexeme",
+        : undefined,
     canEditLexicon: session.canEditLexicon,
     imageAssets: session.assets.filter((asset) => asset.kind === "image"),
     uploadAsset: session.uploadAsset,
