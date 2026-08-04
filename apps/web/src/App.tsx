@@ -65,7 +65,8 @@ import {
 import { ErrorScreen } from "./screens/ErrorScreen";
 import { StartScreen } from "./screens/StartScreen";
 import { AuthorScreen } from "./screens/AuthorScreen";
-import { EditScreen, type EditTarget } from "./screens/EditScreen";
+import type { EditTarget } from "./screens/edit/types";
+import { SessionEditSheet } from "./screens/edit/SessionEditSheet";
 import { PrivacyScreen } from "./screens/PrivacyScreen";
 import { ImpressumScreen } from "./screens/ImpressumScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
@@ -159,18 +160,6 @@ type Screen =
   // Authoring (plan 0012 step 2): sign-in + document list, the editor, and
   // the static privacy note. Learner flows never route here.
   | { screen: "author" }
-  // Explicitly-labelled fallback (spec 0021-5 §2c): the old form editor,
-  // for the documents in-place editing has nowhere to put. A **domain**
-  // document has no learner screen at all, and a Book the author has not
-  // added to My Books has no loadable content here — both would otherwise
-  // dead-end on AuthorScreen. Nothing else routes here; it goes with the
-  // form editor at slice 11.
-  | {
-      screen: "forms";
-      docId: string;
-      mode?: "maintain" | "propose" | "private";
-      back?: Screen;
-    }
   // The two legal pages (§ 5 DDG, Art. 13 GDPR), reached from the legal links
   // on the cover and the home screen. `back` returns to the sign-in form for
   // the one link that isn't the footer (AuthorScreen's "privacy note").
@@ -1166,48 +1155,41 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     );
   }
 
-  /** Re-runs the update check after the author publishes. The learner-facing
-   * content source is built from the document cache at boot and only a
-   * reload swaps it (`content/source.ts`), so a just-published edit does not
-   * appear in the running session — this is what turns it into an update
-   * offer on My Books rather than leaving the author to wonder why their
-   * text didn't change. Deliberately never auto-accepts, even with
-   * auto-update on: accepting reloads the page, and the author is
-   * mid-session. */
-  function recheckForUpdate(): void {
-    // Cannot reject: `checkForUpdate` catches its own fetch failures.
-    void contentInit.checkForUpdate().then(setUpdate);
-  }
+  // `recheckForUpdate` lived here, re-running the update check when the form
+  // editor reported a publish. Its last two callers were the `forms` route
+  // and the session ✎'s full editor, both gone — and `EditSession` has had
+  // no publish callback since slice 5, so this had already stopped covering
+  // the in-place path. Publishing still leaves the author's own learner view
+  // on the cached copy until the next reload; that is the same open gap
+  // STATUS records for an unlisted Book, where a recheck would not have
+  // helped either (`planUpdate` only considers catalog rows).
 
-  /** Renders a session with the ✎ editor layered over it while one is open.
-   * The session is hidden, NOT unmounted — that is the whole point (see
-   * `sessionEdit`): React keeps its state, so closing the editor resumes
-   * exactly where the author left off. */
+  /** Renders a session with the scoped ✎ sheet over it while one is open
+   * (plan decision 13). The session stays mounted and, since spec 0021-11
+   * §3, stays *visible* too: the sheet is a modal `<dialog>`, so it makes
+   * its own backdrop and inerts what is behind it — the `hidden` this
+   * wrapper used to need was for a full-screen editor, and hiding the
+   * question you are fixing a typo in was never the intent. */
   function withSessionEdit(session: ReactElement): ReactElement {
     const close = () => setSessionEdit(null);
     if (sessionEdit !== null) {
-      // Hardware back closes the editor and leaves the session running,
+      // Hardware back closes the sheet and leaves the session running,
       // rather than exiting the session underneath it.
       backActionRef.current = close;
     }
     // The wrapper is unconditional, and so is the session's position inside
-    // it: returning the bare session while no editor is open would put a
+    // it: returning the bare session while no sheet is open would put a
     // different element type at this position, and React would unmount and
     // rebuild the session on every open and close — the exact thing this
     // whole arrangement exists to avoid.
     return (
       <>
-        <div hidden={sessionEdit !== null}>{session}</div>
-        {sessionEdit !== null && (
-          <EditScreen
-            docId={sessionEdit.docId}
+        <div>{session}</div>
+        {sessionEdit !== null && editSession.value !== null && (
+          <SessionEditSheet
+            session={editSession.value}
             target={sessionEdit.target}
-            mode={sessionEdit.mode ?? editModeFor(sessionEdit.docId)}
-            onBack={close}
-            onPublished={() => {
-              close();
-              recheckForUpdate();
-            }}
+            onClose={close}
           />
         )}
       </>
@@ -1490,12 +1472,25 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     screen.editing === true
       ? screen.bookId
       : null;
+  // The scoped session sheet (plan decision 13) needs the same documents,
+  // reached from a *learner* route — a question screen carries no `editing`
+  // flag. It reuses this one hook rather than mounting a second session
+  // underneath the first: two sessions over one Book would each autosave
+  // their own copy of it.
+  const sheetBookId =
+    sessionEdit === null ? null : (editableBookFor(sessionEdit.docId) ?? null);
+  const sessionBookId = editingBookId ?? sheetBookId;
   const editSession = useEditSessionState({
-    bookId: editingBookId ?? "",
-    mode: editingBookId === null ? "maintain" : bookEditMode(editingBookId),
-    enabled: editingBookId !== null,
+    bookId: sessionBookId ?? "",
+    mode: sessionBookId === null ? "maintain" : bookEditMode(sessionBookId),
+    enabled: sessionBookId !== null,
     resolveMode: editModeFor,
   });
+  /** The session **as a route flag** — what the learner screens render from
+   * (spec 0021-5 §2d). Null while only the sheet has one open: the question
+   * underneath must keep playing the content its questions were built from,
+   * not swap to the draft mid-answer. */
+  const routeSession = editingBookId === null ? null : editSession.value;
 
   // Spec 0021-5 §3: leaving edit mode with an unsynced draft used to leave
   // it invisible — the learner screens render published content and nothing
@@ -1617,34 +1612,6 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           setScreen({ screen: "privacy", back: { screen: "author" } })
         }
         onBack={onBack}
-      />
-    );
-  }
-  if (screen.screen === "forms") {
-    const back = screen.back ?? { screen: "author" as const };
-    const onBack = () => setScreen(back);
-    backActionRef.current = onBack;
-    return (
-      <EditScreen
-        docId={screen.docId}
-        // An explicit `mode` still wins; otherwise `editModeFor` decides,
-        // the same way every other route into the editor does.
-        mode={screen.mode ?? editModeFor(screen.docId)}
-        onBack={onBack}
-        // Only for the routes that pin a `back` — every learner ✎ button
-        // and the settings import. Publishing ends that errand, so the
-        // editor closes itself and hands the user back where they came
-        // from. Entered from the authoring area instead (no `back`), it
-        // stays open: that is a workspace, and its publish confirmation is
-        // the feedback there.
-        onPublished={
-          screen.back !== undefined
-            ? () => {
-                onBack();
-                recheckForUpdate();
-              }
-            : undefined
-        }
       />
     );
   }
@@ -1803,18 +1770,18 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     // conditional, here at the resolution point; the screens are unchanged.
     // Resolved *above* the gate now, so the gate can be about what will
     // actually render rather than about what the content source managed.
-    const editView = editSession.value?.view ?? "edit";
+    const editView = routeSession?.view ?? "edit";
     const preview =
-      editView === "preview" ? (editSession.value?.preview ?? null) : null;
+      editView === "preview" ? (routeSession?.preview ?? null) : null;
     const shown =
       preview !== null
         ? preview.content
-        : editView === "diff" && editSession.value?.diff != null
+        : editView === "diff" && routeSession?.diff != null
           ? // The **union** — base ∪ draft (spec 0021-9 §2) — so an entity
             // the draft removed still has a row to tint red.
-            editSession.value.diff.content
-          : (editSession.value?.content ?? content);
-    const shownLookup = domainContent ?? editSession.value?.domainContent;
+            routeSession.diff.content
+          : (routeSession?.content ?? content);
+    const shownLookup = domainContent ?? routeSession?.domainContent;
     if (shown === null || shownLookup === undefined || shownLookup === null) {
       return <p>Loading&hellip;</p>;
     }
@@ -1835,13 +1802,13 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     // In Diff the draft has no copy of a note it deleted, and `UnitScreen`
     // drops any note whose markdown is undefined — so without this fallback
     // the one entity a diff most needs to show never reaches the screen.
-    const diffBefore = editSession.value?.diff?.before;
+    const diffBefore = routeSession?.diff?.before;
     const shownNoteMarkdown =
       preview !== null
         ? preview.noteMarkdown
         : editView === "diff" && diffBefore !== undefined
           ? (stem: string) => {
-              const draft = editSession.value?.noteMarkdown(stem);
+              const draft = routeSession?.noteMarkdown(stem);
               if (draft !== undefined) {
                 return draft;
               }
@@ -1849,7 +1816,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
                 ?.markdown;
               return typeof base === "string" ? base : undefined;
             }
-          : editSession.value?.noteMarkdown;
+          : routeSession?.noteMarkdown;
     /** Wraps a learner screen in the session while `editing` is set. Exiting
      * clears the flag and leaves you exactly where you were. */
     const inSession = (
@@ -1939,7 +1906,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           onBack={onBack}
         />,
         { screen: "book", bookId: screen.bookId },
-        editSession.value !== null && bookScopeChanged(editSession.value),
+        routeSession !== null && bookScopeChanged(routeSession),
       );
     }
 
@@ -1981,8 +1948,8 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           bookId: screen.bookId,
           lessonId: screen.lessonId,
         },
-        editSession.value !== null &&
-          lessonScopeChanged(editSession.value, screen.lessonId),
+        routeSession !== null &&
+          lessonScopeChanged(routeSession, screen.lessonId),
       );
     }
 
@@ -2053,8 +2020,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           lessonId: screen.lessonId,
           unitId: screen.unitId,
         },
-        editSession.value !== null &&
-          unitScopeChanged(editSession.value, screen.unitId),
+        routeSession !== null && unitScopeChanged(routeSession, screen.unitId),
       );
     }
 

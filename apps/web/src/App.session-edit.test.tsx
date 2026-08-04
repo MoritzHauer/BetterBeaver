@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { CONTENT_SCHEMA_VERSION } from "@betterbeaver/schema";
 import type { BookDocument, DomainDocument } from "@betterbeaver/schema";
 import type { AuthorDocSummary } from "./backend/supabase";
@@ -12,9 +18,15 @@ import { initContentSource } from "./content/source";
  * It used to navigate to `screen: "edit"`, which unmounts the running
  * session — so the editor's Back landed on the authoring document list, and
  * getting back to practice rebuilt the session from question one (a fresh
- * shuffle, mid-session answers gone). The fix layers the editor over the
- * session and keeps the session mounted, hidden; this asserts the mounted
- * part, which is what makes resuming possible at all.
+ * shuffle, mid-session answers gone). The fix layers an editing surface over
+ * the session and keeps the session mounted; this asserts the mounted part,
+ * which is what makes resuming possible at all.
+ *
+ * Since spec 0021-11 §3 that surface is the **scoped sheet** of plan
+ * decision 13: only the tapped item or exercise, over a session that is no
+ * longer even hidden (a modal `<dialog>` inerts what is behind it). The
+ * sheet carries no Publish — a scoped fix is saved to the draft like any
+ * other edit, and publishing is the `[⋮]` menu's job on the Book screen.
  */
 vi.mock("./backend/supabase", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./backend/supabase")>();
@@ -82,7 +94,7 @@ describe("session Edit button", () => {
   beforeEach(() => localStorage.clear());
   afterEach(cleanup);
 
-  it("layers the editor over the session and resumes it on close", async () => {
+  it("opens the sheet over the session and resumes it on close", async () => {
     const contentInit = await initContentSource();
     const { container } = render(<App contentInit={contentInit} />);
     await startUnitSession();
@@ -91,53 +103,38 @@ describe("session Edit button", () => {
     expect(question).not.toBe("");
 
     screen.getByRole("button", { name: /Edit/ }).click();
-    const editor = await waitFor(() => {
-      const found = container.querySelector("main.editor");
-      expect(found).not.toBeNull();
-      return found!;
-    });
+    await screen.findByRole("dialog");
 
-    // Hidden, not unmounted — this is what carries the session's shuffle and
+    // Still mounted — this is what carries the session's shuffle and
     // answered-so-far state across the detour.
-    const session = container.querySelector("main.session");
-    expect(session).not.toBeNull();
-    expect(session?.closest("[hidden]")).not.toBeNull();
+    expect(container.querySelector("main.session")).not.toBeNull();
 
-    const back = editor.querySelector<HTMLButtonElement>(
-      'button[title="Back to learning"]',
-    );
-    expect(back).not.toBeNull();
-    back!.click();
+    screen.getByRole("button", { name: "Back to the question" }).click();
 
     // Back on the very same question, and nowhere near the authoring area.
     await waitFor(() => {
-      expect(container.querySelector("main.editor")).toBeNull();
+      expect(screen.queryByRole("dialog")).toBeNull();
     });
-    expect(container.querySelector("main.session")?.closest("[hidden]")).toBe(
-      null,
-    );
     expect(container.querySelector(".question")?.textContent).toBe(question);
   });
 
-  it("closes itself once the edit is published, back into the session", async () => {
+  it("holds only the tapped entity, and writes what is typed into it", async () => {
     const contentInit = await initContentSource();
-    const { container } = render(<App contentInit={contentInit} />);
+    render(<App contentInit={contentInit} />);
     await startUnitSession();
 
-    const question = container.querySelector(".question")?.textContent ?? "";
     screen.getByRole("button", { name: /Edit/ }).click();
-    await waitFor(() => {
-      expect(container.querySelector("main.editor")).not.toBeNull();
-    });
+    const sheet = await screen.findByRole("dialog");
 
-    screen.getByRole("button", { name: "Validate & publish" }).click();
+    // Scoped (decision 13): the tapped entity's own fields, and none of the
+    // navigable document tree the form editor put here.
+    expect(sheet.querySelector("input, textarea")).not.toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Validate & publish" }),
+    ).toBeNull();
 
-    await waitFor(() => {
-      expect(container.querySelector("main.editor")).toBeNull();
-    });
-    expect(container.querySelector("main.session")?.closest("[hidden]")).toBe(
-      null,
-    );
-    expect(container.querySelector(".question")?.textContent).toBe(question);
+    const field = sheet.querySelector<HTMLInputElement>('input[type="text"]')!;
+    fireEvent.change(field, { target: { value: "edited in the sheet" } });
+    expect(field.value).toBe("edited in the sheet");
   });
 });

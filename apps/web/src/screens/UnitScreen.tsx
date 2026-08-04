@@ -135,7 +135,7 @@ function SubPager({
  * editor — without it Listen, Dictation, Shadowing and Picture become
  * permanently unreachable, since §1a greys them for exactly these refs.
  */
-function RowExtras({ item, edit }: { item: Item; edit: UnitEditOps }) {
+export function RowExtras({ item, edit }: { item: Item; edit: UnitEditOps }) {
   const raw = edit.raw(item.id) ?? { id: item.id };
   /** The one optional prose field per kind that `EntryPopup` renders and no
    * other in-place surface sets (spec 0021-11 §1) — `DomainEditor`'s and
@@ -531,7 +531,7 @@ function NoteCard({
  * over what the unit already holds — there is no free-text id field, and the
  * type `<select>` lists only types this exercise's current items support.
  */
-function ExerciseCard({
+export function ExerciseCard({
   taskId,
   edit,
   itemById,
@@ -542,7 +542,9 @@ function ExerciseCard({
   edit: UnitEditOps;
   itemById: Map<string, Item>;
   unitItems: Item[];
-  onDelete: (label: string) => void;
+  /** Absent in the session sheet (spec 0021-11 §3): deleting the exercise
+   * you are practising would leave the session running over nothing. */
+  onDelete?: (label: string) => void;
 }) {
   const raw = edit.rawTask(taskId);
   if (raw === undefined) {
@@ -605,7 +607,9 @@ function ExerciseCard({
         />
       </label>
       <ProblemMarker problems={edit.problemsFor(taskId)} />
-      <RowActions onRemove={() => onDelete(exerciseLabel(type, items))} />
+      {onDelete !== undefined && (
+        <RowActions onRemove={() => onDelete(exerciseLabel(type, items))} />
+      )}
     </li>
   );
 }
