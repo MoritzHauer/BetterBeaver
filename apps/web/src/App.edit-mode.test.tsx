@@ -126,9 +126,10 @@ describe("edit mode as a route flag", () => {
     await screen.findByRole("heading", { name: /Meet BetterBeaver/ });
     expect(editBar()).not.toBeNull();
 
-    // Lesson → Unit.
+    // Lesson → Unit. Its title is an input, not a heading, from slice 6 on —
+    // the unit edits in place.
     (await screen.findByRole("button", { name: /Beaver basics/ })).click();
-    await screen.findByRole("heading", { name: /Beaver basics/ });
+    expect(await screen.findByDisplayValue("Beaver basics")).toBeTruthy();
     expect(editBar()).not.toBeNull();
 
     // Up again, by hardware back — which must behave exactly as it does from

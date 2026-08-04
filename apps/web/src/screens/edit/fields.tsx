@@ -269,6 +269,7 @@ export function EntityPicker({
   removeLabel,
   onOpen,
   freeTextWhenEmpty = false,
+  hideIds = false,
 }: {
   label: string;
   options: PickerOption[];
@@ -297,6 +298,12 @@ export function EntityPicker({
    * author could not produce one valid item.
    */
   freeTextWhenEmpty?: boolean;
+  /** Hides the raw id shown beside every title. In-place editing shows no
+   * entity ids at all (plan 0021 §11) — but the form editor still must,
+   * because its validation errors name ids and spec 0018 made those
+   * generated UUIDs, so hiding them there without slice 10's deep-linking
+   * would make an error unlocatable. Hence opt-in, not the default. */
+  hideIds?: boolean;
 }) {
   const [search, setSearch] = useState("");
   const [activeFilterKey, setActiveFilterKey] = useState(defaultFilterKey);
@@ -357,7 +364,7 @@ export function EntityPicker({
                   {option?.title ?? id}
                   {option === undefined && " · unresolved"}
                   {option?.kind !== undefined && ` · ${option.kind}`}
-                  <span className="status"> {id}</span>
+                  {!hideIds && <span className="status"> {id}</span>}
                 </span>
                 <RowActions
                   onUp={
@@ -426,7 +433,7 @@ export function EntityPicker({
                     {row.title}
                     {row.unresolved && " · unresolved"}
                     {row.kind !== undefined && ` · ${row.kind}`}
-                    <span className="status"> {row.id}</span>
+                    {!hideIds && <span className="status"> {row.id}</span>}
                   </label>
                 </li>
               ))}

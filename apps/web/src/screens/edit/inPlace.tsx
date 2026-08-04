@@ -1,0 +1,303 @@
+import type { Item, ItemKind } from "@betterbeaver/schema";
+import { DOMAIN_ENTRY_KIND, domainSchema } from "@betterbeaver/schema";
+import type { Problem } from "@betterbeaver/engine";
+import {
+  moveId,
+  removeEntity,
+  removeNote,
+  setNote,
+  upsertDomainEntry,
+  upsertEntity,
+} from "@betterbeaver/engine";
+import { newEntityId } from "../../content/entity-ids";
+import { newPrivateId } from "../../content/private-ids";
+import type { LexiconAccess, NoteAsset } from "../../components/NoteEditor";
+import type { EditSessionValue } from "./EditSessionContext";
+import { type Entity, firstResourceId } from "./types";
+
+/** Shared support for editing the learner screens in place (plan 0021 §3).
+ * The mutations live here, not in the screens: every one of them has to pick
+ * the right document and go through `documentEdit`'s ops, and none of that
+ * is presentation. Slice 7 extends this for Book and Lesson. */
+
+const obj = (v: unknown): Record<string, unknown> =>
+  typeof v === "object" && v !== null ? (v as Record<string, unknown>) : {};
+
+const list = (v: unknown): string[] =>
+  Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+
+/**
+ * A quiet marker, never an error dialog (spec 0021-6 §3). No `aria-invalid`:
+ * a field the author is still filling in is not invalid, it is unfinished,
+ * and announcing it as an error on every keystroke would be worse than
+ * saying nothing.
+ */
+export function ProblemMarker({ problems }: { problems: Problem[] }) {
+  if (problems.length === 0) {
+    return null;
+  }
+  return (
+    <span className="problem-marker">
+      <span aria-hidden="true">⚠</span>{" "}
+      {problems.map((problem) => problem.message).join(" · ")}
+    </span>
+  );
+}
+
+export interface UnitEditOps {
+  /** The unit as it is stored, not as `draftContent` coerced it — every
+   * write starts from this so nothing the adapter dropped is lost. */
+  rawUnit: Entity;
+  /** Whether this id is a Book-owned item (vs a lexicon entry the unit
+   * merely references, vs neither). */
+  isBookItem: (id: string) => boolean;
+  isLexiconEntry: (id: string) => boolean;
+  /** Editable at all: a lexicon row is read-only when the Book points at a
+   * lexicon this user does not maintain (slice 5 §4), and an id in neither
+   * document has nothing to write to. */
+  canEditRow: (id: string) => boolean;
+  raw: (id: string) => Entity | undefined;
+  /** A stored payload field, read off the raw entity rather than the
+   * coerced one, so an input shows exactly what will be written back. */
+  payloadValue: (id: string, ...path: string[]) => string;
+  problemsFor: (id: string) => Problem[];
+  fieldProblems: (id: string, path: string) => Problem[];
+  entityProblems: (id: string) => Problem[];
+  patchUnit: (next: Entity) => void;
+  /** Writes one item/entry back to whichever document owns it. */
+  patchEntity: (next: Entity) => void;
+  /** Delete (Book-owned) or unlink (lexicon entry) — never the other way
+   * round, or taking a word out of one unit deletes it from every Book that
+   * shares the lexicon. */
+  removeRow: (id: string) => void;
+  removeLabel: (id: string) => string;
+  moveRow: (id: string, delta: -1 | 1) => void;
+  /** Creates an empty entity of `kind` and appends it to `unit.itemIds`.
+   * Empty on purpose (§2e): the new row carries problem markers straight
+   * away, which is the design, not a bug to pre-empt. */
+  addItem: (kind: ItemKind) => void;
+  addNote: () => void;
+  setNoteMarkdown: (stem: string, markdown: string) => void;
+  removeNoteByStem: (stem: string) => void;
+  /** The `Аү` sheet's dependencies (spec 0021-3), or undefined when this
+   * Book's lexicon could not be parsed. */
+  lexicon: LexiconAccess | undefined;
+  /** Which kind a new lexicon entry has to be — `validate.ts` enforces that
+   * it matches the domain's own kind (lexeme for a language domain, concept
+   * for a general one). */
+  entryKind: ItemKind;
+  /** False when the Book points at a lexicon this user does not maintain
+   * (slice 5 §4): its rows render read-only and no add control is offered. */
+  canEditLexicon: boolean;
+  /** For a note's `+ image` picker; images only, since a figure's stem
+   * validates against `imageStemSet` (spec 0021-2 §2d). */
+  imageAssets: NoteAsset[];
+  uploadAsset: ((file: File) => Promise<void>) | undefined;
+}
+
+/**
+ * Everything the Unit screen needs to edit itself, or `null` in learner
+ * mode. Not a hook: it runs during render off the session value and holds
+ * no state of its own.
+ */
+export function unitEditOps(
+  session: EditSessionValue | null,
+  unitId: string,
+): UnitEditOps | null {
+  if (session === null) {
+    return null;
+  }
+  const book = session.book;
+  const domain = session.domain;
+  const rawUnit = (book.units as Entity[]).find((u) => u.id === unitId) ?? {
+    id: unitId,
+  };
+  const bookItems = book.items as Entity[];
+  const entries = domain.entries as Entity[];
+  const bookItemIds = new Set(bookItems.map((i) => i.id));
+  const entryIds = new Set(entries.map((e) => e.id));
+  const bookCode =
+    typeof (book.topic as Entity).code === "string"
+      ? ((book.topic as Entity).code as string)
+      : "";
+  const parsedDomain = domainSchema.safeParse(domain.domain);
+  const domainEntity = parsedDomain.success ? parsedDomain.data : undefined;
+
+  const isBookItem = (id: string) => bookItemIds.has(id);
+  const isLexiconEntry = (id: string) => entryIds.has(id);
+
+  const patchUnit = (next: Entity) =>
+    session.changeBook(upsertEntity(book, "units", next));
+
+  const setItemIds = (ids: string[]) => patchUnit({ ...rawUnit, itemIds: ids });
+
+  return {
+    rawUnit,
+    isBookItem,
+    isLexiconEntry,
+    canEditRow: (id) =>
+      isBookItem(id) || (isLexiconEntry(id) && session.canEditLexicon),
+    raw: (id) =>
+      bookItems.find((i) => i.id === id) ?? entries.find((e) => e.id === id),
+    payloadValue: (id, ...path) => {
+      const entity =
+        bookItems.find((i) => i.id === id) ?? entries.find((e) => e.id === id);
+      let current: unknown = obj(entity?.payload);
+      for (const key of path) {
+        current = obj(current)[key];
+      }
+      return typeof current === "string" ? current : "";
+    },
+    problemsFor: (id) => session.problemsByEntity.get(id) ?? [],
+    fieldProblems: (id, path) =>
+      (session.problemsByEntity.get(id) ?? []).filter(
+        (problem) => problem.path === path,
+      ),
+    entityProblems: (id) =>
+      (session.problemsByEntity.get(id) ?? []).filter(
+        (problem) => problem.path === undefined,
+      ),
+    patchUnit,
+    patchEntity: (next) => {
+      // An id in neither document is a dangling `itemIds` reference, which
+      // is routine mid-edit. Writing it anywhere would silently *create* the
+      // entity in whichever document guessed first, so do nothing — the row
+      // renders read-only and the reference checker already names it.
+      if (isBookItem(next.id)) {
+        session.changeBook(upsertEntity(book, "items", next));
+      } else if (isLexiconEntry(next.id) && session.canEditLexicon) {
+        session.changeDomain(upsertDomainEntry(domain, next));
+      }
+    },
+    removeRow: (id) => {
+      if (isBookItem(id)) {
+        // `removeEntity` strips every reference across the document too —
+        // removing it from `itemIds` by hand would orphan the entity.
+        session.changeBook(removeEntity(book, "items", id));
+        return;
+      }
+      setItemIds(list(rawUnit.itemIds).filter((x) => x !== id));
+    },
+    removeLabel: (id) => (isBookItem(id) ? "Delete" : "Unlink"),
+    moveRow: (id, delta) =>
+      setItemIds(moveId(list(rawUnit.itemIds), id, delta)),
+    addItem: (kind) => {
+      if (kind === "lexeme" || kind === "concept") {
+        // A lexicon entry when it is the kind this domain holds, otherwise a
+        // Book-owned item of the same kind. `validate.ts` requires every
+        // entry to match `DOMAIN_ENTRY_KIND[domain.kind]`, so there is no
+        // choice to offer here.
+        const asEntry =
+          domainEntity !== undefined &&
+          DOMAIN_ENTRY_KIND[domainEntity.kind] === kind &&
+          session.canEditLexicon;
+        if (asEntry) {
+          const id = newEntityId(domainEntity?.code ?? "");
+          session.changeDomain(
+            upsertDomainEntry(domain, {
+              id,
+              kind,
+              sourceRef: firstResourceId(book),
+              payload: {},
+            }),
+          );
+          setItemIds([...list(rawUnit.itemIds), id]);
+          return;
+        }
+      }
+      // One `changeBook`, not two: the second would start from the stale
+      // `book` this closure captured and drop the item the first just added.
+      const id = newEntityId(bookCode);
+      const withItem = upsertEntity(book, "items", {
+        id,
+        kind,
+        sourceRef: firstResourceId(book),
+        payload: {},
+      });
+      session.changeBook(
+        upsertEntity(withItem, "units", {
+          ...rawUnit,
+          itemIds: [...list(rawUnit.itemIds), id],
+        }),
+      );
+    },
+    addNote: () => {
+      const stem = newPrivateId();
+      // Seed the heading a note is titled by. Without it a brand-new note
+      // has no `# ` line, so every list labels it by its stem — a UUID since
+      // spec 0018 generated ids.
+      const withNote = setNote(book, stem, "# New note\n\n");
+      session.changeBook(
+        upsertEntity(withNote, "units", {
+          ...rawUnit,
+          noteIds: [...list(rawUnit.noteIds), `${bookCode}-note-${stem}`],
+        }),
+      );
+    },
+    setNoteMarkdown: (stem, markdown) =>
+      session.changeBook(setNote(book, stem, markdown)),
+    // `removeNote` deletes the note *and* strips its derived id from every
+    // unit's `noteIds`.
+    removeNoteByStem: (stem) => session.changeBook(removeNote(book, stem)),
+    lexicon:
+      domainEntity !== undefined
+        ? {
+            entries,
+            domain: domainEntity,
+            domainCode: domainEntity.code,
+            sourceRef: firstResourceId(book),
+            ...(session.canEditLexicon
+              ? {
+                  onAddEntry: (entry: Item) =>
+                    session.changeDomain(upsertDomainEntry(domain, entry)),
+                }
+              : {}),
+          }
+        : undefined,
+    entryKind:
+      domainEntity !== undefined
+        ? DOMAIN_ENTRY_KIND[domainEntity.kind]
+        : "lexeme",
+    canEditLexicon: session.canEditLexicon,
+    imageAssets: session.assets.filter((asset) => asset.kind === "image"),
+    uploadAsset: session.uploadAsset,
+  };
+}
+
+/** Immutable set of one `payload` field, keeping the key present even when
+ * cleared. Unlike `fields.tsx`'s `setPath`, which deletes on `""`: these are
+ * all required fields, so an empty string is an honest "not filled in yet"
+ * and keeps the input mounted with a marker rather than making the key
+ * vanish mid-typing. */
+export function withPayload(
+  entity: Entity,
+  path: [string] | [string, string],
+  value: string,
+): Entity {
+  const payload = obj(entity.payload);
+  if (path.length === 1) {
+    return { ...entity, payload: { ...payload, [path[0]]: value } };
+  }
+  return {
+    ...entity,
+    payload: {
+      ...payload,
+      [path[0]]: { ...obj(payload[path[0]]), [path[1]]: value },
+    },
+  };
+}
+
+/** Sets or clears `unlocksAfterUnitId`. Clearing must **delete** the key,
+ * not set `undefined`: zod's `optional()` expects the key absent, and an
+ * `undefined` value survives in memory while vanishing across the JSON
+ * round-trip to localStorage / the private store, leaving the live document
+ * and its persisted copy disagreeing. Same trap `BookEditor.tsx:263` records. */
+export function withUnlocksAfter(unit: Entity, id: string | undefined): Entity {
+  const next = { ...unit };
+  if (id === undefined) {
+    delete next.unlocksAfterUnitId;
+  } else {
+    next.unlocksAfterUnitId = id;
+  }
+  return next;
+}

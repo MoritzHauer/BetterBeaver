@@ -1240,6 +1240,16 @@ main.unit-screen {
 
 /* Opt-in content-update notice (plan 0012): shown on the home screen only,
  * never blocks anything, and nothing changes until "Update now". */
+/* An in-place problem marker (plan 0021 §3): a quiet triangle and one line,
+ * never an error dialog and never a blocked input. Muted rather than
+ * `--error-text` red on purpose — most of these are "not filled in yet" on a
+ * row the author created two seconds ago. */
+.problem-marker {
+  display: block;
+  font-size: 0.8rem;
+  opacity: 0.75;
+}
+
 /* Edit mode's persistent bar (plan 0021 §8). Fixed to the bottom, over
  * whichever learner screen is being edited, because edit mode is a flag on
  * that screen rather than a screen of its own — it is the one control that
