@@ -1027,6 +1027,15 @@ export function EditSession({
   const { value, mode, bookDocId, book, domain, bookSlot, localChoice } =
     session;
 
+  // The edit bar is fixed to the bottom edge, which the Unit trail's
+  // Practice bar already owns — a plain overlay hid its button entirely.
+  // The class is what lets `styles.css` lift anything else fixed down there
+  // by exactly the bar's height, for this session's lifetime only.
+  useEffect(() => {
+    document.body.classList.add("bb-editing");
+    return () => document.body.classList.remove("bb-editing");
+  }, []);
+
   const closePanel = () => {
     setPanel(null);
     setReviewing(null);

@@ -474,6 +474,9 @@ section.card {
  * that inherited 1rem inset is what pushed the chips down onto the text. */
 :root {
   --book-chip-row: 2.25rem;
+  /* Edit mode's bottom bar (plan 0021 §8). Pinned rather than measured:
+   * `.action-bar` offsets itself by it, so the two must agree exactly. */
+  --edit-bar-height: 2.75rem;
 }
 
 .book-actions {
@@ -1248,12 +1251,26 @@ main.unit-screen {
   right: 0;
   bottom: 0;
   z-index: 2;
+  box-sizing: border-box;
+  height: var(--edit-bar-height);
   display: flex;
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem 0.9rem;
   background: var(--bg);
   border-top: 1px solid var(--card-border);
+}
+
+/* While a session is open the edit bar owns the bottom edge, so anything
+ * else fixed there stacks above it instead of disappearing behind it — the
+ * Unit trail's Practice bar is `.action-bar` at `bottom: 0` too, and its
+ * button was fully covered. `EditSession` sets the class for its lifetime. */
+body.bb-editing .action-bar {
+  bottom: var(--edit-bar-height);
+}
+
+body.bb-editing main {
+  padding-bottom: var(--edit-bar-height);
 }
 
 .edit-bar .status {

@@ -1564,8 +1564,18 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           onArchive={contentInit.archiveBook}
           onRestore={contentInit.restoreBook}
           onRemove={contentInit.removeBook}
+          // Through `editorRouteFor`, not straight to the Book screen: this
+          // is the only ✎ that can be tapped on a Book which does not
+          // load — a broken card is exactly where there is no Book screen
+          // to reach ✎ from — and in-place editing needs a loadable one.
+          // Those land on the form-editor fallback, as they did before edit
+          // mode became a route flag.
           onEdit={(bookId) =>
-            setScreen({ screen: "book", bookId, editing: true })
+            setScreen(
+              editorRouteFor(documentId("topic", bookId), "private", {
+                screen: "books",
+              }),
+            )
           }
           unpublishedChanges={unpublishedBookIds}
           onLibrary={
