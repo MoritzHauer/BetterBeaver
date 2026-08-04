@@ -280,6 +280,12 @@ describe("UnitScreen in edit mode", () => {
     expect(
       screen.getByText(/you can use them, but not change them/),
     ).toBeTruthy();
+    // Reorder and Unlink stay: they write `unit.itemIds`, which this Book
+    // owns. Only the word itself is somebody else's.
+    expect(screen.getByRole("button", { name: "Unlink" })).toBeTruthy();
+    expect(
+      screen.getAllByRole("button", { name: "Move up" }).length,
+    ).toBeGreaterThan(0);
 
     goToPage(CONCEPTS);
     expect(screen.getByLabelText("Term")).toBeTruthy();

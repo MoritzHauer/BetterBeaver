@@ -266,26 +266,34 @@ export function unitEditOps(
   };
 }
 
-/** Immutable set of one `payload` field, keeping the key present even when
- * cleared. Unlike `fields.tsx`'s `setPath`, which deletes on `""`: these are
- * all required fields, so an empty string is an honest "not filled in yet"
- * and keeps the input mounted with a marker rather than making the key
- * vanish mid-typing. */
+/** Immutable set of one `payload` field. An empty value **deletes** the
+ * key, the same rule `fields.tsx`'s `setPath` follows, and it is load-bearing
+ * twice over: zod's `optional()` expects an absent key rather than `""` (so
+ * slice 8's optional refs stay absent), and every payload string is a bare
+ * `z.string()` — which accepts `""` — so keeping the key would mean clearing
+ * a required field showed *no* problem marker at all. The input stays
+ * mounted either way; `payloadValue` reads a missing key as `""`. */
 export function withPayload(
   entity: Entity,
   path: [string] | [string, string],
   value: string,
 ): Entity {
   const payload = obj(entity.payload);
+  const set = (into: Record<string, unknown>, key: string) => {
+    const next = { ...into };
+    if (value === "") {
+      delete next[key];
+    } else {
+      next[key] = value;
+    }
+    return next;
+  };
   if (path.length === 1) {
-    return { ...entity, payload: { ...payload, [path[0]]: value } };
+    return { ...entity, payload: set(payload, path[0]) };
   }
   return {
     ...entity,
-    payload: {
-      ...payload,
-      [path[0]]: { ...obj(payload[path[0]]), [path[1]]: value },
-    },
+    payload: { ...payload, [path[0]]: set(obj(payload[path[0]]), path[1]) },
   };
 }
 

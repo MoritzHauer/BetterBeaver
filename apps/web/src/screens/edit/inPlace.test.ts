@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { BookDocument, DomainDocument } from "@betterbeaver/schema";
 import type { EditSessionValue } from "./EditSessionContext";
-import { unitEditOps, withUnlocksAfter } from "./inPlace";
+import { unitEditOps, withPayload, withUnlocksAfter } from "./inPlace";
 
 /**
  * The two mutations that fail *silently* (spec 0021-6 §2d, §2a): writing an
@@ -188,6 +188,27 @@ describe("unitEditOps", () => {
     expect(
       (written.book[0]!.units[0] as { noteIds: string[] }).noteIds,
     ).toEqual([`bk-note-${notes[0]!.stem}`]);
+  });
+});
+
+describe("withPayload", () => {
+  it("deletes a field cleared to empty, so its problem marker comes back", () => {
+    const set = withPayload({ id: "i", payload: {} }, ["term"], "Dam");
+    expect((set.payload as { term: string }).term).toBe("Dam");
+
+    // Every payload string is a bare `z.string()`, which accepts "" — keep
+    // the key and clearing a required field would report nothing wrong.
+    const cleared = withPayload(set, ["term"], "");
+    expect("term" in (cleared.payload as object)).toBe(false);
+  });
+
+  it("reaches a nested side without dropping the other one", () => {
+    const a = withPayload({ id: "i", payload: {} }, ["a", "script"], "one");
+    const both = withPayload(a, ["b", "script"], "two");
+    expect(both.payload).toEqual({
+      a: { script: "one" },
+      b: { script: "two" },
+    });
   });
 });
 

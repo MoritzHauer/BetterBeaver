@@ -341,6 +341,10 @@ export function UnitScreen({
   const edit = unitEditOps(useEditSession(), unitId);
   // Which vocabulary row has its secondary fields open (transliteration
   // today; slice 8 §2c adds the source and asset controls to the same row).
+  // Deliberately not reset when `unitId` changes — `App.tsx` reuses this
+  // instance across units (see the keyboard effect below), and an id from
+  // the previous unit simply matches no row here, so the only effect is that
+  // coming back re-opens the row you left open.
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
   // Trail page index, plus each section's own sub-pager index (plan 0010
@@ -810,6 +814,11 @@ export function UnitScreen({
                       ) : null}
                       {edit !== null ? (
                         <td>
+                          {/* Shown even on a row whose fields are read-only:
+                              all three write `unit.itemIds`, which the Book
+                              owns, never the lexicon. Reordering and
+                              unlinking a borrowed word are the author's to
+                              do; changing the word itself is not. */}
                           <RowActions
                             onUp={() => edit.moveRow(item.id, -1)}
                             onDown={() => edit.moveRow(item.id, 1)}
