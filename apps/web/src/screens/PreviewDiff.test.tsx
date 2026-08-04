@@ -280,11 +280,13 @@ describe("Diff", () => {
 
     const oldRow = screen.getByText("First").closest("li");
     const newRow = screen.getByText("First, renamed").closest("li");
+    expect(oldRow).not.toBeNull();
+    expect(newRow).not.toBeNull();
     expect(oldRow?.className).toContain("diff-old");
     expect(newRow?.className).toContain("diff-new");
     // Old above new, in that order.
     expect(
-      oldRow?.compareDocumentPosition(newRow!) &
+      (oldRow as Element).compareDocumentPosition(newRow as Node) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });

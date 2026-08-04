@@ -115,6 +115,9 @@ type Screen =
       lessonId: string;
       unitId: string;
       taskId: string;
+      /** Set only by Preview (spec 0021-9 §1): the session then runs over
+       * the draft's own content, against a store that records nothing. */
+      editing?: boolean;
     }
   // Pooled unit-level practice (plan 0010): one shuffled session across an
   // entire unit's task set, launched by UnitScreen's sticky Practice bar.
@@ -123,6 +126,7 @@ type Screen =
       bookId: string;
       lessonId: string;
       unitId: string;
+      editing?: boolean;
     }
   // Cross-unit recall session (plan 0016): practice-only over a sample of
   // the LINKED unit's tasks; onDone returns to the LINKING unit's Overview.
@@ -132,6 +136,7 @@ type Screen =
       lessonId: string;
       unitId: string; // the linking unit, for onDone back-nav
       recallUnitId: string; // the linked unit whose tasks are sampled
+      editing?: boolean;
     }
   // Lesson summary (plan 0020 §5): shown after the unit session that
   // completed the lesson. Derived tiles only — nothing is persisted for it.
@@ -223,6 +228,7 @@ function itemEditTarget(
  * they don't reshuffle across re-renders. An attempt is recorded only once
  * every question has been answered, matching the plan's completion rule. */
 function TaskSession({
+  store = progressStore,
   content,
   lookup,
   task,
@@ -230,6 +236,9 @@ function TaskSession({
   onOpenEdit,
   onDone,
 }: {
+  /** Preview passes a no-op store so the draft's exercises play for
+   * real and record nothing (spec 0021-9 §1). */
+  store?: ProgressStore;
   content: Content;
   /** Tap-to-lookup dependencies (plan 0006 step 4), for post-answer reveal
    * surfaces (SessionScreen's pinned rules). */
@@ -251,7 +260,7 @@ function TaskSession({
     [task.id],
   );
   async function handleGrade(unitId: string, quality: Quality) {
-    await recordGrade(progressStore, unitId, quality, new Date(), domainId);
+    await recordGrade(store, unitId, quality, new Date(), domainId);
   }
 
   const onEdit = canEdit
@@ -288,10 +297,10 @@ function TaskSession({
       lookup={lookup}
       onEdit={onEdit}
       onGrade={handleGrade}
-      onAllAnswered={() => void progressStore.markTaskAttempted(task.id)}
+      onAllAnswered={() => void store.markTaskAttempted(task.id)}
       onFinished={onDone}
       onExit={onDone}
-      loadStreak={() => progressStore.getStreak(domainId)}
+      loadStreak={() => store.getStreak(domainId)}
     />
   );
 }
@@ -302,6 +311,7 @@ function TaskSession({
  * report `onTaskAnswered` granularly (rather than only at session-end, the
  * way `TaskSession`'s single-task `onAllAnswered` does). */
 function UnitSession({
+  store = progressStore,
   content,
   unit,
   lookup,
@@ -313,6 +323,9 @@ function UnitSession({
   onSwipeBack,
   nextAction,
 }: {
+  /** Preview passes a no-op store so the draft's exercises play for
+   * real and record nothing (spec 0021-9 §1). */
+  store?: ProgressStore;
   content: Content;
   unit: Unit;
   /** Tap-to-lookup dependencies (plan 0006 step 4), for post-answer reveal
@@ -345,7 +358,7 @@ function UnitSession({
   const taskIds = useMemo(() => pairs.map((pair) => pair.taskId), [pairs]);
 
   async function handleGrade(unitId: string, quality: Quality) {
-    await recordGrade(progressStore, unitId, quality, new Date(), domainId);
+    await recordGrade(store, unitId, quality, new Date(), domainId);
   }
 
   const onEdit = canEdit
@@ -387,12 +400,12 @@ function UnitSession({
       onTogglePin={onTogglePin}
       onEdit={onEdit}
       onGrade={handleGrade}
-      onTaskAnswered={(taskId) => void progressStore.markTaskAttempted(taskId)}
+      onTaskAnswered={(taskId) => void store.markTaskAttempted(taskId)}
       onFinished={onDone}
       nextAction={nextAction}
       onExit={onDone}
       onSwipeBack={onSwipeBack}
-      loadStreak={() => progressStore.getStreak(domainId)}
+      loadStreak={() => store.getStreak(domainId)}
     />
   );
 }
@@ -403,11 +416,15 @@ function UnitSession({
  * unit isn't rescheduled); no `markTaskAttempted` — the linking unit's
  * completion must stay derived from its own taskIds, not this session. */
 function RecallSession({
+  store = progressStore,
   content,
   linkedUnit,
   lookup,
   onDone,
 }: {
+  /** Preview passes a no-op store so the draft's exercises play for
+   * real and record nothing (spec 0021-9 §1). */
+  store?: ProgressStore;
   content: Content;
   linkedUnit: Unit;
   lookup: TapLookup;
@@ -422,7 +439,7 @@ function RecallSession({
   const questions = useMemo(() => pairs.map((pair) => pair.question), [pairs]);
 
   async function handleGrade(unitId: string, quality: Quality) {
-    await recordGrade(progressStore, unitId, quality, new Date(), domainId);
+    await recordGrade(store, unitId, quality, new Date(), domainId);
   }
 
   return (
@@ -434,7 +451,7 @@ function RecallSession({
       onGrade={handleGrade}
       onFinished={onDone}
       onExit={onDone}
-      loadStreak={() => progressStore.getStreak(domainId)}
+      loadStreak={() => store.getStreak(domainId)}
     />
   );
 }
@@ -1402,7 +1419,13 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   const editingBookId =
     (screen.screen === "book" ||
       screen.screen === "lesson" ||
-      screen.screen === "unit") &&
+      screen.screen === "unit" ||
+      // Preview's Practice launches a real session over the draft (spec
+      // 0021-9 §1), so the session has to stay mounted across those routes
+      // or the task ids it just offered resolve against published content.
+      screen.screen === "task" ||
+      screen.screen === "unit-session" ||
+      screen.screen === "recall-session") &&
     screen.editing === true
       ? screen.bookId
       : null;
@@ -1750,6 +1773,8 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
               screen: "task",
               bookId: screen.bookId,
               ...target,
+              // Carried so Preview's Practice plays the draft (§1).
+              editing: screen.editing,
             })
           }
           onReview={() =>
@@ -1794,6 +1819,8 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
               screen: "task",
               bookId: screen.bookId,
               ...target,
+              // Carried so Preview's Practice plays the draft (§1).
+              editing: screen.editing,
             })
           }
           onEdit={
@@ -1836,6 +1863,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
               bookId: screen.bookId,
               lessonId: screen.lessonId,
               unitId: screen.unitId,
+              editing: screen.editing,
             })
           }
           onRecall={(recallUnitId) =>
@@ -1845,6 +1873,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
               lessonId: screen.lessonId,
               unitId: screen.unitId,
               recallUnitId,
+              editing: screen.editing,
             })
           }
           onPinNote={(noteId) => {
@@ -1883,7 +1912,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     }
 
     if (screen.screen === "unit-session") {
-      const unit = content.units.find((u) => u.id === screen.unitId);
+      const unit = shown.units.find((u) => u.id === screen.unitId);
       if (unit === undefined) {
         return (
           <main>
@@ -1913,7 +1942,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           atEnd: true,
         });
       };
-      const lesson = content.lessons.find((l) => l.id === screen.lessonId);
+      const lesson = shown.lessons.find((l) => l.id === screen.lessonId);
       // Plan 0020 §4: does finishing THIS unit finish the lesson? Every
       // OTHER unit's completion is already accurate in `attemptedTaskIds`
       // (state) — this session only ever marks this unit's own tasks — so
@@ -1980,7 +2009,8 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
       };
       return withSessionEdit(
         <UnitSession
-          content={content}
+          store={shownStore}
+          content={shown}
           unit={unit}
           lookup={lookup}
           pinnedUnitIds={pinnedUnitIds}
@@ -2023,9 +2053,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     }
 
     if (screen.screen === "recall-session") {
-      const linkedUnit = content.units.find(
-        (u) => u.id === screen.recallUnitId,
-      );
+      const linkedUnit = shown.units.find((u) => u.id === screen.recallUnitId);
       if (linkedUnit === undefined) {
         return (
           <main>
@@ -2043,7 +2071,8 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
       backActionRef.current = onDone;
       return (
         <RecallSession
-          content={content}
+          store={shownStore}
+          content={shown}
           linkedUnit={linkedUnit}
           lookup={lookup}
           onDone={onDone}
@@ -2052,7 +2081,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     }
 
     // screen.screen === "task"
-    const task = content.tasks.find((t) => t.id === screen.taskId);
+    const task = shown.tasks.find((t) => t.id === screen.taskId);
     if (task === undefined) {
       return (
         <main>
@@ -2072,7 +2101,8 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     backActionRef.current = onTaskDone;
     return withSessionEdit(
       <TaskSession
-        content={content}
+        store={shownStore}
+        content={shown}
         lookup={lookup}
         task={task}
         canEdit={canEdit(screen.bookId)}

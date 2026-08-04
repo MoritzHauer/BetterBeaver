@@ -81,6 +81,8 @@ import {
  * missing `notes` crashed `assetReferences` the moment it grew a note scan
  * (spec 0021-2 §2e). */
 const EMPTY_BOOK = emptyDocFor("topic") as BookDocument;
+/** Stable identity, deliberately: see `remoteAssets` below. */
+const NO_REMOTE_ASSETS: RemoteAsset[] = [];
 const EMPTY_DOMAIN = emptyDocFor("domain") as DomainDocument;
 
 const codeOf = (entity: unknown): string => {
@@ -774,8 +776,14 @@ export function useEditSessionState(args: {
   // matters (plan 0021 §10): `registerRemoteAssets` populates that overlay
   // from *cached* documents at boot, so a file uploaded for an unpublished
   // draft is not in it and every reference to it would read as dangling.
-  const remoteAssets = mode === "private" ? [] : bookSlot.assets;
-  const remoteLexiconAssets = mode === "private" ? [] : domainSlot.assets;
+  // `NO_REMOTE_ASSETS`, not a fresh `[]`: these feed `assetStems`, which
+  // feeds the Preview build, which feeds an effect that sets state. A new
+  // array literal per render made every one of those recompute every render
+  // and the effect re-fire forever — a hard freeze on the first click in a
+  // private Book.
+  const remoteAssets = mode === "private" ? NO_REMOTE_ASSETS : bookSlot.assets;
+  const remoteLexiconAssets =
+    mode === "private" ? NO_REMOTE_ASSETS : domainSlot.assets;
   const assetStems: AssetStems = useMemo(() => {
     const base = allAssetStems();
     if (mode === "private") {
