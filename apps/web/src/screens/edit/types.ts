@@ -120,3 +120,21 @@ export const draftKey = (docId: string) => `bb.author.draft.${docId}`;
  * loaded from the learner-facing `catalog` view instead of `documents` —
  * RLS gives a non-maintainer no other way to read this document. */
 export const proposalKey = (docId: string) => `bb.proposal.${docId}`;
+
+/** Whether this Book has work that has not left the device (spec 0021-5
+ * §3). Read at render, not once at mount: the point is that it shows from
+ * *outside* a session, so it has to notice the session that just closed.
+ * A private Book has neither key and correctly reports nothing — every
+ * keystroke is already saved, there is nothing "unpublished" about it. */
+export function hasUnpublishedChanges(docId: string): boolean {
+  try {
+    return (
+      localStorage.getItem(draftKey(docId)) !== null ||
+      localStorage.getItem(proposalKey(docId)) !== null
+    );
+  } catch {
+    // Same degrade as every other storage read in this app (spec 0019 §1):
+    // a private-mode webview throws rather than returning null.
+    return false;
+  }
+}

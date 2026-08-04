@@ -60,10 +60,16 @@ export function BookScreen({
   onVocabulary,
   onEdit,
   onBack,
+  unpublishedChanges = false,
 }: {
   content: Content;
   attemptedTaskIds: ReadonlySet<string>;
   store: ProgressStore;
+  /** This Book has authored work that has not left the device (spec 0021-5
+   * §3). Shown to everyone who can see it, because only an author ever has
+   * the storage key it is read from — leaving edit mode used to hide the
+   * fact that a draft existed at all. */
+  unpublishedChanges?: boolean;
   /** Bumped by the caller on every navigation to this screen, so the due
    * count is recomputed after sessions elsewhere may have changed it. */
   epoch: number;
@@ -172,6 +178,7 @@ export function BookScreen({
         ) : null}
       </header>
       <h1>{content.topic.title}</h1>
+      {unpublishedChanges && <p className="status">unpublished changes</p>}
       <p>{content.topic.description}</p>
       <FeedbackWidget
         docId={`topic:${content.topic.id}`}

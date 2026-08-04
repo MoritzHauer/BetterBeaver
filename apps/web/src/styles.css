@@ -1237,6 +1237,36 @@ main.unit-screen {
 
 /* Opt-in content-update notice (plan 0012): shown on the home screen only,
  * never blocks anything, and nothing changes until "Update now". */
+/* Edit mode's persistent bar (plan 0021 §8). Fixed to the bottom, over
+ * whichever learner screen is being edited, because edit mode is a flag on
+ * that screen rather than a screen of its own — it is the one control that
+ * has to survive navigating book → lesson → unit. Same slot and stacking as
+ * `.action-bar`, which it never co-exists with (a session is not editable). */
+.edit-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.9rem;
+  background: var(--bg);
+  border-top: 1px solid var(--card-border);
+}
+
+.edit-bar .status {
+  flex: 1;
+  margin: 0;
+}
+
+.edit-bar-menu {
+  font-size: 1.4rem;
+  line-height: 1;
+  padding: 0.2rem 0.6rem;
+}
+
 .update-banner {
   display: flex;
   flex-wrap: wrap;

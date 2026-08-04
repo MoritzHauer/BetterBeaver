@@ -196,6 +196,7 @@ export function UnitScreen({
   onEdit,
   onBack,
   startAtEnd,
+  noteMarkdown = (stem) => getNoteMarkdown(content.topic.id, stem),
 }: {
   content: Content;
   unitId: string;
@@ -219,6 +220,10 @@ export function UnitScreen({
   /** Opens on the last content page instead of the Overview — how the
    * practice session's back-swipe returns you to where you left the trail. */
   startAtEnd?: boolean;
+  /** Raw note markdown by stem. Defaults to the module-global
+   * `getNoteMarkdown`, which only knows published text — edit mode passes
+   * the draft's own instead (spec 0021-5 §2d). */
+  noteMarkdown?: (stem: string) => string | undefined;
 }) {
   // Which shipped lexicon entry's popup is open, if any (kind-partitioned
   // restructure's Vocabulary table): opened by id directly, same
@@ -253,7 +258,7 @@ export function UnitScreen({
           if (note === undefined) {
             return [];
           }
-          const markdown = getNoteMarkdown(content.topic.id, note.stem);
+          const markdown = noteMarkdown(note.stem);
           return markdown === undefined
             ? []
             : [{ noteId, stem: note.stem, markdown }];
