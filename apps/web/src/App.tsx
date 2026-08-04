@@ -1032,33 +1032,51 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   }
 
   /**
-   * Where a document id opens now that `screen: "edit"` is gone (spec 0021-5
-   * §2c). Editing happens on the Book's own screens, so the id has to be
-   * resolved back to a Book that is actually loadable here:
-   *
-   * - a Book document whose Book is in this device's content → its Book
-   *   screen, in edit mode;
-   * - a **domain** document → the Book that owns it, which is the only
-   *   surface its words have (they are never named as a document in the UI);
-   * - anything left — a domain nobody here owns, a Book the author has not
-   *   added — keeps the old form editor behind the labelled `forms`
-   *   fallback, rather than dead-ending on a screen that cannot load.
+   * The Book a document is edited on, now that editing happens on the Book's
+   * own screens (spec 0021-5 §2c): a Book document is its own Book, and a
+   * **domain** document belongs to whichever Book uses it — those words are
+   * never named as a document in the UI. `undefined` when neither resolves
+   * to something loadable on this device.
    */
-  function editorRouteFor(
-    docId: string,
-    mode?: "maintain" | "propose" | "private",
-    back?: Screen,
-  ): Screen {
+  function editableBookFor(docId: string): string | undefined {
     const id = contentIdOf(docId);
-    const bookId = docId.startsWith("domain:")
-      ? books.find((book) => book.domainId === id)?.id
-      : books.some((book) => book.id === id)
-        ? id
-        : undefined;
-    if (bookId !== undefined) {
-      return { screen: "book", bookId, editing: true };
+    if (docId.startsWith("domain:")) {
+      return books.find((book) => book.domainId === id)?.id;
     }
-    return { screen: "forms", docId, mode, back };
+    // `isPrivateBook` as well as `books` (spec 0021-11 §2): a private Book
+    // whose documents don't validate is absent from `books` — that absence
+    // *is* what makes its card the broken one — and it is still editable,
+    // because the session reads the private store directly and
+    // `draftContent` cannot fail. This is the route behind the broken card's
+    // Edit, which is the only way back into such a Book.
+    return books.some((book) => book.id === id) || isPrivateBook(id)
+      ? id
+      : undefined;
+  }
+
+  /**
+   * Why a document cannot be edited here, or `undefined` when it can (spec
+   * 0021-11 §3). Every route into the old form editor now ends in one of
+   * these two sentences instead: with the form tree gone there is no
+   * fallback that can open a document out of context, and slice 10 §2's rule
+   * is to **say so** rather than dead-end.
+   */
+  function noEditorReason(docId: string): string | undefined {
+    if (editableBookFor(docId) !== undefined) {
+      return undefined;
+    }
+    return docId.startsWith("domain:")
+      ? "add the Book that uses these words to edit them"
+      : "add this Book to your books first — editing happens on the Book itself";
+  }
+
+  /** Where a document id opens: its Book, in edit mode, or the Library —
+   * which is where adding the missing Book actually happens. */
+  function editorRouteFor(docId: string): Screen {
+    const bookId = editableBookFor(docId);
+    return bookId !== undefined
+      ? { screen: "book", bookId, editing: true }
+      : { screen: "library" };
   }
 
   /**
@@ -1104,9 +1122,17 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     }
     const first = entries[0];
     if (first !== undefined) {
-      setScreen(
-        editorRouteFor(first.id, editModeFor(first.id), { screen: "settings" }),
-      );
+      // The storage half above is unchanged; only the destination moved
+      // (spec 0021-11 §3). An imported document with no Book to open it on
+      // — a lexicon whose Book is not here, a Book not in My Books — is
+      // reported rather than dropping the author on an unrelated screen.
+      // The draft/proposal key is already written either way, so adding the
+      // Book afterwards picks the import straight up.
+      const reason = noEditorReason(first.id);
+      if (reason !== undefined) {
+        throw new Error(`${first.id} was imported, but ${reason}`);
+      }
+      setScreen(editorRouteFor(first.id));
     }
   }
 
@@ -1400,12 +1426,20 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
         }
         if (loadedContent !== undefined) {
           setContent(loadedContent);
-        } else if (isBookFamilyScreen) {
+        } else if (
+          isBookFamilyScreen &&
+          !("editing" in screen && screen.editing === true)
+        ) {
           // The active book failed to load (stale snapshot, spec 0019 §3a):
           // `content` would otherwise stay whatever it was (or `null`, which
           // renders a permanent "Loading…" on book-family screens) — send
           // the learner back to the books list, where the broken card for
           // this id now shows via `runtimeBrokenBookIds`.
+          //
+          // Never in edit mode (spec 0021-11 §2): a Book that does not
+          // validate is exactly the one you came here to repair, and the
+          // session renders it from the draft. Bailing would bounce you off
+          // the screen the moment you arrived.
           setScreen({ screen: "books" });
         }
         if (loadedDomain !== undefined) {
@@ -1572,11 +1606,11 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           // second ago (unlisted, unpublished) is not in.
           await contentInit.addCreatedBook(bookId, book, domainId, domain);
         }}
-        onOpenDocument={(docId, mode) => setScreen(editorRouteFor(docId, mode))}
-        orphanedLexicon={(docId) =>
-          docId.startsWith("domain:") &&
-          !books.some((book) => book.domainId === contentIdOf(docId))
-        }
+        // No `mode`: the route carries only the Book, and the session
+        // resolves maintain/propose/private from the document itself
+        // (`bookEditMode`) — the same answer `editModeFor` gave here.
+        onOpenDocument={(docId) => setScreen(editorRouteFor(docId))}
+        noEditorReason={noEditorReason}
         // Pinned back: the note is read from the sign-in form, and losing a
         // half-typed email to a Back tap would be its own little betrayal.
         onPrivacy={() =>
@@ -1695,18 +1729,14 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           onArchive={contentInit.archiveBook}
           onRestore={contentInit.restoreBook}
           onRemove={contentInit.removeBook}
-          // Through `editorRouteFor`, not straight to the Book screen: this
-          // is the only ✎ that can be tapped on a Book which does not
-          // load — a broken card is exactly where there is no Book screen
-          // to reach ✎ from — and in-place editing needs a loadable one.
-          // Those land on the form-editor fallback, as they did before edit
-          // mode became a route flag.
+          // The only ✎ on a Book that does not load — a broken card is
+          // exactly where there is no Book screen to reach ✎ from. It is
+          // offered on private Books alone, whose documents live nowhere
+          // else, and it now opens the Book screen in edit mode like every
+          // other ✎: the session reads the private store directly, so it
+          // does not need the Book to validate (spec 0021-11 §2).
           onEdit={(bookId) =>
-            setScreen(
-              editorRouteFor(documentId("topic", bookId), "private", {
-                screen: "books",
-              }),
-            )
+            setScreen(editorRouteFor(documentId("topic", bookId)))
           }
           unpublishedChanges={unpublishedBookIds}
           onLibrary={
@@ -1759,19 +1789,20 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     // domainContent is gated here too (not just content): unit notes and
     // task-session post-answer reveals need the domain's merged entry pool
     // for tap-to-lookup (plan 0006 step 4).
-    if (content === null || domainContent === null) {
-      return <p>Loading&hellip;</p>;
-    }
-    const lookup: TapLookup = {
-      domainContent,
-      listStore: vocabListStore,
-      userEntryStore,
-      onWordsChanged: () => setDomainEpoch((epoch) => epoch + 1),
-    };
+    //
+    // Both fall back to the session's own copies (spec 0021-11 §2), and that
+    // fallback is the whole editing route for a Book whose published copy
+    // does not validate. `content` comes from the validated content source,
+    // so a Book with, say, a unit that has no tasks yet — the state `+ unit`
+    // leaves behind, per plan §1 — loads as nothing at all, and until now
+    // its only way in was the form editor. The draft has no such gate:
+    // `draftContent` cannot fail by construction.
+    //
     // Spec 0021-5 §2d: in edit mode the screens render the draft through
-    // `draftContent`, which cannot fail on a mid-edit document, instead of
-    // the validated published content. One conditional, here at the
-    // resolution point; the screens themselves are unchanged.
+    // `draftContent` instead of the validated published content. One
+    // conditional, here at the resolution point; the screens are unchanged.
+    // Resolved *above* the gate now, so the gate can be about what will
+    // actually render rather than about what the content source managed.
     const editView = editSession.value?.view ?? "edit";
     const preview =
       editView === "preview" ? (editSession.value?.preview ?? null) : null;
@@ -1783,6 +1814,16 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
             // the draft removed still has a row to tint red.
             editSession.value.diff.content
           : (editSession.value?.content ?? content);
+    const shownLookup = domainContent ?? editSession.value?.domainContent;
+    if (shown === null || shownLookup === undefined || shownLookup === null) {
+      return <p>Loading&hellip;</p>;
+    }
+    const lookup: TapLookup = {
+      domainContent: shownLookup,
+      listStore: vocabListStore,
+      userEntryStore,
+      onWordsChanged: () => setDomainEpoch((epoch) => epoch + 1),
+    };
     // Preview opens everything (§1b): inspecting unit 12 must not cost
     // eleven skip-ahead confirms, and a bad unlock chain is caught
     // structurally anyway. A prop swap, deliberately, not a store change.
@@ -1883,10 +1924,10 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
             })
           }
           onReview={() =>
-            setScreen({ screen: "review", domainId: content.topic.domainId })
+            setScreen({ screen: "review", domainId: shown.topic.domainId })
           }
           onVocabulary={() =>
-            setScreen({ screen: "vocab", domainId: content.topic.domainId })
+            setScreen({ screen: "vocab", domainId: shown.topic.domainId })
           }
           // Cannot reject — see the My Books call site.
           onPlay={() => void playBook(screen.bookId)}
@@ -1989,7 +2030,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
               noteUnitId(noteId),
               recallQuality("again"),
               new Date(),
-              content.topic.domainId,
+              shown.topic.domainId,
             );
           }}
           isNotePinned={(noteId) =>
@@ -2065,7 +2106,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
         lesson !== undefined &&
         isLessonComplete(
           lesson,
-          content.units,
+          shown.units,
           new Set([...attemptedTaskIds, ...unit.taskIds]),
         );
       // Plan 0020 §4: resolve the next step from the POST-session attempted
@@ -2077,7 +2118,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
         setAttemptedTaskIds(ids);
         if (
           lesson !== undefined &&
-          isLessonComplete(lesson, content.units, ids)
+          isLessonComplete(lesson, shown.units, ids)
         ) {
           setScreen({
             screen: "lesson-summary",
@@ -2089,7 +2130,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
         // Two branches, and they're total (plan 0020 §4): an incomplete
         // lesson always contains an incomplete unit, so `next` is null here
         // only defensively.
-        const next = nextUnit(content, ids);
+        const next = nextUnit(shown, ids);
         // Never send the learner back into the unit they just finished. That
         // happens when `finishesLesson` (optimistic, computed from
         // attemptedTaskIds ∪ unit.taskIds) and this fresh read disagree —
@@ -2121,7 +2162,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           lookup={lookup}
           pinnedUnitIds={pinnedUnitIds}
           onTogglePin={(unitIds) => {
-            togglePinnedUnits(content.topic.domainId, unitIds);
+            togglePinnedUnits(shown.topic.domainId, unitIds);
             setPinEpoch((epoch) => epoch + 1);
           }}
           canEdit={canEdit(screen.bookId)}
@@ -2141,7 +2182,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
       backActionRef.current = onBack;
       return (
         <LessonSummaryScreen
-          content={content}
+          content={shown}
           lessonId={screen.lessonId}
           attemptedTaskIds={attemptedTaskIds}
           store={progressStore}

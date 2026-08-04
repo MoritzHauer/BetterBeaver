@@ -136,6 +136,7 @@ function makeSession(overrides: Partial<EditSessionValue> = {}): {
     changeBook: (next) => books.push(next),
     changeDomain: (next) => domains.push(next),
     content: build(BOOK, DOMAIN),
+    domainContent: {} as EditSessionValue["domainContent"],
     noteMarkdown: () => undefined,
     problems: [],
     problemsByEntity: new Map(),

@@ -18,7 +18,7 @@ import { BookWatermark } from "../components/BookWatermark";
 import { useEditSession } from "./edit/EditSessionContext";
 import { ProblemMarker, bookEditOps, withOptionalKey } from "./edit/inPlace";
 import { diffView } from "./edit/diffView";
-import { RowActions } from "./edit/fields";
+import { EntityPicker, RowActions } from "./edit/fields";
 
 const CHAT_ENABLED = false;
 
@@ -257,9 +257,10 @@ export function BookScreen({
             <input
               type="text"
               value={content.topic.title}
-              onChange={(e) =>
-                edit.patchBook({ ...edit.rawBook, title: e.target.value })
-              }
+              // Not `patchBook`: the title also names this Book's lexicon
+              // (decision 11), and that is where `VocabularyScreen`'s heading
+              // comes from.
+              onChange={(e) => edit.setTitle(e.target.value)}
             />
           </label>
           <ProblemMarker problems={edit.fieldProblems("topic", "title")} />
@@ -588,6 +589,77 @@ export function BookScreen({
           >
             + source
           </button>
+          {/* This Book's words, at the level that owns them (spec 0021-11
+              §1). Both settings belong to the lexicon, so both are hidden
+              — not disabled — when it is somebody else's (§7). */}
+          {edit.canEditLexicon && (
+            <>
+              <h2>Words</h2>
+              <label className="field">
+                Read-aloud language
+                <input
+                  type="text"
+                  placeholder="ky"
+                  value={edit.readAloudLang}
+                  onChange={(e) => edit.setReadAloudLang(e.target.value)}
+                />
+                <span className="status">
+                  A BCP-47 tag, like <code>ky</code> or <code>de-AT</code>.
+                  Leave it empty and this Book&rsquo;s words are never read
+                  aloud.
+                </span>
+              </label>
+              <h3>Word families</h3>
+              <p className="status">
+                Groups of related words, shown together on the Vocabulary
+                screen.
+              </p>
+              <ul className="editor-list">
+                {edit.families.map((family) => (
+                  <li key={family.id}>
+                    <label className="field">
+                      Name
+                      <input
+                        type="text"
+                        value={
+                          typeof family.name === "string" ? family.name : ""
+                        }
+                        onChange={(e) =>
+                          edit.patchFamily({ ...family, name: e.target.value })
+                        }
+                      />
+                    </label>
+                    <ProblemMarker
+                      problems={edit.fieldProblems(family.id, "name")}
+                    />
+                    <EntityPicker
+                      label="Words in this family"
+                      options={edit.entryOptions}
+                      selected={
+                        Array.isArray(family.entryIds)
+                          ? (family.entryIds as string[])
+                          : []
+                      }
+                      onChange={(ids) =>
+                        edit.patchFamily({ ...family, entryIds: ids })
+                      }
+                      multiple
+                      hideIds
+                    />
+                    <ProblemMarker problems={edit.entityProblems(family.id)} />
+                    <RowActions onRemove={() => edit.dropFamily(family.id)} />
+                  </li>
+                ))}
+              </ul>
+              <button
+                type="button"
+                className="editor-add"
+                onClick={edit.addFamily}
+              >
+                + word family
+              </button>
+            </>
+          )}
         </>
       )}
       {/* ponytail: chat deactivated per owner call, not removed — code

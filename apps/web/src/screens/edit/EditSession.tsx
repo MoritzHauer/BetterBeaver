@@ -15,6 +15,7 @@ import {
   diffDomainDocument,
   documentProblems,
   draftContent,
+  symmetricLinks,
   upsertDomainEntry,
 } from "@betterbeaver/engine";
 import { validateForPublish } from "../../backend/publishCheck";
@@ -871,9 +872,24 @@ export function useEditSessionState(args: {
       return null;
     }
     const withDomain = domain ?? EMPTY_DOMAIN;
-    const { content } = draftContent(book, withDomain, assetStems);
+    const { content, parsed } = draftContent(book, withDomain, assetStems);
     const { all, byEntity } = documentProblems(book, withDomain, assetStems);
-    return { content, problems: all, problemsByEntity: byEntity };
+    return {
+      content,
+      // `parsed`, not `content`: `Content.items` is post-merge (§1), and
+      // tap-to-lookup wants the lexicon's own entries. Learner-created words
+      // are deliberately *not* merged in here — they live in localStorage,
+      // not in the document, and an authoring view that showed them would
+      // invite editing something publishing cannot carry.
+      domainContent: {
+        domain: parsed.domain,
+        entries: parsed.entries,
+        families: parsed.families,
+        linksByEntryId: symmetricLinks(parsed.entries),
+      },
+      problems: all,
+      problemsByEntity: byEntity,
+    };
   }, [enabled, book, domain, assetStems]);
 
   const uploadFile =
@@ -972,6 +988,7 @@ export function useEditSessionState(args: {
           changeBook,
           changeDomain,
           content: drafted.content,
+          domainContent: drafted.domainContent,
           noteMarkdown: (stem: string) =>
             book.notes.find((note) => note.stem === stem)?.markdown,
           problems: drafted.problems,

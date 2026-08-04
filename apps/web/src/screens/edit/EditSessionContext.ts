@@ -4,7 +4,7 @@ import type {
   Content,
   DomainDocument,
 } from "@betterbeaver/schema";
-import type { ContentDiff, Problem } from "@betterbeaver/engine";
+import type { ContentDiff, DomainContent, Problem } from "@betterbeaver/engine";
 import type { AssetView } from "./AssetsManager";
 
 /** Which lifecycle a document is edited through (plan 0012 §5, plan 0017
@@ -45,6 +45,11 @@ export interface EditSessionValue {
   /** What the learner screens render in edit mode (§2d): the draft through
    * `draftContent`, which cannot fail on a mid-edit document. */
   content: Content;
+  /** The draft's own lexicon, in the shape tap-to-lookup takes. Needed
+   * because a Book whose *published* copy does not validate has no
+   * `domainContent` at all (spec 0021-11 §2), and that is precisely the
+   * Book you have entered edit mode to repair. */
+  domainContent: DomainContent;
   /** Raw note markdown from the draft, for `UnitScreen`'s `noteMarkdown`
    * prop — the module-global `getNoteMarkdown` only knows published text. */
   noteMarkdown: (stem: string) => string | undefined;

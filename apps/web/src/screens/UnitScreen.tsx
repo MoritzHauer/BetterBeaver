@@ -137,6 +137,26 @@ function SubPager({
  */
 function RowExtras({ item, edit }: { item: Item; edit: UnitEditOps }) {
   const raw = edit.raw(item.id) ?? { id: item.id };
+  /** The one optional prose field per kind that `EntryPopup` renders and no
+   * other in-place surface sets (spec 0021-11 §1) — `DomainEditor`'s and
+   * `BookEditor`'s entry forms were the only way in. */
+  const prose = (label: string, path: [string] | [string, string]) => (
+    <>
+      <label className="field">
+        {label}
+        <textarea
+          rows={2}
+          value={edit.payloadValue(item.id, ...path)}
+          onChange={(e) =>
+            edit.patchEntity(withPayload(raw, path, e.target.value))
+          }
+        />
+      </label>
+      <ProblemMarker
+        problems={edit.fieldProblems(item.id, `payload.${path.join(".")}`)}
+      />
+    </>
+  );
   const ref = (
     label: string,
     kind: "audio" | "image",
@@ -185,6 +205,15 @@ function RowExtras({ item, edit }: { item: Item; edit: UnitEditOps }) {
         </label>
       )}
       <ProblemMarker problems={edit.fieldProblems(item.id, "sourceRef")} />
+      {/* A lexeme's example is a text/translation pair, a concept's is one
+          string — both surface in `EntryPopup` under the word's gloss. */}
+      {item.kind === "lexeme" && (
+        <>
+          {prose("Example", ["example", "text"])}
+          {prose("Example translation", ["example", "translation"])}
+        </>
+      )}
+      {item.kind === "concept" && prose("Example", ["example"])}
       {item.kind === "pair" ? (
         <>
           {/* The only mandatory slugs in the schema (§2c). */}

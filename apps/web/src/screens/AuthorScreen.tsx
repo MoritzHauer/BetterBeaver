@@ -14,6 +14,12 @@ import {
   type Proposal,
 } from "../backend/supabase";
 
+/** The one line a row gets when it has no Book to open on. Its button stays
+ * live and lands on the Library, which is where adding that Book happens. */
+function Unreachable({ reason }: { reason: string | undefined }) {
+  return reason === undefined ? null : <span className="status">{reason}</span>;
+}
+
 /**
  * Author entry point (plan 0012 step 2, extended by §5): creating a private
  * Book, magic-link sign-in, the list of documents the account maintains,
@@ -26,7 +32,7 @@ export function AuthorScreen({
   onCreateBook,
   onCreateHostedBook,
   onOpenDocument,
-  orphanedLexicon = () => false,
+  noEditorReason = () => undefined,
   onPrivacy,
   onBack,
 }: {
@@ -35,10 +41,13 @@ export function AuthorScreen({
   /** Creates a hosted Book **and its lexicon** for the signed-in account
    * (spec 0021-10 §1), then opens it in edit mode. */
   onCreateHostedBook: (title: string) => Promise<void>;
-  onOpenDocument: (docId: string, mode?: "maintain" | "propose") => void;
-  /** True for a lexicon document whose Book is not on this device — it has
-   * no screen to open (spec 0021-10 §2). */
-  orphanedLexicon?: (docId: string) => boolean;
+  onOpenDocument: (docId: string) => void;
+  /** Why this document cannot be edited from here, or `undefined` when it
+   * can (spec 0021-10 §2, spec 0021-11 §3): editing happens on the Book, so
+   * a lexicon whose Book is not on this device — or a Book that is not
+   * itself added — has no screen to open. Both lists show the reason
+   * instead of dead-ending. */
+  noEditorReason?: (docId: string) => string | undefined;
   onPrivacy: () => void;
   onBack: () => void;
 }) {
@@ -243,15 +252,12 @@ export function AuthorScreen({
                       {doc.listed ? "" : " · not listed yet"}
                     </span>
                   </button>
-                  {/* A lexicon has no learner screen of its own: it is edited
-                      on the Book that uses it (spec 0021-10 §2). Say so when
-                      that Book isn't on this device, rather than dead-ending
-                      on a screen with no words in context. */}
-                  {doc.kind === "domain" && orphanedLexicon(doc.id) && (
-                    <span className="status">
-                      add the Book that uses these words to edit them
-                    </span>
-                  )}
+                  {/* Editing happens on the Book, so a document with no Book
+                      on this device has no screen to open (spec 0021-10 §2).
+                      Say so, rather than dead-ending on a screen with no
+                      content in context — there is no form editor to fall
+                      back to any more (spec 0021-11 §3). */}
+                  <Unreachable reason={noEditorReason(doc.id)} />
                 </li>
               ))}
             </ul>
@@ -266,13 +272,17 @@ export function AuthorScreen({
             <ul className="card-list">
               {suggestable.map((row) => (
                 <li key={row.id} className="card">
-                  <button onClick={() => onOpenDocument(row.id, "propose")}>
+                  {/* No `mode` argument: the Book route carries only the
+                      Book, and the session resolves propose vs maintain from
+                      the document itself. */}
+                  <button onClick={() => onOpenDocument(row.id)}>
                     <strong>{row.id}</strong>
                     <span className="status">
                       {row.kind === "topic" ? "Book" : "Domain lexicon"} ·
                       version {row.published_version}
                     </span>
                   </button>
+                  <Unreachable reason={noEditorReason(row.id)} />
                 </li>
               ))}
             </ul>

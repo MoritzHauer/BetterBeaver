@@ -4,11 +4,14 @@ import type { Problem } from "@betterbeaver/engine";
 import {
   moveId,
   removeEntity,
+  removeFamily,
   removeNote,
   setNote,
   upsertDomainEntry,
   upsertEntity,
+  upsertFamily,
 } from "@betterbeaver/engine";
+import { type PickerOption, optionsFrom } from "../entityPicker";
 import { newEntityId } from "../../content/entity-ids";
 import { newPrivateId } from "../../content/private-ids";
 import type { LexiconAccess, NoteAsset } from "../../components/NoteEditor";
@@ -16,7 +19,7 @@ import type { AssetView } from "./AssetsManager";
 import type { EditSessionValue } from "./EditSessionContext";
 import { type Entity, firstResourceId } from "./types";
 
-/** Shared support for editing the learner screens in place (plan 0021 �§3).
+/** Shared support for editing the learner screens in place (plan 0021 �§3).
  * The mutations live here, not in the screens: every one of them has to pick
  * the right document and go through `documentEdit`'s ops, and none of that
  * is presentation. Slice 7 extends this for Book and Lesson. */
@@ -28,7 +31,7 @@ const list = (v: unknown): string[] =>
   Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
 
 /**
- * A quiet marker, never an error dialog (spec 0021-6 �§3). No `aria-invalid`:
+ * A quiet marker, never an error dialog (spec 0021-6 �§3). No `aria-invalid`:
  * a field the author is still filling in is not invalid, it is unfinished,
  * and announcing it as an error on every keystroke would be worse than
  * saying nothing.
@@ -45,7 +48,7 @@ export function ProblemMarker({ problems }: { problems: Problem[] }) {
   );
 }
 
-/** The two marker lookups every in-place screen needs (�§3): field-level
+/** The two marker lookups every in-place screen needs (�§3): field-level
  * problems carry a dotted `path`, entity-level ones carry none. */
 interface ProblemViews {
   fieldProblems: (id: string, path: string) => Problem[];
@@ -342,9 +345,35 @@ export interface BookEditOps extends ProblemViews {
    * `sourceRef` resolves against the *Book's* resources
    * (`validate.ts:785`), a genuine cross-document coupling. */
   sourceRefCount: (id: string) => number;
+  // ---- The lexicon's own Book-level settings (spec 0021-11 §1). ----
+  // `DomainEditor` was the only surface for these three, and each has a
+  // learner rendering, so deleting it without them strands shipped
+  // behaviour. They live on the Book screen for the reason Sources does:
+  // they belong to the whole Book, not to one unit.
+  /** False when the Book points at a lexicon this user does not maintain
+   * (slice 5 §4) — every control below is then hidden, not disabled. */
+  canEditLexicon: boolean;
+  /** Writes the Book's title **and its lexicon's** (decision 11: the two are
+   * one thing, and the lexicon is never named in the UI). The domain's own
+   * `title` is what `VocabularyScreen`'s heading shows, so leaving it behind
+   * would strand a rename halfway. */
+  setTitle: (title: string) => void;
+  /** BCP-47 tag; drives read-aloud (TTS) for every word in this lexicon
+   * (`UnitScreen:710`, `VocabularyScreen:242`). Absent on a Book created
+   * in-app, so without this control no new Book can ever speak. */
+  readAloudLang: string;
+  setReadAloudLang: (lang: string) => void;
+  /** Word families — `VocabularyScreen`'s "Word families" section, whose
+   * only authoring surface was `DomainEditor`'s family view. */
+  families: Entity[];
+  /** The lexicon's entries as picker options, for a family's member list. */
+  entryOptions: PickerOption[];
+  patchFamily: (next: Entity) => void;
+  addFamily: () => void;
+  dropFamily: (id: string) => void;
 }
 
-/** The Book screen's half of �§1, or `null` in learner mode. */
+/** The Book screen's half of �§1, or `null` in learner mode. */
 export function bookEditOps(
   session: EditSessionValue | null,
 ): BookEditOps | null {
@@ -360,6 +389,13 @@ export function bookEditOps(
   const lessons = book.lessons as Entity[];
   const patchBook = (next: Entity) =>
     session.changeBook({ ...book, topic: next });
+
+  const domain = session.domain;
+  const domainEntity = obj(domain.domain) as Entity;
+  const domainCode =
+    typeof domainEntity.code === "string" ? domainEntity.code : "";
+  const patchDomain = (next: Entity) =>
+    session.changeDomain({ ...domain, domain: next });
 
   return {
     rawBook: topic,
@@ -415,6 +451,38 @@ export function bookEditOps(
         ...((book.items as Entity[] | undefined) ?? []),
         ...((session.domain.entries as Entity[] | undefined) ?? []),
       ].filter((entity) => entity.sourceRef === id).length,
+    canEditLexicon: session.canEditLexicon,
+    setTitle: (title) => {
+      patchBook({ ...topic, title });
+      // Two documents, two slots, so both writes land — unlike the
+      // same-document pairs above, which have to go in one `changeBook`.
+      if (session.canEditLexicon) {
+        patchDomain({ ...domainEntity, title });
+      }
+    },
+    readAloudLang:
+      typeof domainEntity.readAloudLang === "string"
+        ? domainEntity.readAloudLang
+        : "",
+    // `.min(1).optional()`: cleared has to mean the key is *gone*, not `""`,
+    // which is exactly what `withOptionalKey` is for.
+    setReadAloudLang: (lang) =>
+      patchDomain(withOptionalKey(domainEntity, "readAloudLang", lang)),
+    families: (domain.families as Entity[] | undefined) ?? [],
+    entryOptions: optionsFrom((domain.entries as Entity[] | undefined) ?? []),
+    patchFamily: (next) => session.changeDomain(upsertFamily(domain, next)),
+    addFamily: () =>
+      session.changeDomain(
+        upsertFamily(domain, {
+          id: newEntityId(domainCode),
+          name: "",
+          entryIds: [],
+        }),
+      ),
+    // Named `dropFamily`, not `removeFamily`: the engine op of that name is
+    // imported here, and shadowing it inside the returned object literal
+    // reads as a recursive call at every future edit.
+    dropFamily: (id) => session.changeDomain(removeFamily(domain, id)),
   };
 }
 
@@ -508,10 +576,17 @@ export function withPayload(
   if (path.length === 1) {
     return { ...entity, payload: set(payload, path[0]) };
   }
-  return {
-    ...entity,
-    payload: { ...payload, [path[0]]: set(obj(payload[path[0]]), path[1]) },
-  };
+  // Emptying every field of a nested object deletes the object too, for the
+  // same reason its keys go: `lexeme.example` is
+  // `z.object({text, translation}).optional()`, so `{}` is *invalid* where
+  // absent is fine — clearing both halves would otherwise leave a problem
+  // marker the author has no way to clear.
+  const nested = set(obj(payload[path[0]]), path[1]);
+  const next = { ...payload, [path[0]]: nested };
+  if (Object.keys(nested).length === 0) {
+    delete next[path[0]];
+  }
+  return { ...entity, payload: next };
 }
 
 /** Sets an optional top-level key, or **deletes** it when the value is

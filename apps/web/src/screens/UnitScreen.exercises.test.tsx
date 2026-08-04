@@ -173,6 +173,7 @@ function makeSession(
       changeBook: (next) => books.push(next),
       changeDomain: () => {},
       content: build(book, stems),
+      domainContent: {} as EditSessionValue["domainContent"],
       noteMarkdown: () => undefined,
       problems: [],
       problemsByEntity: new Map(),

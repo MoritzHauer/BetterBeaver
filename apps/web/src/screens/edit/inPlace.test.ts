@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { BookDocument, DomainDocument } from "@betterbeaver/schema";
 import type { EditSessionValue } from "./EditSessionContext";
-import { unitEditOps, withOptionalKey, withPayload } from "./inPlace";
+import {
+  bookEditOps,
+  unitEditOps,
+  withOptionalKey,
+  withPayload,
+} from "./inPlace";
 
 /**
  * The two mutations that fail *silently* (spec 0021-6 §2d, §2a): writing an
@@ -68,6 +73,7 @@ function makeSession(overrides: Partial<EditSessionValue> = {}) {
     changeBook: (next: BookDocument) => written.book.push(next),
     changeDomain: (next: DomainDocument) => written.domain.push(next),
     content: {} as EditSessionValue["content"],
+    domainContent: {} as EditSessionValue["domainContent"],
     noteMarkdown: () => undefined,
     problems: [],
     problemsByEntity: new Map(),
@@ -198,6 +204,60 @@ describe("unitEditOps", () => {
   });
 });
 
+/** The Book-level surfaces that write the *lexicon* (spec 0021-11 §1) —
+ * the ones `DomainEditor` used to own. Each writes the other document, which
+ * is the failure mode `unitEditOps`' own routing test exists for. */
+describe("bookEditOps, on the lexicon's behalf", () => {
+  it("renames the lexicon with the Book, since they are one thing", () => {
+    const { session, written } = makeSession();
+    bookEditOps(session)!.setTitle("Kyrgyz for travel");
+
+    const renamed = (d: DomainDocument | BookDocument) =>
+      (("topic" in d ? d.topic : d.domain) as { title: string }).title;
+    expect(renamed(written.book[0]!)).toBe("Kyrgyz for travel");
+    // `VocabularyScreen`'s heading reads the *domain's* title, so a rename
+    // that stopped at the Book would leave the two disagreeing forever.
+    expect(renamed(written.domain[0]!)).toBe("Kyrgyz for travel");
+  });
+
+  it("renames only the Book when the lexicon is somebody else's", () => {
+    const { session, written } = makeSession({ canEditLexicon: false });
+    bookEditOps(session)!.setTitle("Mine");
+
+    expect(written.book).toHaveLength(1);
+    expect(written.domain).toHaveLength(0);
+  });
+
+  it("clears read-aloud by deleting the key, not by emptying it", () => {
+    const { session, written } = makeSession();
+    const ops = bookEditOps(session)!;
+
+    ops.setReadAloudLang("ky");
+    expect(
+      (written.domain[0]!.domain as { readAloudLang?: string }).readAloudLang,
+    ).toBe("ky");
+    // `.min(1).optional()`: `""` is unpublishable where absent is fine.
+    ops.setReadAloudLang("");
+    expect("readAloudLang" in (written.domain[1]!.domain as object)).toBe(
+      false,
+    );
+  });
+
+  it("adds a word family to the lexicon, with its code", () => {
+    const { session, written } = makeSession();
+    const ops = bookEditOps(session)!;
+
+    ops.addFamily();
+    const families = written.domain[0]!.families as { id: string }[];
+    expect(families).toHaveLength(1);
+    expect(families[0]!.id.startsWith("dm-")).toBe(true);
+    expect(written.book).toHaveLength(0);
+
+    // The picker behind a family's member list is over lexicon entries.
+    expect(ops.entryOptions.map((option) => option.id)).toEqual(["dm-e1"]);
+  });
+});
+
 describe("withPayload", () => {
   it("deletes a field cleared to empty, so its problem marker comes back", () => {
     const set = withPayload({ id: "i", payload: {} }, ["term"], "Dam");
@@ -216,6 +276,22 @@ describe("withPayload", () => {
       a: { script: "one" },
       b: { script: "two" },
     });
+  });
+
+  it("deletes a nested object once its last field is cleared", () => {
+    // `lexeme.example` is `z.object({text, translation}).optional()`, so an
+    // emptied `{}` is *invalid* where absent is fine — leaving it behind
+    // would pin a problem marker the author has no control that clears.
+    const filled = withPayload(
+      withPayload({ id: "i", payload: {} }, ["example", "text"], "Салам"),
+      ["example", "translation"],
+      "hello",
+    );
+    const half = withPayload(filled, ["example", "text"], "");
+    expect(half.payload).toEqual({ example: { translation: "hello" } });
+
+    const empty = withPayload(half, ["example", "translation"], "");
+    expect("example" in (empty.payload as object)).toBe(false);
   });
 });
 
