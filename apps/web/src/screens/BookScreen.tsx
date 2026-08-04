@@ -9,11 +9,15 @@ import {
   isUnitUnlocked,
   nextUnit,
 } from "@betterbeaver/engine";
+import { BOOK_ICONS } from "@betterbeaver/schema";
 import { ConfirmSheet } from "../components/Sheet";
 import { LockableProgress } from "../components/ProgressBar";
 import { FeedbackWidget } from "../components/FeedbackWidget";
 import { ChatThread } from "../components/ChatThread";
 import { BookWatermark } from "../components/BookWatermark";
+import { useEditSession } from "./edit/EditSessionContext";
+import { ProblemMarker, bookEditOps, withOptionalKey } from "./edit/inPlace";
+import { RowActions } from "./edit/fields";
 
 const CHAT_ENABLED = false;
 
@@ -90,6 +94,10 @@ export function BookScreen({
   const [dueCount, setDueCount] = useState<number | null>(null);
   const [streak, setStreak] = useState<Streak | null>(null);
   const [pendingLessonId, setPendingLessonId] = useState<string | null>(null);
+  // Edit mode (plan 0021 §1), same shape as the Unit screen: `null` in
+  // learner mode, and every editable surface is `edit === null ? … : …`.
+  const edit = bookEditOps(useEditSession());
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -139,6 +147,9 @@ export function BookScreen({
   // gets here — but the name is resolved defensively all the same.
   const pendingLesson =
     pendingLessonId !== null ? lessonById.get(pendingLessonId) : undefined;
+  // Named by title, never by id — the id is a UUID and means nothing.
+  const pendingDelete =
+    pendingDeleteId !== null ? lessonById.get(pendingDeleteId) : undefined;
   const blockingLesson =
     pendingLesson?.unlocksAfterLessonId !== undefined
       ? lessonById.get(pendingLesson.unlocksAfterLessonId)
@@ -177,69 +188,154 @@ export function BookScreen({
           </span>
         ) : null}
       </header>
-      <h1>{content.topic.title}</h1>
-      {unpublishedChanges && <p className="status">unpublished changes</p>}
-      <p>{content.topic.description}</p>
-      <FeedbackWidget
-        docId={`topic:${content.topic.id}`}
-        contentKind="topic"
-        contentId={content.topic.id}
-      />
-      <ul className="card-list">
-        <li className={"card" + (playDisabled ? "" : " primary")}>
-          <button onClick={onPlay} disabled={playDisabled}>
-            <strong>
-              <img
-                className="icon-glyph"
-                src={`${import.meta.env.BASE_URL}art/icons/${bookComplete ? "trophy" : "play"}.png`}
-                alt=""
-              />{" "}
-              {bookComplete ? "Book complete" : "Continue learning"}
-            </strong>
-          </button>
-        </li>
-        <li className={`card review${dueCount !== 0 ? " primary" : ""}`}>
-          <button onClick={onReview} disabled={dueCount === 0}>
-            <strong>Daily Review</strong>
-            {dueCount !== null && dueCount > 0 ? (
-              <span className="badge">{dueCount}</span>
-            ) : null}
-            <p className="status">
-              {dueCount === null
-                ? "Loading…"
-                : dueCount === 0
-                  ? "Nothing due"
-                  : `${dueCount} due`}
-            </p>
-          </button>
-        </li>
-        <li className={`card${practicePool.length > 0 ? " primary" : ""}`}>
-          <button
-            disabled={practicePool.length === 0}
-            onClick={() => {
-              const target =
-                practicePool[Math.floor(Math.random() * practicePool.length)];
-              if (target !== undefined) {
-                onPracticeTask(target);
+      {edit === null ? (
+        <>
+          <h1>{content.topic.title}</h1>
+          {unpublishedChanges && <p className="status">unpublished changes</p>}
+          <p>{content.topic.description}</p>
+          {/* Reporting a problem in content you are editing is a loop, so
+              this and the chat block below are hidden in edit mode. */}
+          <FeedbackWidget
+            docId={`topic:${content.topic.id}`}
+            contentKind="topic"
+            contentId={content.topic.id}
+          />
+        </>
+      ) : (
+        <>
+          <label className="field">
+            Title
+            <input
+              type="text"
+              value={content.topic.title}
+              onChange={(e) =>
+                edit.patchBook({ ...edit.rawBook, title: e.target.value })
               }
-            }}
-          >
-            <strong>Practice</strong>
-            <p className="status">A random task from your opened lessons</p>
-          </button>
-        </li>
-        <li className="card vocab">
-          <button onClick={onVocabulary}>
-            <strong>
-              <img
-                className="icon-glyph"
-                src={`${import.meta.env.BASE_URL}art/icons/book_front.png`}
-                alt=""
-              />{" "}
-              Vocabulary
-            </strong>
-          </button>
-        </li>
+            />
+          </label>
+          <ProblemMarker problems={edit.fieldProblems("topic", "title")} />
+          <label className="field">
+            Description
+            <textarea
+              rows={3}
+              value={content.topic.description}
+              onChange={(e) =>
+                edit.patchBook({ ...edit.rawBook, description: e.target.value })
+              }
+            />
+          </label>
+          <ProblemMarker
+            problems={edit.fieldProblems("topic", "description")}
+          />
+          <label className="field">
+            Icon
+            <select
+              value={content.topic.icon ?? ""}
+              onChange={(e) =>
+                edit.patchBook(
+                  withOptionalKey(edit.rawBook, "icon", e.target.value),
+                )
+              }
+            >
+              <option value="">(none)</option>
+              {BOOK_ICONS.map((icon) => (
+                <option key={icon} value={icon}>
+                  {icon}
+                </option>
+              ))}
+            </select>
+          </label>
+          {/* Hidden for a private Book, not disabled: the watermark is loaded
+              from `art/icons/<book.id>.png` in the app's *public* assets,
+              which a private Book can never reach — offering a control that
+              could only ever silently fail is worse than not offering it
+              (`BookEditor.tsx:46-51`, same rationale). */}
+          {!edit.isPrivate && (
+            <label className="field">
+              Cover art
+              <input
+                type="checkbox"
+                checked={content.topic.hasCoverArt === true}
+                onChange={(e) =>
+                  edit.patchBook(
+                    withOptionalKey(
+                      edit.rawBook,
+                      "hasCoverArt",
+                      e.target.checked,
+                    ),
+                  )
+                }
+              />
+            </label>
+          )}
+          <ProblemMarker problems={edit.entityProblems("topic")} />
+        </>
+      )}
+      <ul className="card-list">
+        {/* Progress affordances, not content (§1c): all four are hidden in
+            edit mode. Play in particular derives from `nextUnit`/`dueUnits`
+            over the *published* content while you are looking at a draft, so
+            it would be actively misleading. */}
+        {edit === null && (
+          <>
+            <li className={"card" + (playDisabled ? "" : " primary")}>
+              <button onClick={onPlay} disabled={playDisabled}>
+                <strong>
+                  <img
+                    className="icon-glyph"
+                    src={`${import.meta.env.BASE_URL}art/icons/${bookComplete ? "trophy" : "play"}.png`}
+                    alt=""
+                  />{" "}
+                  {bookComplete ? "Book complete" : "Continue learning"}
+                </strong>
+              </button>
+            </li>
+            <li className={`card review${dueCount !== 0 ? " primary" : ""}`}>
+              <button onClick={onReview} disabled={dueCount === 0}>
+                <strong>Daily Review</strong>
+                {dueCount !== null && dueCount > 0 ? (
+                  <span className="badge">{dueCount}</span>
+                ) : null}
+                <p className="status">
+                  {dueCount === null
+                    ? "Loading…"
+                    : dueCount === 0
+                      ? "Nothing due"
+                      : `${dueCount} due`}
+                </p>
+              </button>
+            </li>
+            <li className={`card${practicePool.length > 0 ? " primary" : ""}`}>
+              <button
+                disabled={practicePool.length === 0}
+                onClick={() => {
+                  const target =
+                    practicePool[
+                      Math.floor(Math.random() * practicePool.length)
+                    ];
+                  if (target !== undefined) {
+                    onPracticeTask(target);
+                  }
+                }}
+              >
+                <strong>Practice</strong>
+                <p className="status">A random task from your opened lessons</p>
+              </button>
+            </li>
+            <li className="card vocab">
+              <button onClick={onVocabulary}>
+                <strong>
+                  <img
+                    className="icon-glyph"
+                    src={`${import.meta.env.BASE_URL}art/icons/book_front.png`}
+                    alt=""
+                  />{" "}
+                  Vocabulary
+                </strong>
+              </button>
+            </li>
+          </>
+        )}
         {content.topic.lessonIds.map((lessonId) => {
           const lesson = lessonById.get(lessonId);
           if (lesson === undefined) {
@@ -260,6 +356,64 @@ export function BookScreen({
             const unit = content.units.find((u) => u.id === id);
             return unit !== undefined && isUnitComplete(unit, attemptedTaskIds);
           }).length;
+          if (edit !== null) {
+            const raw = edit.rawLesson(lesson.id) ?? { id: lesson.id };
+            // The card can't stay one big <button> once it holds inputs, so
+            // opening the lesson becomes its own control. The lock glyph and
+            // progress bar stay (§1c): a lock is the learner-visible face of
+            // `unlocksAfterLessonId`, and seeing it is how the author checks
+            // the chain they just authored.
+            return (
+              <li
+                key={lesson.id}
+                className={`card${unlocked ? "" : " locked"}`}
+              >
+                <label className="field">
+                  {unlocked ? "Lesson" : "\u{1F512} Lesson"}
+                  <input
+                    type="text"
+                    value={lesson.title}
+                    onChange={(e) =>
+                      edit.patchLesson({ ...raw, title: e.target.value })
+                    }
+                  />
+                </label>
+                <ProblemMarker
+                  problems={edit.fieldProblems(lesson.id, "title")}
+                />
+                <label className="field">
+                  Goal
+                  <textarea
+                    rows={2}
+                    value={lesson.goal}
+                    onChange={(e) =>
+                      edit.patchLesson({ ...raw, goal: e.target.value })
+                    }
+                  />
+                </label>
+                <ProblemMarker
+                  problems={edit.fieldProblems(lesson.id, "goal")}
+                />
+                <ProblemMarker problems={edit.entityProblems(lesson.id)} />
+                <LockableProgress
+                  unlocked={unlocked}
+                  value={completeCount}
+                  max={lesson.unitIds.length}
+                />
+                <RowActions
+                  onUp={() => edit.moveLesson(lesson.id, -1)}
+                  onDown={() => edit.moveLesson(lesson.id, 1)}
+                  onRemove={() => setPendingDeleteId(lesson.id)}
+                />
+                <button
+                  className="plain"
+                  onClick={() => onSelectLesson(lesson.id)}
+                >
+                  Open &rsaquo;
+                </button>
+              </li>
+            );
+          }
           return (
             <li key={lesson.id} className={`card${unlocked ? "" : " locked"}`}>
               <button
@@ -287,9 +441,35 @@ export function BookScreen({
           );
         })}
       </ul>
+      {edit !== null && (
+        <>
+          {/* Book-level problems — a dangling `topic.lessonIds` reference is
+              the usual one — belong beside the list they are about. */}
+          <ProblemMarker problems={edit.fieldProblems("topic", "lessonIds")} />
+          <button type="button" className="editor-add" onClick={edit.addLesson}>
+            + lesson
+          </button>
+        </>
+      )}
       {/* ponytail: chat deactivated per owner call, not removed — code
        * stays intact for later; flip this back to re-enable. */}
-      {CHAT_ENABLED && <ChatThread docId={`topic:${content.topic.id}`} />}
+      {CHAT_ENABLED && edit === null && (
+        <ChatThread docId={`topic:${content.topic.id}`} />
+      )}
+      {pendingDelete !== undefined && (
+        <ConfirmSheet
+          icon="lock_key"
+          title="Delete this lesson?"
+          body={`“${pendingDelete.title}” and everything under it will be removed from this Book.`}
+          cancelLabel="Keep it"
+          confirmLabel="Delete"
+          onCancel={() => setPendingDeleteId(null)}
+          onConfirm={() => {
+            setPendingDeleteId(null);
+            edit?.removeLesson(pendingDelete.id);
+          }}
+        />
+      )}
       {pendingLesson !== undefined && (
         <ConfirmSheet
           icon="lock_key"

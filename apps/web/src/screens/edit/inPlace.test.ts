@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { BookDocument, DomainDocument } from "@betterbeaver/schema";
 import type { EditSessionValue } from "./EditSessionContext";
-import { unitEditOps, withPayload, withUnlocksAfter } from "./inPlace";
+import { unitEditOps, withOptionalKey, withPayload } from "./inPlace";
 
 /**
  * The two mutations that fail *silently* (spec 0021-6 §2d, §2a): writing an
@@ -212,14 +212,23 @@ describe("withPayload", () => {
   });
 });
 
-describe("withUnlocksAfter", () => {
+describe("withOptionalKey", () => {
   it("deletes the key when cleared, rather than setting undefined", () => {
-    const set = withUnlocksAfter({ id: "u" }, "bk-u2");
+    const set = withOptionalKey({ id: "u" }, "unlocksAfterUnitId", "bk-u2");
     expect(set.unlocksAfterUnitId).toBe("bk-u2");
 
-    const cleared = withUnlocksAfter(set, undefined);
+    const cleared = withOptionalKey(set, "unlocksAfterUnitId", undefined);
     // `=== undefined` would pass on the bug: an `undefined` value survives
     // in memory and vanishes across the JSON round-trip to storage.
     expect("unlocksAfterUnitId" in cleared).toBe(false);
+  });
+
+  it("treats an unchecked box and a cleared select as absent too", () => {
+    const withArt = withOptionalKey({ id: "b" }, "hasCoverArt", true);
+    expect(
+      "hasCoverArt" in withOptionalKey(withArt, "hasCoverArt", false),
+    ).toBe(false);
+    const withIcon = withOptionalKey({ id: "b" }, "icon", "🦫");
+    expect("icon" in withOptionalKey(withIcon, "icon", "")).toBe(false);
   });
 });

@@ -428,7 +428,18 @@ export function EntityPicker({
                       type={multiple ? "checkbox" : "radio"}
                       name={multiple ? undefined : label}
                       checked={selectedSet.has(row.id)}
-                      onChange={() => toggle(row.id)}
+                      // A single-select clears by tapping its own selected
+                      // row — and clicking an already-checked radio changes
+                      // nothing, so `change` never fires and `toggle`'s
+                      // clear branch was unreachable. `click` fires either
+                      // way (keyboard activation included). The checkbox
+                      // keeps `change`, where it works.
+                      {...(multiple
+                        ? { onChange: () => toggle(row.id) }
+                        : {
+                            onClick: () => toggle(row.id),
+                            onChange: () => {},
+                          })}
                     />
                     {row.title}
                     {row.unresolved && " · unresolved"}

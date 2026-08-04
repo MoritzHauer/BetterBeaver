@@ -121,21 +121,31 @@ describe("edit mode as a route flag", () => {
   it("survives book → lesson → unit and back", async () => {
     await enterEditMode();
 
-    // Down: Book → Lesson.
-    (await screen.findByRole("button", { name: /Meet BetterBeaver/ })).click();
-    await screen.findByRole("heading", { name: /Meet BetterBeaver/ });
+    // Down: Book → Lesson. From slice 7 the lesson card holds inputs, so
+    // opening it is its own control rather than the whole card.
+    (await screen.findByRole("button", { name: /Open/ })).click();
+    expect(await screen.findByDisplayValue("Meet BetterBeaver")).toBeTruthy();
     expect(editBar()).not.toBeNull();
 
     // Lesson → Unit. Its title is an input, not a heading, from slice 6 on —
     // the unit edits in place.
-    (await screen.findByRole("button", { name: /Beaver basics/ })).click();
+    (await screen.findAllByRole("button", { name: /Open/ }))[0]!.click();
     expect(await screen.findByDisplayValue("Beaver basics")).toBeTruthy();
+    // The Unit trail, not the Lesson screen: only the unit has page dots.
+    expect(
+      screen.getAllByRole("button", { name: /^Page \d+ of/ }).length,
+    ).toBeGreaterThan(0);
     expect(editBar()).not.toBeNull();
 
     // Up again, by hardware back — which must behave exactly as it does from
     // the same screen without edit mode: one level up, still editing.
     window.dispatchEvent(new PopStateEvent("popstate"));
-    await screen.findByRole("heading", { name: /Meet BetterBeaver/ });
+    await waitFor(() =>
+      expect(screen.queryAllByRole("button", { name: /^Page \d+ of/ })).toEqual(
+        [],
+      ),
+    );
+    expect(await screen.findByDisplayValue("Meet BetterBeaver")).toBeTruthy();
     expect(editBar()).not.toBeNull();
   });
 
@@ -148,7 +158,9 @@ describe("edit mode as a route flag", () => {
     await waitFor(() => expect(editBar()?.textContent).toContain("saved"));
     await openMenu();
     screen.getByRole("button", { name: /Edit all fields/ }).click();
-    expect(await screen.findByLabelText("Title")).toBeTruthy();
+    expect(
+      await screen.findByRole("button", { name: "New lesson" }),
+    ).toBeTruthy();
   });
 
   it("holds the Book and its lexicon together in maintain mode", async () => {
@@ -158,7 +170,9 @@ describe("edit mode as a route flag", () => {
     // The lexicon is only offered once its own document is in hand — the
     // Book names it, so it cannot even be looked up until the Book loads.
     screen.getByRole("button", { name: "Words" }).click();
-    expect(await screen.findByLabelText("Title")).toBeTruthy();
+    expect(
+      await screen.findByRole("button", { name: "New entry" }),
+    ).toBeTruthy();
     expect(
       screen.queryByText(/you can use them, but not change them/),
     ).toBeNull();
@@ -180,8 +194,12 @@ describe("edit mode as a route flag", () => {
     await enterEditMode();
     await openMenu();
     screen.getByRole("button", { name: /Edit all fields/ }).click();
+    // Wait for the panel itself, not just for *a* "Title" — the Book screen
+    // has one of its own now, and querying too early would type into an
+    // input the panel is about to unmount.
+    await screen.findByRole("button", { name: "New lesson" });
 
-    const title = await screen.findByLabelText("Title");
+    const title = screen.getByLabelText("Title");
     (title as HTMLInputElement).focus();
     // The 400 ms debounce is deliberately still pending when the session
     // unmounts a few lines below — the flush is what has to catch it.

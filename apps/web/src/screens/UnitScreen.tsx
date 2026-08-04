@@ -13,7 +13,7 @@ import {
   type UnitEditOps,
   unitEditOps,
   withPayload,
-  withUnlocksAfter,
+  withOptionalKey,
 } from "./edit/inPlace";
 import { EntityPicker, RowActions } from "./edit/fields";
 import { unitPoolOptionsGroupedByLesson } from "./entityPicker";
@@ -641,7 +641,9 @@ export function UnitScreen({
                   : []
               }
               onChange={(ids) =>
-                edit.patchUnit(withUnlocksAfter(edit.rawUnit, ids[0]))
+                edit.patchUnit(
+                  withOptionalKey(edit.rawUnit, "unlocksAfterUnitId", ids[0]),
+                )
               }
               multiple={false}
               groupBy

@@ -44,7 +44,22 @@ export function ProblemMarker({ problems }: { problems: Problem[] }) {
   );
 }
 
-export interface UnitEditOps {
+/** The two marker lookups every in-place screen needs (§3): field-level
+ * problems carry a dotted `path`, entity-level ones carry none. */
+interface ProblemViews {
+  fieldProblems: (id: string, path: string) => Problem[];
+  entityProblems: (id: string) => Problem[];
+}
+
+function problemViews(session: EditSessionValue): ProblemViews {
+  const of = (id: string) => session.problemsByEntity.get(id) ?? [];
+  return {
+    fieldProblems: (id, path) => of(id).filter((p) => p.path === path),
+    entityProblems: (id) => of(id).filter((p) => p.path === undefined),
+  };
+}
+
+export interface UnitEditOps extends ProblemViews {
   /** The unit as it is stored, not as `draftContent` coerced it — every
    * write starts from this so nothing the adapter dropped is lost. */
   rawUnit: Entity;
@@ -61,8 +76,6 @@ export interface UnitEditOps {
    * coerced one, so an input shows exactly what will be written back. */
   payloadValue: (id: string, ...path: string[]) => string;
   problemsFor: (id: string) => Problem[];
-  fieldProblems: (id: string, path: string) => Problem[];
-  entityProblems: (id: string) => Problem[];
   patchUnit: (next: Entity) => void;
   /** Writes one item/entry back to whichever document owns it. */
   patchEntity: (next: Entity) => void;
@@ -155,14 +168,7 @@ export function unitEditOps(
       return typeof current === "string" ? current : "";
     },
     problemsFor: (id) => session.problemsByEntity.get(id) ?? [],
-    fieldProblems: (id, path) =>
-      (session.problemsByEntity.get(id) ?? []).filter(
-        (problem) => problem.path === path,
-      ),
-    entityProblems: (id) =>
-      (session.problemsByEntity.get(id) ?? []).filter(
-        (problem) => problem.path === undefined,
-      ),
+    ...problemViews(session),
     patchUnit,
     patchEntity: (next) => {
       // An id in neither document is a dangling `itemIds` reference, which
@@ -266,6 +272,132 @@ export function unitEditOps(
   };
 }
 
+export interface BookEditOps extends ProblemViews {
+  /** The Book's own entity (`topic`), as stored. */
+  rawBook: Entity;
+  /** A private Book can never reach the app's public assets, so it is never
+   * offered the cover-art toggle (§1a). */
+  isPrivate: boolean;
+  patchBook: (next: Entity) => void;
+  rawLesson: (id: string) => Entity | undefined;
+  patchLesson: (next: Entity) => void;
+  moveLesson: (id: string, delta: -1 | 1) => void;
+  removeLesson: (id: string) => void;
+  addLesson: () => void;
+}
+
+/** The Book screen's half of §1, or `null` in learner mode. */
+export function bookEditOps(
+  session: EditSessionValue | null,
+): BookEditOps | null {
+  if (session === null) {
+    return null;
+  }
+  const book = session.book;
+  const topic = obj(book.topic) as Entity;
+  const bookCode = typeof topic.code === "string" ? topic.code : "";
+  const lessons = book.lessons as Entity[];
+  const patchBook = (next: Entity) =>
+    session.changeBook({ ...book, topic: next });
+
+  return {
+    rawBook: topic,
+    isPrivate: session.mode === "private",
+    ...problemViews(session),
+    patchBook,
+    rawLesson: (id) => lessons.find((l) => l.id === id),
+    patchLesson: (next) =>
+      session.changeBook(upsertEntity(book, "lessons", next)),
+    moveLesson: (id, delta) =>
+      patchBook({
+        ...topic,
+        lessonIds: moveId(list(topic.lessonIds), id, delta),
+      }),
+    // `removeEntity` strips the id from `topic.lessonIds` and every other
+    // reference; doing it by hand would orphan the lesson.
+    removeLesson: (id) => session.changeBook(removeEntity(book, "lessons", id)),
+    addLesson: () => {
+      // One `changeBook`: the entity and the reference land together, or the
+      // second write starts from this closure's stale `book`.
+      const id = newEntityId(bookCode);
+      const withLesson = upsertEntity(book, "lessons", {
+        id,
+        // A `topicId` that doesn't match its Book is validator class (a).
+        topicId: typeof topic.id === "string" ? topic.id : "",
+        title: "",
+        goal: "",
+        unitIds: [],
+      });
+      session.changeBook({
+        ...withLesson,
+        topic: { ...topic, lessonIds: [...list(topic.lessonIds), id] },
+      });
+    },
+  };
+}
+
+export interface LessonEditOps extends ProblemViews {
+  rawLesson: Entity;
+  patchLesson: (next: Entity) => void;
+  rawUnit: (id: string) => Entity | undefined;
+  patchUnit: (next: Entity) => void;
+  moveUnit: (id: string, delta: -1 | 1) => void;
+  removeUnit: (id: string) => void;
+  addUnit: () => void;
+}
+
+/** The Lesson screen's half of §2, or `null` in learner mode. */
+export function lessonEditOps(
+  session: EditSessionValue | null,
+  lessonId: string,
+): LessonEditOps | null {
+  if (session === null) {
+    return null;
+  }
+  const book = session.book;
+  const topic = obj(book.topic) as Entity;
+  const bookCode = typeof topic.code === "string" ? topic.code : "";
+  const rawLesson = (book.lessons as Entity[]).find(
+    (l) => l.id === lessonId,
+  ) ?? { id: lessonId };
+  const patchLesson = (next: Entity) =>
+    session.changeBook(upsertEntity(book, "lessons", next));
+
+  return {
+    rawLesson,
+    ...problemViews(session),
+    patchLesson,
+    rawUnit: (id) => (book.units as Entity[]).find((u) => u.id === id),
+    patchUnit: (next) => session.changeBook(upsertEntity(book, "units", next)),
+    moveUnit: (id, delta) =>
+      patchLesson({
+        ...rawLesson,
+        unitIds: moveId(list(rawLesson.unitIds), id, delta),
+      }),
+    removeUnit: (id) => session.changeBook(removeEntity(book, "units", id)),
+    addUnit: () => {
+      const id = newEntityId(bookCode);
+      const withUnit = upsertEntity(book, "units", {
+        id,
+        // Must match the owning lesson: a mismatch is validator class (a),
+        // and a unit no lesson lists is class (d).
+        lessonId,
+        title: "",
+        goal: "",
+        itemIds: [],
+        taskIds: [],
+        noteIds: [],
+      });
+      session.changeBook(
+        upsertEntity(withUnit, "lessons", {
+          ...rawLesson,
+          unitIds: [...list(rawLesson.unitIds), id],
+        }),
+      );
+    },
+  };
+}
+
 /** Immutable set of one `payload` field. An empty value **deletes** the
  * key, the same rule `fields.tsx`'s `setPath` follows, and it is load-bearing
  * twice over: zod's `optional()` expects an absent key rather than `""` (so
@@ -297,17 +429,23 @@ export function withPayload(
   };
 }
 
-/** Sets or clears `unlocksAfterUnitId`. Clearing must **delete** the key,
- * not set `undefined`: zod's `optional()` expects the key absent, and an
- * `undefined` value survives in memory while vanishing across the JSON
- * round-trip to localStorage / the private store, leaving the live document
- * and its persisted copy disagreeing. Same trap `BookEditor.tsx:263` records. */
-export function withUnlocksAfter(unit: Entity, id: string | undefined): Entity {
-  const next = { ...unit };
-  if (id === undefined) {
-    delete next.unlocksAfterUnitId;
+/** Sets an optional top-level key, or **deletes** it when the value is
+ * empty (`undefined`, `""` or `false`). Deleting is the whole point: zod's
+ * `optional()` expects the key absent, and an `undefined` value survives in
+ * memory while vanishing across the JSON round-trip to localStorage / the
+ * private store, leaving the live document and its persisted copy
+ * disagreeing. `BookEditor.tsx:263` records the same trap for
+ * `unlocksAfterUnitId`; `icon` and `hasCoverArt` need it too. */
+export function withOptionalKey(
+  entity: Entity,
+  key: string,
+  value: string | boolean | undefined,
+): Entity {
+  const next = { ...entity };
+  if (value === undefined || value === "" || value === false) {
+    delete next[key];
   } else {
-    next.unlocksAfterUnitId = id;
+    next[key] = value;
   }
   return next;
 }

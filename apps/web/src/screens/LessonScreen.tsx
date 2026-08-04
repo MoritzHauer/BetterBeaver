@@ -5,6 +5,10 @@ import { ConfirmSheet } from "../components/Sheet";
 import { LockableProgress } from "../components/ProgressBar";
 import { FeedbackWidget } from "../components/FeedbackWidget";
 import { BookWatermark } from "../components/BookWatermark";
+import { useEditSession } from "./edit/EditSessionContext";
+import { ProblemMarker, lessonEditOps, withOptionalKey } from "./edit/inPlace";
+import { EntityPicker, RowActions } from "./edit/fields";
+import { optionsFrom } from "./entityPicker";
 import type { PracticeTarget } from "./BookScreen";
 import { lessonPracticeTargets } from "./BookScreen";
 
@@ -34,6 +38,9 @@ export function LessonScreen({
   // Ahead of the unknown-lesson early return below: hooks cannot be
   // conditional.
   const [pendingUnitId, setPendingUnitId] = useState<string | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  // Edit mode (plan 0021 §2), same shape as the Book and Unit screens.
+  const edit = lessonEditOps(useEditSession(), lessonId);
 
   const lesson = content.lessons.find((l) => l.id === lessonId);
   if (lesson === undefined) {
@@ -68,6 +75,8 @@ export function LessonScreen({
   const blockingUnit = units.find(
     (u) => u.id === pendingUnit?.unlocksAfterUnitId,
   );
+  // Named by title, never by id.
+  const pendingDelete = units.find((u) => u.id === pendingDeleteId);
 
   return (
     <main>
@@ -92,35 +101,136 @@ export function LessonScreen({
           </button>
         )}
       </header>
-      <h1>{lesson.title}</h1>
-      <p>{lesson.goal}</p>
-      <FeedbackWidget
-        docId={`topic:${content.topic.id}`}
-        contentKind="lesson"
-        contentId={lesson.id}
-      />
-      <ul className="card-list">
-        <li className={`card${practicePool.length > 0 ? " primary" : ""}`}>
-          <button
-            disabled={practicePool.length === 0}
-            onClick={() => {
-              const target =
-                practicePool[Math.floor(Math.random() * practicePool.length)];
-              if (target !== undefined) {
-                onPracticeTask(target);
+      {edit === null ? (
+        <>
+          <h1>{lesson.title}</h1>
+          <p>{lesson.goal}</p>
+          <FeedbackWidget
+            docId={`topic:${content.topic.id}`}
+            contentKind="lesson"
+            contentId={lesson.id}
+          />
+        </>
+      ) : (
+        <>
+          <label className="field">
+            Title
+            <input
+              type="text"
+              value={lesson.title}
+              onChange={(e) =>
+                edit.patchLesson({ ...edit.rawLesson, title: e.target.value })
               }
-            }}
-          >
-            <strong>Practice</strong>
-            <p className="status">A random task from your opened units</p>
-          </button>
-        </li>
+            />
+          </label>
+          <ProblemMarker problems={edit.fieldProblems(lesson.id, "title")} />
+          <label className="field">
+            Goal
+            <textarea
+              rows={3}
+              value={lesson.goal}
+              onChange={(e) =>
+                edit.patchLesson({ ...edit.rawLesson, goal: e.target.value })
+              }
+            />
+          </label>
+          <ProblemMarker problems={edit.fieldProblems(lesson.id, "goal")} />
+          <ProblemMarker problems={edit.entityProblems(lesson.id)} />
+          {/* Edited here, on the entity it belongs to, even though its
+              learner surface is the lock on the Book screen's card. */}
+          <EntityPicker
+            label="Unlocks after"
+            options={optionsFrom(
+              content.lessons.filter((l) => l.id !== lesson.id),
+            )}
+            selected={
+              lesson.unlocksAfterLessonId !== undefined
+                ? [lesson.unlocksAfterLessonId]
+                : []
+            }
+            onChange={(ids) =>
+              edit.patchLesson(
+                withOptionalKey(edit.rawLesson, "unlocksAfterLessonId", ids[0]),
+              )
+            }
+            multiple={false}
+            hideIds
+          />
+        </>
+      )}
+      <ul className="card-list">
+        {/* A progress affordance over published content, meaningless while
+            you are looking at a draft (§2b). */}
+        {edit === null && (
+          <li className={`card${practicePool.length > 0 ? " primary" : ""}`}>
+            <button
+              disabled={practicePool.length === 0}
+              onClick={() => {
+                const target =
+                  practicePool[Math.floor(Math.random() * practicePool.length)];
+                if (target !== undefined) {
+                  onPracticeTask(target);
+                }
+              }}
+            >
+              <strong>Practice</strong>
+              <p className="status">A random task from your opened units</p>
+            </button>
+          </li>
+        )}
         {units.map((unit) => {
           const unlocked = isUnitUnlocked(unit, units, attemptedTaskIds);
           const complete = isUnitComplete(unit, attemptedTaskIds);
           const attemptedCount = unit.taskIds.filter((id) =>
             attemptedTaskIds.has(id),
           ).length;
+          if (edit !== null) {
+            const raw = edit.rawUnit(unit.id) ?? { id: unit.id };
+            return (
+              <li key={unit.id} className={`card${unlocked ? "" : " locked"}`}>
+                <label className="field">
+                  {unlocked ? "Unit" : "\u{1F512} Unit"}
+                  <input
+                    type="text"
+                    value={unit.title}
+                    onChange={(e) =>
+                      edit.patchUnit({ ...raw, title: e.target.value })
+                    }
+                  />
+                </label>
+                <ProblemMarker
+                  problems={edit.fieldProblems(unit.id, "title")}
+                />
+                <label className="field">
+                  Goal
+                  <textarea
+                    rows={2}
+                    value={unit.goal}
+                    onChange={(e) =>
+                      edit.patchUnit({ ...raw, goal: e.target.value })
+                    }
+                  />
+                </label>
+                <ProblemMarker problems={edit.fieldProblems(unit.id, "goal")} />
+                {/* A brand-new unit reads "unit has zero tasks" straight
+                    away; slice 8's Exercises page is where that resolves. */}
+                <ProblemMarker problems={edit.entityProblems(unit.id)} />
+                <LockableProgress
+                  unlocked={unlocked}
+                  value={attemptedCount}
+                  max={unit.taskIds.length}
+                />
+                <RowActions
+                  onUp={() => edit.moveUnit(unit.id, -1)}
+                  onDown={() => edit.moveUnit(unit.id, 1)}
+                  onRemove={() => setPendingDeleteId(unit.id)}
+                />
+                <button className="plain" onClick={() => onSelectUnit(unit.id)}>
+                  Open &rsaquo;
+                </button>
+              </li>
+            );
+          }
           return (
             <li key={unit.id} className={`card${unlocked ? "" : " locked"}`}>
               <button
@@ -146,6 +256,28 @@ export function LessonScreen({
           );
         })}
       </ul>
+      {edit !== null && (
+        <>
+          <ProblemMarker problems={edit.fieldProblems(lesson.id, "unitIds")} />
+          <button type="button" className="editor-add" onClick={edit.addUnit}>
+            + unit
+          </button>
+        </>
+      )}
+      {pendingDelete !== undefined && (
+        <ConfirmSheet
+          icon="lock_key"
+          title="Delete this unit?"
+          body={`“${pendingDelete.title}” and everything in it will be removed from this Book.`}
+          cancelLabel="Keep it"
+          confirmLabel="Delete"
+          onCancel={() => setPendingDeleteId(null)}
+          onConfirm={() => {
+            setPendingDeleteId(null);
+            edit?.removeUnit(pendingDelete.id);
+          }}
+        />
+      )}
       {pendingUnit !== undefined && (
         <ConfirmSheet
           icon="lock_key"
