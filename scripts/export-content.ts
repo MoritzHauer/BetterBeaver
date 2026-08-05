@@ -28,7 +28,7 @@ if (!url || !key) {
 }
 
 const response = await fetch(
-  `${url}/rest/v1/catalog?select=id,kind,published`,
+  `${url}/rest/v1/catalog?select=id,kind,published,published_version`,
   { headers: { apikey: key, Authorization: `Bearer ${key}` } },
 );
 if (!response.ok) {
@@ -38,6 +38,7 @@ const rows = (await response.json()) as {
   id: string;
   kind: "topic" | "domain";
   published: unknown;
+  published_version: number;
 }[];
 
 // Scoped to the onboarding Book only (plan 0015 decision 10): the bundled
@@ -46,16 +47,32 @@ const rows = (await response.json()) as {
 const ONBOARDING_BOOK_ID = "demo";
 const ONBOARDING_DOMAIN_ID = "demo";
 
+const seededVersions: Record<string, number> = {};
 for (const row of rows) {
   const id = contentIdOf(row.id);
   if (row.kind === "topic") {
     if (id === ONBOARDING_BOOK_ID) {
       writeBookDocument(id, row.published as BookDocument);
+      seededVersions[row.id] = row.published_version;
     }
   } else if (id === ONBOARDING_DOMAIN_ID) {
     writeDomainDocument(id, row.published as DomainDocument);
+    seededVersions[row.id] = row.published_version;
   }
 }
+
+// The version each seeded document was exported at, read back by
+// `content/bundled.ts`'s `seedDocumentVersions` and reported by
+// `seedCatalogRows`. Without it the first-run cache claims version 0 and
+// `planUpdate` offers a content update on the first boot of every fresh
+// install. Written last, so a failed export never leaves versions claiming
+// to describe documents that were not written. A file, not a directory, so
+// `loadContentDocuments`' `isDirectory()` walk skips it — same trick
+// `base-versions.json` already uses.
+writeFileSync(
+  join(CONTENT_DIR, "seed-versions.json"),
+  `${JSON.stringify(seededVersions, null, 2)}\n`,
+);
 
 // Seed assets (spec 0012-C §5): the onboarding Book is pre-added from the
 // bundle and never fetched, so a remote-only asset reference in it would put

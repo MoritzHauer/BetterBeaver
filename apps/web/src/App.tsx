@@ -228,6 +228,37 @@ function itemEditTarget(
   return { docId: documentId("topic", bookId), target: { itemId } };
 }
 
+/**
+ * A deterministic `rng` for the session builders, seeded from the session's
+ * own id. This is what lets the three `useMemo`s below depend on `content`
+ * at all.
+ *
+ * They used to key on the id alone, deliberately — `Math.random` meant any
+ * rebuild reshuffled the questions mid-session, so the only safe guard was
+ * never to rebuild. The cost was the bug this replaces: edit a word through
+ * the question screen's `✎` sheet and the question underneath went on
+ * showing the old text, publish or no publish, because its questions were
+ * frozen at mount. Seeding removes the reason for the freeze — the same id
+ * always yields the same order, so a rebuild is positionally identical and
+ * only the *content* of each question moves.
+ *
+ * mulberry32 over a string hash: not cryptographic, and it does not need to
+ * be — it shuffles flashcards.
+ */
+function rngFor(seed: string): () => number {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < seed.length; i += 1) {
+    hash = Math.imul(hash ^ seed.charCodeAt(i), 0x01000193) >>> 0;
+  }
+  return () => {
+    hash = (hash + 0x6d2b79f5) >>> 0;
+    let t = hash;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 /** Wires the engine's task-session building and grading to `SessionScreen`.
  * Questions are built once per mount (keyed by `task.id` via `useMemo`), so
  * they don't reshuffle across re-renders. An attempt is recorded only once
@@ -259,10 +290,11 @@ function TaskSession({
 }) {
   const domainId = content.topic.domainId;
   const questions = useMemo(
-    () => buildTaskSession(task, content, Math.random),
-    // Keyed by taskId only: `content` is reloaded (new reference) on every
-    // screen change, but the session must not reshuffle across re-renders.
-    [task.id],
+    () => buildTaskSession(task, content, rngFor(task.id)),
+    // `content` is reloaded (new reference) on every screen change and
+    // changes for real when the `✎` sheet edits the draft — both rebuild,
+    // and neither reshuffles, because `rngFor` is seeded by the task id.
+    [task.id, content],
   );
   async function handleGrade(unitId: string, quality: Quality) {
     await recordGrade(store, unitId, quality, new Date(), domainId);
@@ -355,9 +387,9 @@ function UnitSession({
 }) {
   const domainId = content.topic.domainId;
   const pairs = useMemo(
-    () => buildUnitSession(unit, content, Math.random),
-    // Keyed by unit.id only, same reshuffle-guard rule as TaskSession.
-    [unit.id],
+    () => buildUnitSession(unit, content, rngFor(unit.id)),
+    // Same seeded-rebuild rule as TaskSession.
+    [unit.id, content],
   );
   const questions = useMemo(() => pairs.map((pair) => pair.question), [pairs]);
   const taskIds = useMemo(() => pairs.map((pair) => pair.taskId), [pairs]);
@@ -437,9 +469,9 @@ function RecallSession({
 }) {
   const domainId = content.topic.domainId;
   const pairs = useMemo(
-    () => buildRecallSession(linkedUnit, content, Math.random),
-    // Keyed by linkedUnit.id only, same reshuffle-guard as UnitSession.
-    [linkedUnit.id],
+    () => buildRecallSession(linkedUnit, content, rngFor(linkedUnit.id)),
+    // Same seeded-rebuild rule as UnitSession.
+    [linkedUnit.id, content],
   );
   const questions = useMemo(() => pairs.map((pair) => pair.question), [pairs]);
 
@@ -1502,18 +1534,66 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
         )?.[0] ??
         editableBookFor(sessionEdit.docId) ??
         null);
-  const sessionBookId = editingBookId ?? sheetBookId;
+  /**
+   * The Book whose draft a running session renders from, once that session's
+   * `✎` has been used — and **after the sheet closes**, which is the part
+   * that makes the fix worth anything. `sessionEdit` is the sheet, and it is
+   * cleared the moment you tap "Back to the question"; hanging the draft off
+   * it meant the edit was visible only while the sheet covered the question,
+   * and the question reverted to published content underneath. Sticky until
+   * the screen changes: the effect below clears it on exactly the navigation
+   * that already ends `sessionEdit`, so leaving the session tears the draft
+   * session down with it.
+   */
+  const [sessionDraftBookId, setSessionDraftBookId] = useState<string | null>(
+    null,
+  );
+  useEffect(() => {
+    if (sheetBookId !== null) {
+      setSessionDraftBookId(sheetBookId);
+    }
+  }, [sheetBookId]);
+  useEffect(() => setSessionDraftBookId(null), [screen]);
+  const sessionBookId = editingBookId ?? sheetBookId ?? sessionDraftBookId;
   const editSession = useEditSessionState({
     bookId: sessionBookId ?? "",
     mode: sessionBookId === null ? "maintain" : bookEditMode(sessionBookId),
     enabled: sessionBookId !== null,
     resolveMode: editModeFor,
   });
-  /** The session **as a route flag** — what the learner screens render from
-   * (spec 0021-5 §2d). Null while only the sheet has one open: the question
-   * underneath must keep playing the content its questions were built from,
-   * not swap to the draft mid-answer. */
+  /** The session **as a route flag** — what the learner screens render from,
+   * and what carries Edit/Preview/Diff (spec 0021-5 §2d). Stays null while
+   * only the sheet has one open: those three modes belong to a screen you
+   * navigated into edit mode on, not to a question you tapped `✎` in. */
   const routeSession = editingBookId === null ? null : editSession.value;
+  /**
+   * The draft the *content* of a screen resolves against, which the scoped
+   * sheet (decision 13) also has to feed. Editing a word through a
+   * question's `✎` used to leave the question underneath showing the old
+   * text until the author published and took a content update — the session
+   * rendered published content and never re-derived.
+   *
+   * This was previously ruled out as "not swap to the draft mid-answer", and
+   * that objection was about *reshuffling*, not about the text: the builders
+   * now seed their rng from the session's own id, so re-deriving keeps every
+   * question in place and changes only what each one says.
+   */
+  const sheetContentSession =
+    routeSession !== null || sessionDraftBookId === null
+      ? null
+      : sessionDraftBookId === ("bookId" in screen ? screen.bookId : undefined)
+        ? // Only once the lexicon has settled. The Book document loads
+          // first, so until the second fetch lands the draft's units
+          // reference words it does not yet hold — questions built from it
+          // would drop every lexicon-backed one and then get them back a
+          // moment later. (Harmless now rather than fatal: `buildTaskSession`
+          // no longer asserts those references resolve.) A lexicon that
+          // *fails* to load never settles, and this correctly leaves that
+          // session showing published content instead of a Book with no words.
+          editSession.value?.lexiconLoaded === true
+          ? editSession.value
+          : null
+        : null;
 
   // Spec 0021-5 §3: leaving edit mode with an unsynced draft used to leave
   // it invisible — the learner screens render published content and nothing
@@ -1803,7 +1883,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           ? // The **union** — base ∪ draft (spec 0021-9 §2) — so an entity
             // the draft removed still has a row to tint red.
             routeSession.diff.content
-          : (routeSession?.content ?? content);
+          : (routeSession?.content ?? sheetContentSession?.content ?? content);
     const shownLookup = domainContent ?? routeSession?.domainContent;
     if (shown === null || shownLookup === undefined || shownLookup === null) {
       return <p>Loading&hellip;</p>;

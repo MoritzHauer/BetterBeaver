@@ -197,9 +197,12 @@ function sampleMcq(
   return { choices, correctIndex };
 }
 
-/** The unit whose `taskIds` contains `task.id` (guaranteed unique by the content validator). */
-function owningUnitOf(task: Task, content: Content) {
-  return content.units.find((unit) => unit.taskIds.includes(task.id))!;
+/** The unit whose `taskIds` contains `task.id` — unique, and present, for
+ * any content the validator has passed. `undefined` is reachable only from a
+ * draft, so this no longer asserts; `buildTaskSession`'s `owningUnitItems`
+ * degrades to an empty distractor pool rather than throwing. */
+function owningUnitOf(task: Task, content: Content): Unit | undefined {
+  return content.units.find((unit) => unit.taskIds.includes(task.id));
 }
 
 /** An item's `audioRef` stem; only `lexeme`/`concept`/`sentence` carry one (guaranteed present by validator class (n)). */
@@ -343,11 +346,37 @@ export function matchingOutcomes(
  * is the only shuffle) so sessions are reproducible in tests.
  */
 export function buildTaskSession(
-  task: Task,
+  rawTask: Task,
   content: Content,
   rng: Rng,
 ): Question[] {
   const itemById = new Map(content.items.map((item) => [item.id, item]));
+
+  /**
+   * Every `itemById.get(id)!` below is sound only over *validated* content,
+   * where the reference checker has already proved each id resolves. That
+   * stopped being the only caller: an edit session renders through
+   * `draftContent`, whose whole contract is that it never fails, and it
+   * settles the Book document before the lexicon — so for one render a unit
+   * that references lexicon words has itemIds that resolve to nothing. The
+   * assertions then handed `undefined` to `sampleMcq`, which crashed the
+   * running session outright.
+   *
+   * Dropping the unresolvable ids once, here, covers all eleven task types
+   * and both id lists rather than repeating a guard sixteen times. Validated
+   * content filters nothing, so this is invisible to every existing caller.
+   */
+  const resolves = (id: string) => itemById.has(id);
+  const task = rawTask.itemIds.every(resolves)
+    ? rawTask
+    : { ...rawTask, itemIds: rawTask.itemIds.filter(resolves) };
+  /** The owning unit's items, holes dropped — the distractor pool for the
+   * MCQ types and the token bank for `build`. A missing owner (only
+   * reachable from a draft) yields an empty pool, not a throw. */
+  const owningUnitItems = (): Item[] =>
+    (owningUnitOf(task, content)?.itemIds ?? []).flatMap(
+      (id) => itemById.get(id) ?? [],
+    );
 
   switch (task.type) {
     case "recall":
@@ -356,8 +385,7 @@ export function buildTaskSession(
       );
 
     case "recognize": {
-      const owningUnit = owningUnitOf(task, content);
-      const unitItems = owningUnit.itemIds.map((id) => itemById.get(id)!);
+      const unitItems = owningUnitItems();
 
       return task.itemIds.map((itemId): Question => {
         const item = itemById.get(itemId)!;
@@ -418,8 +446,7 @@ export function buildTaskSession(
       });
 
     case "listen": {
-      const owningUnit = owningUnitOf(task, content);
-      const unitItems = owningUnit.itemIds.map((id) => itemById.get(id)!);
+      const unitItems = owningUnitItems();
       return task.itemIds.map((itemId): Question => {
         const item = itemById.get(itemId)!;
         const { choices, correctIndex } = sampleMcq(item, unitItems, rng);
@@ -468,8 +495,7 @@ export function buildTaskSession(
       });
 
     case "picture": {
-      const owningUnit = owningUnitOf(task, content);
-      const unitItems = owningUnit.itemIds.map((id) => itemById.get(id)!);
+      const unitItems = owningUnitItems();
       return task.itemIds.map((itemId): Question => {
         const item = itemById.get(itemId)!;
         const { choices, correctIndex } = sampleMcq(item, unitItems, rng);
@@ -484,7 +510,7 @@ export function buildTaskSession(
     }
 
     case "build": {
-      const owningUnit = owningUnitOf(task, content);
+      const siblings = owningUnitItems();
       return task.itemIds.map((itemId): Question => {
         const item = itemById.get(itemId)!;
         if (item.kind !== "sentence") {
@@ -498,12 +524,11 @@ export function buildTaskSession(
         const targetLower = new Set(targetTokens.map((t) => t.toLowerCase()));
         const pool = [
           ...new Set(
-            owningUnit.itemIds.flatMap((id) => {
-              const sibling = itemById.get(id)!;
-              return sibling.id !== item.id && sibling.kind === "sentence"
+            siblings.flatMap((sibling) =>
+              sibling.id !== item.id && sibling.kind === "sentence"
                 ? sentenceTokens(sibling.payload.text)
-                : [];
-            }),
+                : [],
+            ),
           ),
         ].filter((token) => !targetLower.has(token.toLowerCase()));
         const distractors = shuffle(pool, rng).slice(0, BUILD_DISTRACTOR_COUNT);

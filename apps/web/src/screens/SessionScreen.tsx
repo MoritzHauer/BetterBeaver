@@ -1053,7 +1053,13 @@ export function SessionScreen({
   }, [taskIds]);
   const taskAnsweredCount = useRef(new Map<string, number>());
 
-  const question = questions[index];
+  // Clamped, not a bare `questions[index]`: the questions now re-derive from
+  // the draft while the scoped `✎` sheet is open, and the sheet's exercise
+  // card can drop an item — shrinking the list under a session already past
+  // that point. `index` would then read past the end and the body rendered
+  // blank with no way forward. Empty list still lands on `undefined`, which
+  // the render below already handles.
+  const question = questions[Math.min(index, questions.length - 1)];
 
   function advance() {
     if (index + 1 >= questions.length) {

@@ -142,4 +142,78 @@ describe("session Edit button", () => {
     fireEvent.change(field, { target: { value: "edited in the sheet" } });
     expect(field.value).toBe("edited in the sheet");
   });
+
+  it("shows the edit on the question underneath, with no publish", async () => {
+    const contentInit = await initContentSource();
+    const { container } = render(<App contentInit={contentInit} />);
+    await startUnitSession();
+
+    const before = container.querySelector(".question")?.textContent ?? "";
+    expect(before).not.toBe("");
+
+    screen.getByRole("button", { name: /Edit/ }).click();
+    const sheet = await screen.findByRole("dialog");
+    // The card's Definition, which is what this question kind puts on screen
+    // as its answer choices — the Term above it renders only into the prompt.
+    const field = await waitFor(() => {
+      const found = sheet.querySelector<HTMLTextAreaElement>("textarea");
+      expect(found).not.toBeNull();
+      return found!;
+    });
+    fireEvent.change(field, { target: { value: "ZZ-EDITED" } });
+
+    // Closing the sheet is the moment that used to lose it: `sessionEdit`
+    // clears, and with it went the only thing holding the draft — so the
+    // question reverted to published content and the author had to publish
+    // and take a content update to see their own typo fix.
+    screen.getByRole("button", { name: "Back to the question" }).click();
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+
+    // The whole session subtree rather than `.question` alone, so this keeps
+    // holding whichever element the edited text lands in as the shuffle's
+    // first question changes.
+    await waitFor(() => {
+      expect(container.querySelector("main.session")?.textContent).toContain(
+        "ZZ-EDITED",
+      );
+    });
+    expect(before).not.toContain("ZZ-EDITED");
+    // Nothing was published to get there.
+    expect(
+      screen.queryByRole("button", { name: "Validate & publish" }),
+    ).toBeNull();
+  });
+
+  it("re-deriving the questions does not reshuffle them", async () => {
+    const contentInit = await initContentSource();
+    const { container } = render(<App contentInit={contentInit} />);
+    await startUnitSession();
+
+    const progress = () =>
+      container
+        .querySelector('[role="progressbar"]')
+        ?.getAttribute("aria-valuenow");
+    const at = progress();
+
+    // Opening and closing the sheet swaps the session's content source from
+    // published to draft, which rebuilds the question list. The builders seed
+    // their rng from the unit id precisely so that rebuild is positionally
+    // identical — without it the author would be thrown to a different
+    // question, which is why the content was frozen in the first place.
+    screen.getByRole("button", { name: /Edit/ }).click();
+    await screen.findByRole("dialog");
+    screen.getByRole("button", { name: "Back to the question" }).click();
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+
+    expect(progress()).toBe(at);
+    expect(
+      container
+        .querySelector('[role="progressbar"]')
+        ?.getAttribute("aria-valuemax"),
+    ).not.toBe("0");
+  });
 });
