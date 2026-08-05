@@ -9,8 +9,10 @@ import type { TapLookup } from "./TappableText";
 import { EntryPopup } from "./EntryPopup";
 
 /** Glyph per callout variant (spec 0021-2 §1b) — every one of these PNGs
- * already exists in `public/art/icons/`. */
-const CALLOUT_ICON: Record<CalloutVariant, string> = {
+ * already exists in `public/art/icons/`. Exported: `NoteEditor`'s
+ * `.note-editor-callout-block` shows the same glyph its idle `NoteView`
+ * counterpart does (spec 0021-12 §3), rather than re-deriving the mapping. */
+export const CALLOUT_ICON: Record<CalloutVariant, string> = {
   note: "book_front",
   tip: "lightbulb",
   warning: "stop_sign",
@@ -77,7 +79,17 @@ function InlineRun({
   onTap,
 }: {
   text: string;
-  onTap: (span: string) => void;
+  /** Absent inside `NoteEditor`'s idle prose blocks (spec 0021-12 §2): that
+   * wrapper is itself `role="button"` (tap-to-edit), so a nested
+   * `<button>` here would both be invalid-ish (a button inside a button's
+   * accessible-name computation) and steal the tap instead of opening the
+   * textarea. A non-interactive `<span className="tappable-kyrgyz">` keeps
+   * the same look — italic plus the dotted underline, the same class the
+   * tappable `<button>` below carries — without the interactive element, so
+   * the word doesn't drift between the two renderers (§2); `NoteView` always
+   * passes `onTap`, so its own markup — and every `NoteView.test.tsx`
+   * assertion on it — is unchanged. */
+  onTap?: (span: string) => void;
 }) {
   return (
     <>
@@ -86,7 +98,11 @@ function InlineRun({
           case "bold":
             return <strong key={index}>{segment.text}</strong>;
           case "kyrgyz":
-            return (
+            return onTap === undefined ? (
+              <span key={index} className="tappable-kyrgyz">
+                <em>{segment.text}</em>
+              </span>
+            ) : (
               <button
                 key={index}
                 type="button"
@@ -110,6 +126,28 @@ function InlineRun({
         }
       })}
     </>
+  );
+}
+
+/**
+ * How one prose block (`title`/`heading`/`paragraph`, and a `callout`'s
+ * body) renders, shared with `NoteEditor`'s idle blocks (spec 0021-12 §2) so
+ * the two never drift into showing an author different text in the two
+ * modes. `title` matches today's `NoteView` exactly — plain text, no
+ * `InlineRun` — a note's `# ` line has never carried inline markup here.
+ */
+export function ProseBlock({
+  as,
+  text,
+  onTap,
+}: {
+  as: "h2" | "h3" | "p";
+  text: string;
+  onTap?: (span: string) => void;
+}) {
+  const Tag = as;
+  return (
+    <Tag>{as === "h2" ? text : <InlineRun text={text} onTap={onTap} />}</Tag>
   );
 }
 
@@ -140,14 +178,17 @@ export function NoteView({
 
   return (
     <>
-      {title !== "" ? <h2>{title}</h2> : null}
+      {title !== "" ? <ProseBlock as="h2" text={title} /> : null}
       {blocks.map((block, index) => {
         switch (block.kind) {
           case "heading":
             return (
-              <h3 key={index}>
-                <InlineRun text={block.text} onTap={setTappedSpan} />
-              </h3>
+              <ProseBlock
+                key={index}
+                as="h3"
+                text={block.text}
+                onTap={setTappedSpan}
+              />
             );
           case "list":
             return (
@@ -182,9 +223,12 @@ export function NoteView({
             );
           case "paragraph":
             return (
-              <p key={index}>
-                <InlineRun text={block.text} onTap={setTappedSpan} />
-              </p>
+              <ProseBlock
+                key={index}
+                as="p"
+                text={block.text}
+                onTap={setTappedSpan}
+              />
             );
           case "callout":
             return (
@@ -195,9 +239,7 @@ export function NoteView({
                   alt=""
                 />
                 {block.title !== "" && <strong>{block.title}</strong>}
-                <p>
-                  <InlineRun text={block.text} onTap={setTappedSpan} />
-                </p>
+                <ProseBlock as="p" text={block.text} onTap={setTappedSpan} />
               </aside>
             );
           case "figure": {

@@ -51,6 +51,9 @@
   --primary: #e08820;
   --primary-pressed: #c27314;
   --on-primary: #241503;
+  /* --primary at ~8% — a hover/focus wash (note-editor-block below). Not
+   * repeated per-theme: --primary is the one token identical in both. */
+  --primary-wash: rgba(224, 136, 32, 0.08);
   --recall: #6a4c93;
   --on-recall: #ffffff;
   --review: #2f7a72;
@@ -1369,6 +1372,24 @@ body.bb-editing main {
   padding: 0.2rem 0.6rem;
 }
 
+/* Undo toast (spec 0021-12 §5): fixed at the edit bar's own height above it,
+ * so the two never overlap — same fixed-strip pattern as `.edit-bar` itself,
+ * one slot higher. */
+.undo-toast {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: var(--edit-bar-height);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.9rem;
+  background: var(--card-bg);
+  border-top: 1px solid var(--card-border);
+}
+
 .update-banner {
   display: flex;
   flex-wrap: wrap;
@@ -1465,11 +1486,14 @@ input[type="email"],
 
 .editor-row-actions .plain {
   min-height: 44px; /* repo-wide tap-target norm (ui-review W3) */
+  min-width: 44px; /* same norm, width axis — an icon-only button (spec
+    0021-12 §1) has no text to pad it out the way "Delete row" once did */
   padding: 0.3rem 0.5rem;
 }
 
 .editor-add {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
   margin: 0.5rem 0 1.25rem;
 }
@@ -1482,6 +1506,117 @@ input[type="email"],
 
 .editor-add button {
   flex-shrink: 0;
+  /* An icon (`<PlusIcon>`) plus a word (spec 0021-12 §3's "+ Text" etc.) —
+   * lay the two out on one line instead of the SVG's own inline baseline. */
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+/* Note block editor (spec 0021-12 §3): the ten class names `NoteEditor.tsx`
+ * emits, styled off the rendered Theory page's own rules above (`.note` /
+ * `.note-callout` / `.note-figure` / `.vocab-table`) rather than new values
+ * — none of the ten had a rule at all before this slice, which is why an
+ * 11×2 table rendered as 22 stacked full-width inputs (the finding this
+ * slice exists for). */
+.note-editor {
+  border-left: 3px solid var(--primary);
+  padding-left: 1rem;
+  margin: 1.5rem 0;
+}
+
+.note-editor-toolbar {
+  display: flex;
+  gap: 0.5rem;
+  padding-bottom: 0.5rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid var(--card-border);
+}
+
+/* One block's row: idle content on the left, a control rail (↑ ↓ − and ⚙
+ * where the block has settings) on the right — `.editor-list li` (below)
+ * already lays the two out via flex + justify-content: space-between; this
+ * only adds the hover/focus wash and the rail's hidden-until-needed state.
+ * `visibility`, never `display`, so revealing the rail never reflows the
+ * block underneath it. */
+.note-editor-block:hover,
+.note-editor-block:focus-within {
+  background: var(--primary-wash);
+}
+
+.note-editor-block > .editor-row-actions {
+  visibility: hidden;
+}
+
+.note-editor-block:hover > .editor-row-actions,
+.note-editor-block:focus-within > .editor-row-actions {
+  visibility: visible;
+}
+
+@media (hover: none) {
+  /* No hover on a phone: the rail is the only way to reach ↑ ↓ − ⚙, so it
+   * stays visible unconditionally — a rail that only appears on hover does
+   * not exist on a phone (spec 0021-12 §3). */
+  .note-editor-block > .editor-row-actions {
+    visibility: visible;
+  }
+}
+
+.note-editor-list-block {
+  margin: 0.5rem 0;
+}
+
+/* The variant tint and glyph spacing come from the second/third class on
+ * the same element (`note-callout ${variant}`, both already styled above);
+ * this only adds the gap above the prose body that follows the glyph/title
+ * line. */
+.note-editor-callout-block textarea,
+.note-editor-callout-block [role="button"] {
+  margin-top: 0.5rem;
+}
+
+/* Sizing/overflow come from the second class on the same element
+ * (`note-figure`, already styled above); this only styles the caption
+ * `<input>` that replaces `NoteView`'s plain `<figcaption>`. */
+.note-editor-figure-block input[type="text"] {
+  margin-top: 0.4rem;
+}
+
+/* The table itself reuses `.vocab-table` directly (spec 0021-12 §3: "a real
+ * table... `.vocab-table`-equivalent"); a note table can be wider than a
+ * phone, same overflow guard as the learner-facing `.note-table`. */
+.note-editor-table-block {
+  overflow-x: auto;
+  min-width: 0; /* let it shrink inside the block's flex row instead of
+                   pushing the control rail out */
+  margin: 1rem 0;
+}
+
+/* The trailing action column stays as narrow as its `−` button, never as
+ * wide as the widest data cell (spec 0021-12 §3: "a narrow trailing action
+ * column"). */
+.note-editor-table-row td:last-child {
+  width: 1%;
+  white-space: nowrap;
+}
+
+/* A cell's own `input[type="text"]` padding (0.6rem 0.75rem, styles.css:779)
+ * is sized for a full-width field, not a column sharing a phone-width row
+ * with its neighbours and the action cell — same smaller padding
+ * `.editor-row-actions .plain` already uses. */
+.note-editor-table-row input[type="text"] {
+  padding: 0.3rem 0.5rem;
+}
+
+.note-editor-icon-picker,
+.note-editor-image-picker {
+  margin: 0.5rem 0 1rem;
+  padding: 0.75rem;
+  max-height: 14rem;
+  overflow-y: auto;
+  border: 1px solid var(--card-border);
+  border-radius: 0.75rem;
+  background: var(--card-bg);
 }
 
 /* EntityPicker (plan-less spec 0018): search + filter chips + a scrollable
@@ -1555,8 +1690,10 @@ input[type="email"],
   display: block;
 }
 
-/* NoteEditor's `+ image` picker and a figure block's own preview (spec
- * 0021-2 §2f/§2g) — same overflow concern as `.asset-list img`, smaller. */
+/* NoteEditor's `+ image` picker (spec 0021-2 §2f/§2g) — same overflow
+ * concern as `.asset-list img`, smaller. A figure block's own preview
+ * switched to `.note-figure`'s own (larger) sizing in spec 0021-12 §3, so it
+ * reads at the size a learner will actually see it. */
 .asset-thumb {
   max-width: 4rem;
   max-height: 4rem;

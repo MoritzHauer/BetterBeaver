@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import {
+  type ChangeEventHandler,
+  type FocusEventHandler,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   CALLOUT_VARIANTS,
   type CalloutVariant,
@@ -20,7 +26,11 @@ import { newEntityId } from "../content/entity-ids";
 import { NOTE_ICONS } from "../content/noteIcons";
 import { RowActions } from "../screens/edit/fields";
 import { AddWordForm } from "./AddWordForm";
+import { PlusIcon } from "./icons";
+import { CALLOUT_ICON, ProseBlock } from "./NoteView";
 import { Sheet } from "./Sheet";
+import { SettingsSheet } from "./SettingsSheet";
+import { UndoToast, useUndoSnapshot } from "./UndoToast";
 
 type FieldElement = HTMLInputElement | HTMLTextAreaElement;
 
@@ -112,6 +122,46 @@ function updateAt<T>(arr: T[], index: number, fn: (item: T) => T): T[] {
 function padRows(rows: string[][]): string[][] {
   const width = Math.max(0, ...rows.map((r) => r.length));
   return rows.map((r) => [...r, ...Array<string>(width - r.length).fill("")]);
+}
+
+/** The one place a prose block (title/heading/paragraph/callout body)
+ * becomes a `<textarea>` (spec 0021-12 §2): auto-grown to its content on
+ * mount and on every input — measured off `scrollHeight`, never guessed
+ * from character count — and focused on mount so a tap drops the author
+ * straight into typing rather than costing a second tap. The effect has no
+ * dependency array, same idiom as `NoteEditor`'s own `pendingSelectionRef`
+ * effect below: it re-runs after every render, which is what "on mount and
+ * on every input" comes down to for a controlled textarea. */
+function ProseTextarea({
+  value,
+  onFocus,
+  onChange,
+  onBlur,
+}: {
+  value: string;
+  onFocus: FocusEventHandler<HTMLTextAreaElement>;
+  onChange: ChangeEventHandler<HTMLTextAreaElement>;
+  onBlur: () => void;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (el === null) {
+      return;
+    }
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+    el.focus();
+  });
+  return (
+    <textarea
+      ref={ref}
+      value={value}
+      onFocus={onFocus}
+      onChange={onChange}
+      onBlur={onBlur}
+    />
+  );
 }
 
 /** Resolves a `FocusTarget`'s coordinates against the current `blocks`
@@ -215,6 +265,18 @@ export function NoteEditor({
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const [iconSearch, setIconSearch] = useState("");
   const [imagePickerOpen, setImagePickerOpen] = useState(false);
+  // Which block is idle vs. a `<textarea>` (spec 0021-12 §2) — one number,
+  // not a per-block flag, so at most one prose block is ever open at a time.
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  // Which block's `⚙` sheet is open (spec 0021-12 §4) — a table's column
+  // controls, a callout's variant + title. Never more than one at a time,
+  // same reasoning as `editingIndex`.
+  const [settingsBlock, setSettingsBlock] = useState<number | null>(null);
+  // One-snapshot undo (spec 0021-12 §5): every deletion below captures the
+  // current `markdown` prop — not `session.book`, which this controlled
+  // component (markdown in, markdown out) never sees — so restoring is
+  // `onChange(markdown)` and the result is byte-identical by construction.
+  const { message: undoMessage, capture, undo } = useUndoSnapshot();
   // The lexicon sheet's own state (spec 0021-3 §1): `token` is the wrapped
   // word the readout/search resolve against, `search` the search box, and
   // `adding` toggles the add-row's `AddWordForm` in. One object rather than
@@ -297,6 +359,7 @@ export function NoteEditor({
   };
 
   const removeBlock = (index: number) => {
+    capture("Block", () => onChange(markdown));
     commitStructural(blocks.filter((_, i) => i !== index));
   };
 
@@ -402,6 +465,7 @@ export function NoteEditor({
     ) {
       return;
     }
+    capture("Item", () => onChange(markdown));
     const items = block.items.filter((_, i) => i !== itemIndex);
     commitEdit(
       updateAt(blocks, blockIndex, (b) =>
@@ -463,6 +527,7 @@ export function NoteEditor({
     ) {
       return;
     }
+    capture("Row", () => onChange(markdown));
     const rows = padRows(block.rows.filter((_, i) => i !== rowIndex));
     commitEdit(
       updateAt(blocks, blockIndex, (b) =>
@@ -485,6 +550,13 @@ export function NoteEditor({
     if (width <= 1) {
       return;
     }
+    capture("Column", () => onChange(markdown));
+    // Closes the settings sheet this is only reachable from: the undo toast
+    // renders back on the page (spec §5), and a `<dialog>` opened with
+    // `showModal()` makes everything outside it inert (Sheet.tsx's own doc
+    // comment) — left open, the toast would be both invisible and
+    // un-clickable.
+    setSettingsBlock(null);
     const rows = padRows(block.rows.map((r) => r.slice(0, width - 1)));
     commitEdit(
       updateAt(blocks, blockIndex, (b) =>
@@ -646,6 +718,65 @@ export function NoteEditor({
   const lexiconVisible = lexiconMatches.slice(0, 50);
   const lexiconHidden = lexiconMatches.length - lexiconVisible.length;
 
+  /** One prose block (title/heading/paragraph, or a callout's body): idle,
+   * it renders through `ProseBlock` — the exact component `NoteView` itself
+   * calls, so the two never drift (spec 0021-12 §2) — wrapped in a
+   * keyboard-reachable `role="button"` that swaps it for a `<textarea>` on
+   * activation; editing, it's that `<textarea>`, carrying the raw source
+   * (markers included) and registering the usual "text" `FocusTarget` so
+   * the toolbar keeps working exactly as it does today. `onTap` is omitted
+   * from the idle `ProseBlock`: nesting `NoteView`'s own tappable-word
+   * button inside this wrapper's `role="button"` would both mis-report the
+   * accessible name and steal the tap that's supposed to open the textarea. */
+  const renderProse = (
+    as: "h2" | "h3" | "p",
+    text: string,
+    blockIndex: number,
+  ) =>
+    editingIndex === blockIndex ? (
+      <ProseTextarea
+        value={text}
+        onFocus={(e) =>
+          focus({ element: e.currentTarget, kind: "text", blockIndex })
+        }
+        onChange={(e) => {
+          // A title/heading line is one `# `/`## ` line by grammar — unlike
+          // `paragraph`/`callout` (`as === "p"`), which merge a stray
+          // newline back into one block on the next parse (lossy but
+          // structurally stable), an embedded `\n` here survives into
+          // `renderNoteBlock`'s `# ${text}\n\n` and splits into a *second*
+          // block (a bare title/heading marker cannot swallow a next line
+          // the way a list/paragraph continuation does). Stripped here,
+          // before it ever reaches `raw` — not a `keydown` guard, which
+          // wouldn't catch paste.
+          const value =
+            as === "p"
+              ? e.target.value
+              : e.target.value.replace(/[\r\n]+/g, " ");
+          editField(
+            { element: e.currentTarget, kind: "text", blockIndex },
+            value,
+          );
+        }}
+        onBlur={() => setEditingIndex(null)}
+      />
+    ) : (
+      <div
+        role="button"
+        tabIndex={0}
+        aria-label="Edit this text"
+        onClick={() => setEditingIndex(blockIndex)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setEditingIndex(blockIndex);
+          }
+        }}
+      >
+        <ProseBlock as={as} text={text} />
+      </div>
+    );
+
   return (
     <div className="note-editor">
       <div className="note-editor-toolbar">
@@ -723,55 +854,27 @@ export function NoteEditor({
             block.kind === "figure"
               ? assets.find((a) => a.stem === block.stem)
               : undefined;
+          // The block's own `⚙` (spec 0021-12 §3/§4) — only a table's
+          // column controls and a callout's variant/title have one.
+          // `undefined` means "no settings sheet", which `RowActions`
+          // already treats as absent for both `onSettings` and its label.
+          const settingsLabel =
+            block.kind === "table"
+              ? "Table settings"
+              : block.kind === "callout"
+                ? "Box settings"
+                : undefined;
           return (
             // No stable id exists per block (the pinned `NoteBlock` type has
             // none, matching `NoteView`'s own `key={index}`) — index is fine
             // here since content always re-derives from `markdown`.
             <li key={index} className="note-editor-block">
-              {block.kind === "title" || block.kind === "heading" ? (
-                <input
-                  type="text"
-                  value={block.text}
-                  onFocus={(e) =>
-                    focus({
-                      element: e.currentTarget,
-                      kind: "text",
-                      blockIndex: index,
-                    })
-                  }
-                  onChange={(e) =>
-                    editField(
-                      {
-                        element: e.currentTarget,
-                        kind: "text",
-                        blockIndex: index,
-                      },
-                      e.target.value,
-                    )
-                  }
-                />
+              {block.kind === "title" ? (
+                renderProse("h2", block.text, index)
+              ) : block.kind === "heading" ? (
+                renderProse("h3", block.text, index)
               ) : block.kind === "paragraph" ? (
-                <textarea
-                  rows={3}
-                  value={block.text}
-                  onFocus={(e) =>
-                    focus({
-                      element: e.currentTarget,
-                      kind: "text",
-                      blockIndex: index,
-                    })
-                  }
-                  onChange={(e) =>
-                    editField(
-                      {
-                        element: e.currentTarget,
-                        kind: "text",
-                        blockIndex: index,
-                      },
-                      e.target.value,
-                    )
-                  }
-                />
+                renderProse("p", block.text, index)
               ) : block.kind === "list" ? (
                 <div className="note-editor-list-block">
                   <ul className="editor-list">
@@ -813,6 +916,8 @@ export function NoteEditor({
                           }
                           onRemove={() => removeItem(index, itemIndex)}
                           removeLabel="Delete item"
+                          upLabel="Move item up"
+                          downLabel="Move item down"
                         />
                       </li>
                     ))}
@@ -820,13 +925,143 @@ export function NoteEditor({
                   <button
                     type="button"
                     className="editor-add"
+                    aria-label="Add item"
                     onClick={() => addItem(index)}
                   >
-                    + item
+                    <PlusIcon />
                   </button>
                 </div>
               ) : block.kind === "callout" ? (
-                <div className="note-editor-callout-block">
+                <div
+                  className={`note-editor-callout-block note-callout ${block.variant}`}
+                >
+                  <img
+                    className="icon-glyph"
+                    src={`${import.meta.env.BASE_URL}art/icons/${CALLOUT_ICON[block.variant]}.png`}
+                    alt=""
+                  />
+                  {block.title !== "" && <strong>{block.title}</strong>}
+                  {renderProse("p", block.text, index)}
+                </div>
+              ) : block.kind === "figure" ? (
+                <div className="note-editor-figure-block note-figure">
+                  {figureAsset !== undefined ? (
+                    <img src={figureAsset.url} alt="" />
+                  ) : (
+                    <p className="status">Image not available: {block.stem}</p>
+                  )}
+                  <input
+                    type="text"
+                    placeholder="Caption (optional)"
+                    value={block.caption}
+                    onFocus={blurToolbar}
+                    onChange={(e) => editFigureCaption(index, e.target.value)}
+                  />
+                </div>
+              ) : (
+                <div className="note-editor-table-block">
+                  <table className="vocab-table">
+                    <tbody>
+                      {block.rows.map((row, rowIndex) => {
+                        // The first row is content, not a frozen label
+                        // (spec 0021-12 §3): same `rowIndex === 0 → <th>`
+                        // rule `NoteView.tsx` renders with, still just
+                        // another editable `<input>` with its own `−`.
+                        const Cell = rowIndex === 0 ? "th" : "td";
+                        return (
+                          <tr className="note-editor-table-row" key={rowIndex}>
+                            {row.map((cell, colIndex) => (
+                              <Cell key={colIndex}>
+                                <input
+                                  type="text"
+                                  value={cell}
+                                  onFocus={(e) =>
+                                    focus({
+                                      element: e.currentTarget,
+                                      kind: "cell",
+                                      blockIndex: index,
+                                      row: rowIndex,
+                                      col: colIndex,
+                                    })
+                                  }
+                                  onChange={(e) =>
+                                    editField(
+                                      {
+                                        element: e.currentTarget,
+                                        kind: "cell",
+                                        blockIndex: index,
+                                        row: rowIndex,
+                                        col: colIndex,
+                                      },
+                                      e.target.value,
+                                    )
+                                  }
+                                />
+                              </Cell>
+                            ))}
+                            <td>
+                              <RowActions
+                                onRemove={() => removeRow(index, rowIndex)}
+                                removeLabel="Delete row"
+                              />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  <div className="editor-add">
+                    <button
+                      type="button"
+                      aria-label="Add row"
+                      onClick={() => addRow(index)}
+                    >
+                      <PlusIcon />
+                    </button>
+                  </div>
+                </div>
+              )}
+              <RowActions
+                onUp={index > 0 ? () => moveBlock(index, -1) : undefined}
+                onDown={
+                  index < blocks.length - 1
+                    ? () => moveBlock(index, 1)
+                    : undefined
+                }
+                upLabel="Move block up"
+                downLabel="Move block down"
+                onSettings={
+                  settingsLabel === undefined
+                    ? undefined
+                    : () => setSettingsBlock(index)
+                }
+                settingsLabel={settingsLabel}
+                onRemove={() => removeBlock(index)}
+                removeLabel="Delete block"
+              />
+              {/* Column controls and the callout's variant/title move behind
+                  the block's own `⚙` (spec 0021-12 §3/§4): rare edits that
+                  would otherwise compete with the per-row/per-block `−` for
+                  the same glance, and a sheet — not an inline expansion —
+                  so opening one never reflows the block underneath it. */}
+              {settingsBlock === index && block.kind === "table" && (
+                <SettingsSheet
+                  title="Table settings"
+                  onDismiss={() => setSettingsBlock(null)}
+                >
+                  <button type="button" onClick={() => addColumn(index)}>
+                    + column
+                  </button>
+                  <button type="button" onClick={() => removeColumn(index)}>
+                    - column
+                  </button>
+                </SettingsSheet>
+              )}
+              {settingsBlock === index && block.kind === "callout" && (
+                <SettingsSheet
+                  title="Box settings"
+                  onDismiss={() => setSettingsBlock(null)}
+                >
                   <select
                     value={block.variant}
                     onChange={(e) =>
@@ -849,130 +1084,36 @@ export function NoteEditor({
                     onFocus={blurToolbar}
                     onChange={(e) => editCalloutTitle(index, e.target.value)}
                   />
-                  <textarea
-                    rows={3}
-                    value={block.text}
-                    onFocus={(e) =>
-                      focus({
-                        element: e.currentTarget,
-                        kind: "text",
-                        blockIndex: index,
-                      })
-                    }
-                    onChange={(e) =>
-                      editField(
-                        {
-                          element: e.currentTarget,
-                          kind: "text",
-                          blockIndex: index,
-                        },
-                        e.target.value,
-                      )
-                    }
-                  />
-                </div>
-              ) : block.kind === "figure" ? (
-                <div className="note-editor-figure-block">
-                  {figureAsset !== undefined ? (
-                    <img className="asset-thumb" src={figureAsset.url} alt="" />
-                  ) : (
-                    <p className="status">Image not available: {block.stem}</p>
-                  )}
-                  <input
-                    type="text"
-                    placeholder="Caption (optional)"
-                    value={block.caption}
-                    onFocus={blurToolbar}
-                    onChange={(e) => editFigureCaption(index, e.target.value)}
-                  />
-                </div>
-              ) : (
-                <div className="note-editor-table-block">
-                  {block.rows.map((row, rowIndex) => (
-                    <div className="note-editor-table-row" key={rowIndex}>
-                      {row.map((cell, colIndex) => (
-                        <input
-                          key={colIndex}
-                          type="text"
-                          value={cell}
-                          onFocus={(e) =>
-                            focus({
-                              element: e.currentTarget,
-                              kind: "cell",
-                              blockIndex: index,
-                              row: rowIndex,
-                              col: colIndex,
-                            })
-                          }
-                          onChange={(e) =>
-                            editField(
-                              {
-                                element: e.currentTarget,
-                                kind: "cell",
-                                blockIndex: index,
-                                row: rowIndex,
-                                col: colIndex,
-                              },
-                              e.target.value,
-                            )
-                          }
-                        />
-                      ))}
-                      <RowActions
-                        onRemove={() => removeRow(index, rowIndex)}
-                        removeLabel="Delete row"
-                      />
-                    </div>
-                  ))}
-                  <div className="editor-add">
-                    <button type="button" onClick={() => addRow(index)}>
-                      + row
-                    </button>
-                    <button type="button" onClick={() => addColumn(index)}>
-                      + column
-                    </button>
-                    <button type="button" onClick={() => removeColumn(index)}>
-                      - column
-                    </button>
-                  </div>
-                </div>
+                </SettingsSheet>
               )}
-              <RowActions
-                onUp={index > 0 ? () => moveBlock(index, -1) : undefined}
-                onDown={
-                  index < blocks.length - 1
-                    ? () => moveBlock(index, 1)
-                    : undefined
-                }
-                onRemove={() => removeBlock(index)}
-                removeLabel="Delete block"
-              />
             </li>
           );
         })}
       </ul>
+      {/* The one place a label earns its width next to the `+` (spec
+          0021-12 §3): six unlabelled icons in a row is a puzzle. */}
       <div className="editor-add">
         <button type="button" onClick={() => addBlock("paragraph")}>
-          + ¶
+          <PlusIcon /> Text
         </button>
         <button type="button" onClick={() => addBlock("heading")}>
-          + H
+          <PlusIcon /> Heading
         </button>
         <button type="button" onClick={() => addBlock("list")}>
-          + list
+          <PlusIcon /> List
         </button>
         <button type="button" onClick={() => addBlock("table")}>
-          + table
+          <PlusIcon /> Table
         </button>
         <button type="button" onClick={() => addBlock("callout")}>
-          + box
+          <PlusIcon /> Box
         </button>
         <button
           type="button"
           disabled={assets.length === 0}
           onClick={() => setImagePickerOpen((open) => !open)}
         >
-          + image
+          <PlusIcon /> Image
         </button>
       </div>
       {/* No "add one in Assets" hint: propose mode has no assets manager at
@@ -1128,6 +1269,9 @@ export function NoteEditor({
             </>
           )}
         </Sheet>
+      )}
+      {undoMessage !== null && (
+        <UndoToast message={undoMessage} onUndo={undo} />
       )}
     </div>
   );

@@ -1,6 +1,12 @@
 import { Fragment, useState } from "react";
 import { moveId } from "@betterbeaver/engine";
 import {
+  ArrowDownIcon,
+  ArrowUpIcon,
+  GearIcon,
+  MinusIcon,
+} from "../../components/icons";
+import {
   type PickerFilter,
   type PickerOption,
   groupPickerRows,
@@ -20,34 +26,44 @@ import type { AssetView } from "./AssetsManager";
 export function RowActions({
   onUp,
   onDown,
+  upLabel = "Move up",
+  downLabel = "Move down",
   onOpen,
   onRemove,
   removeLabel = "Delete",
+  onSettings,
+  settingsLabel,
 }: {
   onUp?: () => void;
   onDown?: () => void;
+  /** "And its subject" (spec 0021-12 §1) — the bare defaults are fine
+   * wherever a caller's rows are all the same kind of thing (an
+   * `EntityPicker`'s selection list), but `NoteEditor` renders both a
+   * block's own `↑`/`↓` and a list block's per-item `↑`/`↓` in the same
+   * tree, where two identical "Move up" labels give a screen reader no way
+   * to tell them apart — that caller overrides both. */
+  upLabel?: string;
+  downLabel?: string;
   onOpen?: () => void;
   onRemove?: () => void;
   removeLabel?: string;
+  /** Opens the row/block's own settings sheet (spec 0021-12 §3/§4) — a `⚙`
+   * appended to the same rail, absent everywhere but a table/callout block. */
+  onSettings?: () => void;
+  /** Required whenever `onSettings` is given — "and its subject" (spec
+   * 0021-12 §1): `"Table settings"`, never a bare `"Settings"`. */
+  settingsLabel?: string;
 }) {
   return (
     <span className="editor-row-actions">
       {onUp !== undefined && (
-        <button className="plain" aria-label="Move up" onClick={onUp}>
-          <img
-            className="icon-glyph"
-            src={`${import.meta.env.BASE_URL}art/icons/arrow_N.png`}
-            alt=""
-          />
+        <button className="plain" aria-label={upLabel} onClick={onUp}>
+          <ArrowUpIcon />
         </button>
       )}
       {onDown !== undefined && (
-        <button className="plain" aria-label="Move down" onClick={onDown}>
-          <img
-            className="icon-glyph"
-            src={`${import.meta.env.BASE_URL}art/icons/arrow_S.png`}
-            alt=""
-          />
+        <button className="plain" aria-label={downLabel} onClick={onDown}>
+          <ArrowDownIcon />
         </button>
       )}
       {onOpen !== undefined && (
@@ -55,9 +71,18 @@ export function RowActions({
           Edit
         </button>
       )}
+      {onSettings !== undefined && (
+        <button
+          className="plain"
+          aria-label={settingsLabel ?? "Settings"}
+          onClick={onSettings}
+        >
+          <GearIcon />
+        </button>
+      )}
       {onRemove !== undefined && (
-        <button className="plain danger" onClick={onRemove}>
-          {removeLabel}
+        <button className="plain" aria-label={removeLabel} onClick={onRemove}>
+          <MinusIcon />
         </button>
       )}
     </span>

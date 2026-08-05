@@ -19,6 +19,103 @@ const NOSE = "#633216";
 const CHEEK = "#feac82";
 const TOOTH = "#fefbe4";
 
+/** Edit-chrome icon vocabulary (spec 0021-12 §1): plus / minus / move /
+ * settings, shared by every editable block from slice 12 on. `currentColor`
+ * throughout — unlike the PNG glyphs elsewhere in `public/art/icons/`, these
+ * follow `--fg`/`--primary` through both themes and through a button's own
+ * `color`. Decorative (`aria-hidden`): the action and its subject belong on
+ * the button that wraps the icon (`"Delete row"`, not `"Delete"`), never on
+ * the glyph itself. The `⋮` menu icon is not here — `EditMenu` already
+ * renders it as plain text in its own button. */
+
+export function PlusIcon({ size = 24 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M12 5 v14 M5 12 h14"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+export function MinusIcon({ size = 24 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M5 12 h14"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+export function ArrowUpIcon({ size = 24 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M12 19 V6 M6.5 11.5 L12 6 L17.5 11.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export function ArrowDownIcon({ size = 24 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M12 5 V18 M6.5 12.5 L12 18 L17.5 12.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/** Six evenly-spaced teeth around a ring: a gear, drawn as plainly as the
+ * mark it stands in for (`⚙`). */
+export function GearIcon({ size = 24 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+      <circle
+        cx="12"
+        cy="12"
+        r="6.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.2"
+      />
+      <circle cx="12" cy="12" r="2" fill="currentColor" />
+      {[0, 60, 120, 180, 240, 300].map((deg) => (
+        <rect
+          key={deg}
+          x="10.6"
+          y="1.4"
+          width="2.8"
+          height="3.4"
+          rx="0.8"
+          fill="currentColor"
+          transform={`rotate(${deg} 12 12)`}
+        />
+      ))}
+    </svg>
+  );
+}
+
 /** Open log-book, drawn like the one the mascot holds. Scales via `size`. */
 export function LogBookIcon({ size = 24 }: { size?: number }) {
   return (

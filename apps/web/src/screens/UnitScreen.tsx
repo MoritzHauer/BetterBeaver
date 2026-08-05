@@ -487,11 +487,14 @@ function NoteCard({
           {...(edit.lexicon !== undefined ? { lexicon: edit.lexicon } : {})}
         />
         {/* No pin control: pinning a draft note into your own review queue
-            is meaningless. */}
-        <button
-          className="plain danger"
-          onClick={() => edit.removeNoteByStem(stem)}
-        >
+            is meaningless. Not `danger` (spec 0021-12 done-criteria: "no red
+            word"): a whole-note delete has no undo yet (ponytail: the
+            `useUndoSnapshot` this slice ships lives inside `NoteEditor`,
+            which unmounts with the note it would need to restore — hoisting
+            one to this Theory-page level is follow-up work, not a colour
+            fix), so it still reads as plain text rather than the icon
+            vocabulary's un-confirmed `−`. */}
+        <button className="plain" onClick={() => edit.removeNoteByStem(stem)}>
           Delete this note
         </button>
       </section>

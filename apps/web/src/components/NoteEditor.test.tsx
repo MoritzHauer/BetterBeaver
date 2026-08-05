@@ -94,6 +94,22 @@ function lexiconAccess(
   };
 }
 
+/** Taps the Nth idle prose block (title/heading/paragraph, or a callout's
+ * body — spec 0021-12 §2 renders these idle until tapped) into its
+ * `<textarea>` and returns it. Every idle block shares the same
+ * `aria-label` ("Edit this text"), so callers pick by position in document
+ * order — the same convention this file already uses for
+ * `getAllByLabelText("Move block up")`. */
+function tapProse(position: number): HTMLTextAreaElement {
+  const idleBlocks = screen.getAllByRole("button", {
+    name: "Edit this text",
+  });
+  fireEvent.click(idleBlocks[position]!);
+  return screen
+    .getAllByRole("textbox")
+    .find((el) => el.tagName === "TEXTAREA") as HTMLTextAreaElement;
+}
+
 /** Selects `text` inside `textarea`, assuming it appears exactly once. */
 function selectText(textarea: HTMLTextAreaElement, text: string) {
   const start = textarea.value.indexOf(text);
@@ -117,10 +133,10 @@ describe("NoteEditor", () => {
     const initial = "# T\n\nFirst paragraph.\n\nSecond paragraph.\n\n";
     const { last } = renderEditor(initial);
 
-    const textareas = screen
-      .getAllByRole("textbox")
-      .filter((el) => el.tagName === "TEXTAREA") as HTMLTextAreaElement[];
-    fireEvent.change(textareas[0]!, { target: { value: "Edited paragraph." } });
+    // Prose renders idle until tapped (spec 0021-12 §2) — block 0 is the
+    // title, block 1 is "First paragraph.".
+    const textarea = tapProse(1);
+    fireEvent.change(textarea, { target: { value: "Edited paragraph." } });
 
     expect(last()).toBe("# T\n\nEdited paragraph.\n\nSecond paragraph.\n\n");
   });
@@ -129,9 +145,7 @@ describe("NoteEditor", () => {
     const initial = "# T\n\nHello world.\n\n";
     const { last } = renderEditor(initial);
 
-    const textarea = screen
-      .getAllByRole("textbox")
-      .find((el) => el.tagName === "TEXTAREA") as HTMLTextAreaElement;
+    const textarea = tapProse(1);
     fireEvent.focus(textarea);
     textarea.setSelectionRange(0, 5); // "Hello"
     fireEvent.click(screen.getByRole("button", { name: "B" }));
@@ -145,9 +159,7 @@ describe("NoteEditor", () => {
     const initial = "# T\n\nHello.\n\n";
     const { last } = renderEditor(initial);
 
-    const textarea = screen
-      .getAllByRole("textbox")
-      .find((el) => el.tagName === "TEXTAREA") as HTMLTextAreaElement;
+    const textarea = tapProse(1);
     fireEvent.focus(textarea);
     textarea.setSelectionRange(0, 0);
     fireEvent.click(screen.getByRole("button", { name: "B" }));
@@ -166,17 +178,14 @@ describe("NoteEditor", () => {
     const initial = "# T\n\nAlpha.\n\nBeta.\n\nGamma.\n\n";
     const { last } = renderEditor(initial);
 
-    const textareas = screen
-      .getAllByRole("textbox")
-      .filter((el) => el.tagName === "TEXTAREA") as HTMLTextAreaElement[];
-    const alpha = textareas[0]!; // "Alpha."
+    const alpha = tapProse(1); // "Alpha."
     fireEvent.focus(alpha);
     alpha.setSelectionRange(0, 5); // "Alpha"
 
     // Move Gamma (the last block) up one — this swaps Gamma and Beta and
     // does not shift Alpha's index, so any breakage here is about staleness
     // of content, not index drift.
-    const upButtons = screen.getAllByLabelText("Move up");
+    const upButtons = screen.getAllByLabelText("Move block up");
     fireEvent.click(upButtons[upButtons.length - 1]!);
 
     fireEvent.click(screen.getByRole("button", { name: "B" }));
@@ -188,18 +197,40 @@ describe("NoteEditor", () => {
     const initial = "# T\n\nFirst.\n\nSecond.\n\n";
     const { last } = renderEditor(initial);
 
-    const upButtons = screen.getAllByLabelText("Move up");
+    const upButtons = screen.getAllByLabelText("Move block up");
     fireEvent.click(upButtons[upButtons.length - 1]!); // "Second."'s move-up
 
     expect(last()).toBe("# T\n\nSecond.\n\nFirst.\n\n");
+  });
+
+  it("Move up/down carry a subject, and a list item's does not collide with its block's", () => {
+    // Regression test: an icon-only button's aria-label is its only name
+    // (spec 0021-12 §1, "and its subject") — a bare "Move up" on both the
+    // list block and its items would give a screen reader two identical
+    // names in the same tree. Block 0 (title) has no up, only down; block 1
+    // (the list) has up but no down (it's last); item 0 (Alpha) has no up,
+    // only down; item 1 (Beta) has up but no down — so all four labels
+    // below appear exactly once, and the bare, subject-less form never does.
+    const initial = "# T\n\n- Alpha\n- Beta\n\n";
+    renderEditor(initial);
+
+    expect(screen.getAllByLabelText("Move block up")).toHaveLength(1);
+    expect(screen.getAllByLabelText("Move block down")).toHaveLength(1);
+    expect(screen.getAllByLabelText("Move item up")).toHaveLength(1);
+    expect(screen.getAllByLabelText("Move item down")).toHaveLength(1);
+    expect(screen.queryByLabelText("Move up")).toBeNull();
+    expect(screen.queryByLabelText("Move down")).toBeNull();
   });
 
   it("add row / add column / delete row keep a table rectangular and valid", () => {
     const initial = "# T\n\n| a | b |\n| --- | --- |\n| c | d |\n\n";
     const { last } = renderEditor(initial);
 
-    fireEvent.click(screen.getByRole("button", { name: "+ row" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add row" }));
+    // + column / − column move behind the block's ⚙ (spec 0021-12 §3/§4).
+    fireEvent.click(screen.getByRole("button", { name: "Table settings" }));
     fireEvent.click(screen.getByRole("button", { name: "+ column" }));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
     const afterAdds = last();
     if (afterAdds === undefined) {
       throw new Error("expected onChange to have been called");
@@ -251,7 +282,7 @@ describe("NoteEditor", () => {
     const lastBefore = before[before.length - 1]!;
     const { last } = renderEditor(initial);
 
-    fireEvent.click(screen.getByRole("button", { name: "+ H" }));
+    fireEvent.click(screen.getByRole("button", { name: "Heading" }));
 
     const next = last();
     if (next === undefined) {
@@ -275,6 +306,8 @@ describe("NoteEditor - callouts and figures (spec 0021-2)", () => {
     const initial = "# T\n\nIntro.\n\n> [!note]\n> Body.\n\n";
     const { last } = renderEditor(initial);
 
+    // The variant dropdown moves behind the block's ⚙ (spec 0021-12 §3/§4).
+    fireEvent.click(screen.getByRole("button", { name: "Box settings" }));
     fireEvent.change(screen.getByRole("combobox"), {
       target: { value: "warning" },
     });
@@ -282,10 +315,10 @@ describe("NoteEditor - callouts and figures (spec 0021-2)", () => {
     expect(last()).toBe("# T\n\nIntro.\n\n> [!warning]\n> Body.\n\n");
   });
 
-  it("+ image is disabled with assets = []", () => {
+  it("Image is disabled with assets = []", () => {
     renderEditor("# T\n\nBody.\n\n");
 
-    const button = screen.getByRole("button", { name: "+ image" });
+    const button = screen.getByRole("button", { name: "Image" });
 
     expect(button.hasAttribute("disabled")).toBe(true);
   });
@@ -298,7 +331,7 @@ describe("NoteEditor - callouts and figures (spec 0021-2)", () => {
     };
     const { last } = renderEditor("# T\n\nBody.\n\n", { assets: [asset] });
 
-    fireEvent.click(screen.getByRole("button", { name: "+ image" }));
+    fireEvent.click(screen.getByRole("button", { name: "Image" }));
     fireEvent.click(screen.getByRole("button", { name: "Lodge" }));
 
     expect(last()).toBe("# T\n\nBody.\n\n[img:t-photo-1]\n\n");
@@ -312,16 +345,12 @@ describe("NoteEditor - callouts and figures (spec 0021-2)", () => {
     const initial = "# T\n\nIntro paragraph.\n\n> [!note] MyTitle\n> Body.\n\n";
     const { onChange } = renderEditor(initial);
 
-    const paragraph = screen
-      .getAllByRole("textbox")
-      .find(
-        (el) =>
-          el.tagName === "TEXTAREA" &&
-          (el as HTMLTextAreaElement).value === "Intro paragraph.",
-      ) as HTMLTextAreaElement;
+    const paragraph = tapProse(1); // "Intro paragraph."
     fireEvent.focus(paragraph);
     paragraph.setSelectionRange(0, 5);
 
+    // The title input moves behind the callout's ⚙ (spec 0021-12 §3/§4).
+    fireEvent.click(screen.getByRole("button", { name: "Box settings" }));
     fireEvent.focus(screen.getByPlaceholderText("Title (optional)"));
 
     const bold = screen.getByRole("button", { name: "B" });
@@ -337,9 +366,7 @@ describe("NoteEditor - callouts and figures (spec 0021-2)", () => {
       assets: [{ stem: "a-1", name: "Photo", url: "blob:mock-1" }],
     });
 
-    const paragraph = screen
-      .getAllByRole("textbox")
-      .find((el) => el.tagName === "TEXTAREA") as HTMLTextAreaElement;
+    const paragraph = tapProse(1);
     fireEvent.focus(paragraph);
     paragraph.setSelectionRange(0, 5);
 
@@ -354,10 +381,11 @@ describe("NoteEditor - callouts and figures (spec 0021-2)", () => {
 });
 
 describe("NoteEditor - lexicon sheet (spec 0021-3)", () => {
+  // Every fixture below is "# T\n\n<one paragraph>.\n\n" — block 0 is the
+  // title, block 1 is the paragraph under test (spec 0021-12 §2: idle until
+  // tapped).
   function paragraphTextarea() {
-    return screen
-      .getAllByRole("textbox")
-      .find((el) => el.tagName === "TEXTAREA") as HTMLTextAreaElement;
+    return tapProse(1);
   }
 
   it("Аү over a non-empty selection wraps and opens the sheet", () => {
@@ -518,5 +546,140 @@ describe("NoteEditor - lexicon sheet (spec 0021-3)", () => {
     // Proves `sourceRef` is actually wired through to `AddWordForm`, not
     // shadowed by its old hardcoded local (spec 0021-3 §4a/§4b).
     expect(item.sourceRef).toBe("ky-book-1");
+  });
+});
+
+describe("NoteEditor - block presentation (spec 0021-12)", () => {
+  it("a table block renders one <table> with one row per rows entry, not N stacked inputs", () => {
+    const initial = "# T\n\n| a | b |\n| --- | --- |\n| c | d |\n| e | f |\n\n";
+    renderEditor(initial);
+
+    // The row count is what actually regressed (the finding this slice
+    // exists for): an 11×2 table used to render as 22 stacked inputs.
+    expect(screen.getByRole("table")).toBeTruthy();
+    expect(screen.getAllByRole("row")).toHaveLength(3);
+  });
+
+  it("the header row's cells are editable, and typing in one changes rows[0] in the emitted markdown", () => {
+    const initial = "# T\n\n| a | b |\n| --- | --- |\n| c | d |\n\n";
+    const { last } = renderEditor(initial);
+
+    // Content, not a frozen label (spec 0021-12 §3): rendered as `<th>`,
+    // same as `NoteView`, but still an editable `<input>`.
+    expect(screen.getAllByRole("columnheader")).toHaveLength(2);
+    const cellInputs = screen
+      .getAllByRole("textbox")
+      .filter((el) => el.tagName === "INPUT") as HTMLInputElement[];
+    const headerInput = cellInputs.find((el) => el.value === "a");
+    if (headerInput === undefined) {
+      throw new Error("expected to find the header row's first cell");
+    }
+    fireEvent.change(headerInput, { target: { value: "A" } });
+
+    const next = last();
+    if (next === undefined) {
+      throw new Error("expected onChange to have been called");
+    }
+    expect(tableBlock(next).rows[0]).toEqual(["A", "b"]);
+  });
+
+  it("deleting the header row leaves the next row as rows[0]", () => {
+    const initial = "# T\n\n| a | b |\n| --- | --- |\n| c | d |\n\n";
+    const { last } = renderEditor(initial);
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Delete row" })[0]!);
+
+    const next = last();
+    if (next === undefined) {
+      throw new Error("expected onChange to have been called");
+    }
+    expect(tableBlock(next).rows[0]).toEqual(["c", "d"]);
+  });
+
+  it("tapping a paragraph swaps it for a textarea with the raw markers; blurring restores the rendered markup", () => {
+    const initial = "# T\n\nPlain and **bold** text.\n\n";
+    renderEditor(initial);
+
+    // Idle: the marker is invisible, the word is genuinely bold — not the
+    // raw `**` sitting in a plain-text run.
+    expect(screen.queryByText(/\*\*/)).toBeNull();
+
+    const textarea = tapProse(1);
+    expect(textarea.value).toBe("Plain and **bold** text.");
+
+    fireEvent.blur(textarea);
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(screen.getByText("bold").tagName).toBe("STRONG");
+  });
+
+  it("deleting a block emits shortened markdown, and Undo restores markdown byte-identical to before", () => {
+    const initial = "# T\n\nFirst.\n\nSecond.\n\n";
+    const { last } = renderEditor(initial);
+
+    // Block 0 is the title's own "Delete block", block 1 is "First."'s.
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Delete block" })[1]!,
+    );
+
+    expect(last()).toBe("# T\n\nSecond.\n\n");
+
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+
+    // `.toBe`, not `.toEqual`-on-parsed-blocks: byte-identical is the point
+    // — `raw` is what makes restoring the exact original string possible,
+    // not just an equivalent re-render of it.
+    expect(last()).toBe(initial);
+  });
+
+  it("column add/remove is reachable only through the block's settings sheet", () => {
+    const initial = "# T\n\n| a | b |\n| --- | --- |\n| c | d |\n\n";
+    renderEditor(initial);
+
+    expect(screen.queryByRole("button", { name: "+ column" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "- column" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Table settings" }));
+
+    expect(screen.getByRole("button", { name: "+ column" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "- column" })).toBeTruthy();
+  });
+
+  it("- column closes the settings sheet, so the undo toast it triggers is reachable", () => {
+    // Regression test: `- column` is only reachable from inside the block's
+    // `<dialog>` settings sheet. Left open, the undo toast that renders back
+    // on the page (spec §5) would sit behind `showModal()`'s inert
+    // background — visible in the accessibility tree but nothing a real
+    // click or Tab could reach, which `queryByRole("dialog")` catches here
+    // even though jsdom itself doesn't enforce that inertness.
+    const initial = "# T\n\n| a | b |\n| --- | --- |\n| c | d |\n\n";
+    renderEditor(initial);
+
+    fireEvent.click(screen.getByRole("button", { name: "Table settings" }));
+    fireEvent.click(screen.getByRole("button", { name: "- column" }));
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByRole("status").textContent).toContain("Column deleted");
+    expect(screen.getByRole("button", { name: "Undo" })).toBeTruthy();
+  });
+
+  it("Enter in a title/heading textarea does not split it into a second block on the next edit", () => {
+    // Regression test: title/heading became a `<textarea>` this slice (spec
+    // §2), which — unlike `paragraph`, whose continuation lines re-merge on
+    // parse — has no continuation rule, so an embedded newline that reaches
+    // `renderNoteBlock` splits into a stray paragraph block on the next
+    // parse. Sanitized before it gets that far.
+    const initial = "# T\n\nBody.\n\n";
+    const { last } = renderEditor(initial);
+
+    const title = tapProse(0);
+    fireEvent.change(title, { target: { value: "T\nSecond line" } });
+
+    const next = last();
+    if (next === undefined) {
+      throw new Error("expected onChange to have been called");
+    }
+    const blocks = parseNoteBlocks(next);
+    expect(blocks).toHaveLength(2); // title + "Body.", not three
+    expect(blocks[0]).toMatchObject({ kind: "title", text: "T Second line" });
   });
 });
