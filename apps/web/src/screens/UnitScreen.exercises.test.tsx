@@ -454,6 +454,8 @@ describe("the Exercises page", () => {
     const { session } = makeSession(bookWithTask);
     renderUnit(session, bookWithTask);
     goToExercises();
+    // Spec 0021-13 §3: Type moves behind the card's own "Exercise settings".
+    fireEvent.click(screen.getByRole("button", { name: "Exercise settings" }));
 
     const types = [...screen.getByLabelText("Type").querySelectorAll("option")]
       .map((option) => option.textContent)
@@ -478,7 +480,10 @@ describe("the Exercises page", () => {
     const { session, books } = makeSession(book);
     renderUnit(session, book);
     goToPage(VOCABULARY);
-    fireEvent.click(screen.getAllByRole("button", { name: "More" })[0]!);
+    // Spec 0021-13 §2: "More" is now "⚙" (aria-label "Word settings").
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Word settings" })[0]!,
+    );
 
     const audio = screen.getByLabelText("Audio");
     expect(audio.querySelector("option[value='a1']")).not.toBeNull();
@@ -495,7 +500,8 @@ describe("the Exercises page", () => {
     const { session } = makeSession(book);
     renderUnit(session, book);
     goToPage(EXAMPLES);
-    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    // Spec 0021-13 §2: "More" is now "⚙" (aria-label "Example settings").
+    fireEvent.click(screen.getByRole("button", { name: "Example settings" }));
 
     for (const label of ["First audio", "Second audio"]) {
       const slot = screen.getByLabelText(label);

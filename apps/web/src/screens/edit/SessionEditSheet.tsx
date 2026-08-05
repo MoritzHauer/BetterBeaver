@@ -1,6 +1,6 @@
 import type { Item } from "@betterbeaver/schema";
 import { Sheet } from "../../components/Sheet";
-import { ExerciseCard, RowExtras } from "../UnitScreen";
+import { ExerciseCard, GrowingTextarea, RowExtras } from "../UnitScreen";
 import {
   EditSessionProvider,
   type EditSessionValue,
@@ -171,8 +171,8 @@ function SheetBody({
           <label className="field">
             {field.label}
             {field.multiline === true ? (
-              <textarea
-                rows={2}
+              <GrowingTextarea
+                ariaLabel={field.label}
                 value={edit.payloadValue(entityId, ...field.path)}
                 onChange={(e) =>
                   edit.patchEntity(withPayload(raw, field.path, e.target.value))

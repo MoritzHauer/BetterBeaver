@@ -329,4 +329,114 @@ describe("UnitScreen in edit mode", () => {
       screen.getAllByRole("button", { name: /^Page \d+ of/ }),
     ).toHaveLength(6);
   });
+
+  // Spec 0021-13: rows read as table rows, `⚙` replaces the inline
+  // expansion, and the undo toast names unlink vs. delete.
+  it("renders a concept as one <tr> inside the page's own table", () => {
+    const { session } = makeSession();
+    renderUnit(session);
+
+    goToPage(CONCEPTS);
+    const table = document.querySelector(".vocab-table");
+    expect(table).not.toBeNull();
+    expect(table!.querySelectorAll("tbody tr")).toHaveLength(1);
+  });
+
+  it("grows the Definition field instead of clipping it", () => {
+    const { session } = makeSession();
+    renderUnit(session);
+
+    goToPage(CONCEPTS);
+    const field = screen.getByLabelText("Definition");
+    expect(field.tagName).toBe("TEXTAREA");
+    // jsdom has no layout, so `scrollHeight` can't be asserted as a real
+    // pixel value — this asserts the growth effect ran at all, not what it
+    // measured.
+    expect((field as HTMLTextAreaElement).style.height).not.toBe("");
+  });
+
+  it("keeps Term/Definition as static headings, unlike a note table's own header row", () => {
+    const { session } = makeSession();
+    renderUnit(session);
+
+    goToPage(CONCEPTS);
+    const termHeader = screen.getByRole("columnheader", { name: "Term" });
+    const definitionHeader = screen.getByRole("columnheader", {
+      name: "Definition",
+    });
+    expect(termHeader.querySelector("input, textarea")).toBeNull();
+    expect(definitionHeader.querySelector("input, textarea")).toBeNull();
+  });
+
+  it("moves Source and the asset pickers behind ⚙, off the row itself", () => {
+    const { session } = makeSession();
+    renderUnit(session);
+
+    goToPage(CONCEPTS);
+    expect(screen.queryByLabelText("Source")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Concept settings" }));
+    expect(screen.getByLabelText("Source")).toBeTruthy();
+  });
+
+  it("unlinks a lexicon row behind an 'unlinked' toast, and undo restores it in place", () => {
+    const { session, books } = makeSession();
+    renderUnit(session);
+
+    goToPage(VOCABULARY);
+    fireEvent.click(screen.getByRole("button", { name: "Unlink" }));
+    expect(screen.getByText("Word unlinked")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    const restored = books.at(-1)!;
+    expect((restored.units[0] as { itemIds: string[] }).itemIds).toEqual([
+      "dm-e1",
+      "bk-i1",
+      "bk-i2",
+    ]);
+  });
+
+  it("deletes a Book item behind a 'deleted' toast, and undo restores it", () => {
+    const { session, books } = makeSession();
+    renderUnit(session);
+
+    goToPage(CONCEPTS);
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(screen.getByText("Concept deleted")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(books.at(-1)!.items).toHaveLength(2);
+  });
+
+  it("deletes an Example behind a 'deleted' toast, and undo restores it", () => {
+    const { session, books } = makeSession();
+    renderUnit(session);
+
+    goToPage(EXAMPLES);
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(screen.getByText("Example deleted")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(books.at(-1)!.items).toHaveLength(2);
+  });
+
+  it("explains the empty Vocabulary page in propose mode instead of rendering it", () => {
+    const bare: BookDocument = {
+      ...BOOK,
+      // No `dm-e1`: this Book's lexicon is read-only and nothing has been
+      // linked into it yet, the exact gap spec 0021-13 §5 names.
+      units: [{ ...(BOOK.units[0] as object), itemIds: ["bk-i1", "bk-i2"] }],
+    };
+    const { session } = makeSession({
+      book: bare,
+      content: build(bare, DOMAIN),
+      canEditLexicon: false,
+    });
+    renderUnit(session, build(bare, DOMAIN));
+
+    goToPage(VOCABULARY);
+    expect(
+      screen.getByText(/you can use them, but not change them/),
+    ).toBeTruthy();
+    expect(document.querySelector("table")).toBeNull();
+  });
 });

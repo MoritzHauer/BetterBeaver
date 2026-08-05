@@ -6,6 +6,8 @@ import {
   stripClozeMarkup,
 } from "@betterbeaver/schema";
 import { ConfirmSheet } from "../components/Sheet";
+import { SettingsSheet } from "../components/SettingsSheet";
+import { UndoToast, useUndoSnapshot } from "../components/UndoToast";
 import { countUnitQuestions, diffNoteBlocks } from "@betterbeaver/engine";
 import type { TapLookup } from "../components/TappableText";
 import { TappableText } from "../components/TappableText";
@@ -128,12 +130,64 @@ function SubPager({
   );
 }
 
+/** The `⚙` sheet's title is the row's own text, never the id (spec 0021-13
+ * §2) — obvious which row you opened. A freshly added row has no text yet,
+ * so this falls back to a generic label instead of an empty heading. */
+function rowSheetTitle(text: string, fallback: string): string {
+  return text.trim() === "" ? fallback : text;
+}
+
+/** A field whose learner rendering wraps — `definition` here, `text`/
+ * `translation`/`contrast` on the Examples page, and the same fields in
+ * `SessionEditSheet`'s sheet, which shares this control (spec 0021-13
+ * Context) — auto-grows instead of clipping (spec 0021-13 §1). Same
+ * `scrollHeight` measurement `NoteEditor`'s prose textarea uses (spec
+ * 0021-12 §2), minus its auto-focus: this one sits in a list of rows the
+ * author may not be touching, and stealing focus on every render would yank
+ * it away from whichever field they actually are typing in.
+ *
+ * `[value]`, unlike `NoteEditor`'s version: that one measures a single
+ * mounted textarea, this one is mounted once per row on a page of rows, all
+ * re-rendering together on every keystroke in any of them (they all read
+ * off the same `session.book`) — an effect with no dep array would re-measure
+ * every one of them on every keystroke in any of them. */
+export function GrowingTextarea({
+  value,
+  onChange,
+  ariaLabel,
+}: {
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
+  ariaLabel: string;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (el === null) {
+      return;
+    }
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [value]);
+  return (
+    <textarea
+      ref={ref}
+      rows={1}
+      aria-label={ariaLabel}
+      value={value}
+      onChange={onChange}
+    />
+  );
+}
+
 /**
- * What every item row hides behind its expand (spec 0021-8 §2b, §2c): the
- * source it came from, and its asset refs. **This is the only surface that
- * can set `audioRef`/`imageRef` at all** once slice 11 deletes the form
- * editor — without it Listen, Dictation, Shadowing and Picture become
- * permanently unreachable, since §1a greys them for exactly these refs.
+ * What every item row hides behind its `⚙` (spec 0021-8 §2b, §2c; moved from
+ * an inline expansion into `SettingsSheet` by spec 0021-13 §2, contents
+ * unchanged): the source it came from, and its asset refs. **This is the
+ * only surface that can set `audioRef`/`imageRef` at all** once slice 11
+ * deletes the form editor — without it Listen, Dictation, Shadowing and
+ * Picture become permanently unreachable, since §1a greys them for exactly
+ * these refs.
  */
 export function RowExtras({ item, edit }: { item: Item; edit: UnitEditOps }) {
   const raw = edit.raw(item.id) ?? { id: item.id };
@@ -243,16 +297,23 @@ function ExampleCard({
   lookup,
   bookDocId,
   edit,
-  expanded,
-  onToggle,
+  onRemove,
+  onSettings,
   diff,
 }: {
   item: ExampleItem;
   lookup: TapLookup;
   bookDocId: string;
   edit?: UnitEditOps;
-  expanded?: boolean;
-  onToggle?: () => void;
+  /** Routes through the page's undo toast (spec 0021-13 §4) — never
+   * `edit.removeRow` directly, so a delete here is undoable like every
+   * other `−` on this trail. */
+  onRemove?: () => void;
+  /** Opens the row's `⚙` sheet (spec 0021-13 §2), rendered by the page body
+   * alongside Vocabulary's and Concepts' own: this card is module-local
+   * with one call site, so hoisting the sheet up costs nothing
+   * `openLexeme`/`openConcept` don't already pay. */
+  onSettings?: () => void;
   diff?: DiffView;
 }) {
   const [showTranslation, setShowTranslation] = useState(false);
@@ -298,6 +359,11 @@ function ExampleCard({
     const set = (path: [string] | [string, string], value: string) =>
       edit.patchEntity(withPayload(raw, path, value));
     const editable = edit.canEditRow(item.id);
+    // A field whose learner rendering wraps — `text`, `translation`,
+    // `contrast` — auto-grows instead of clipping (spec 0021-13 §1), the
+    // same `GrowingTextarea` the Concepts page's Definition uses. `First`/
+    // `Second` stay single-line inputs: a pair's script is a short token,
+    // the same call Vocabulary's Script/Gloss already make.
     const field = (
       label: string,
       path: [string] | [string, string],
@@ -307,12 +373,15 @@ function ExampleCard({
         <label className="field">
           {label}
           {multiline ? (
-            <textarea
-              rows={2}
-              readOnly={!editable}
-              value={edit.payloadValue(item.id, ...path)}
-              onChange={(e) => set(path, e.target.value)}
-            />
+            editable ? (
+              <GrowingTextarea
+                ariaLabel={label}
+                value={edit.payloadValue(item.id, ...path)}
+                onChange={(e) => set(path, e.target.value)}
+              />
+            ) : (
+              edit.payloadValue(item.id, ...path)
+            )
           ) : (
             <input
               type="text"
@@ -328,7 +397,7 @@ function ExampleCard({
       </>
     );
     return (
-      <li className="card">
+      <li className="card unit-row-card">
         {item.kind === "sentence" ? (
           <>
             {field("Text", ["text"], true)}
@@ -345,15 +414,12 @@ function ExampleCard({
         <RowActions
           onUp={() => edit.moveRow(item.id, -1)}
           onDown={() => edit.moveRow(item.id, 1)}
-          onRemove={() => edit.removeRow(item.id)}
+          onRemove={onRemove}
           removeLabel={edit.removeLabel(item.id)}
+          {...(editable && onSettings !== undefined
+            ? { onSettings, settingsLabel: "Example settings" }
+            : {})}
         />
-        {editable && onToggle !== undefined && (
-          <button type="button" className="plain" onClick={onToggle}>
-            {expanded === true ? "Less" : "More"}
-          </button>
-        )}
-        {editable && expanded === true && <RowExtras item={item} edit={edit} />}
       </li>
     );
   }
@@ -488,12 +554,14 @@ function NoteCard({
         />
         {/* No pin control: pinning a draft note into your own review queue
             is meaningless. Not `danger` (spec 0021-12 done-criteria: "no red
-            word"): a whole-note delete has no undo yet (ponytail: the
-            `useUndoSnapshot` this slice ships lives inside `NoteEditor`,
-            which unmounts with the note it would need to restore — hoisting
-            one to this Theory-page level is follow-up work, not a colour
-            fix), so it still reads as plain text rather than the icon
-            vocabulary's un-confirmed `−`. */}
+            word"): a whole-note delete still has no undo (ponytail: this
+            component now sits beside a hoisted `useUndoSnapshot` (spec
+            0021-13 §4, used by Vocabulary/Concepts/Examples below), but
+            routing `removeNoteByStem` through it is Theory-page behaviour,
+            and spec 0021-13 says "Not in this slice" — upgrade path is
+            wiring it up when that page's own slice touches this button), so
+            it still reads as plain text rather than the icon vocabulary's
+            un-confirmed `−`. */}
         <button className="plain" onClick={() => edit.removeNoteByStem(stem)}>
           Delete this note
         </button>
@@ -533,6 +601,13 @@ function NoteCard({
  * One existing exercise (spec 0021-8 §1b). Every control here is a picker
  * over what the unit already holds — there is no free-text id field, and the
  * type `<select>` lists only types this exercise's current items support.
+ *
+ * The type and its instructions move behind the card's own `⚙` (spec
+ * 0021-13 §3), with the sheet's open state kept **local to this component**
+ * rather than hoisted to `UnitScreen`'s body the way Vocabulary/Concepts/
+ * Examples keep theirs: `SessionEditSheet` renders this same component from
+ * outside `UnitScreen` entirely, over a different `expandedRow` (it has
+ * none), so a page-level `openX` lookup would have nothing to read there.
  */
 export function ExerciseCard({
   taskId,
@@ -549,6 +624,7 @@ export function ExerciseCard({
    * you are practising would leave the session running over nothing. */
   onDelete?: (label: string) => void;
 }) {
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const raw = edit.rawTask(taskId);
   if (raw === undefined) {
     // A `taskIds` entry pointing at no task — routine mid-edit, and
@@ -567,22 +643,10 @@ export function ExerciseCard({
   // what is wrong with it.
   const typeOptions = [...new Set([type, ...validTypesFor(items, unitItems)])];
   const allowed = TASK_ALLOWED_ITEM_KINDS[type];
+  const label = exerciseLabel(type, items);
   return (
     <li className="card">
-      <strong>{exerciseLabel(type, items)}</strong>
-      <label className="field">
-        Type
-        <select
-          value={type}
-          onChange={(e) => edit.patchTask({ ...raw, type: e.target.value })}
-        >
-          {typeOptions.map((option) => (
-            <option key={option} value={option}>
-              {exerciseTypeLabel(option)}
-            </option>
-          ))}
-        </select>
-      </label>
+      <strong>{label}</strong>
       <EntityPicker
         label="Items"
         options={unitItems
@@ -596,21 +660,48 @@ export function ExerciseCard({
         // picker's default "Delete" would say otherwise.
         removeLabel={() => "Remove"}
       />
-      <label className="field">
-        Instructions
-        <textarea
-          rows={2}
-          value={typeof raw.instructions === "string" ? raw.instructions : ""}
-          onChange={(e) =>
-            // Optional, so an emptied box **deletes** the key rather than
-            // leaving `""` behind (same rule as every other optional field).
-            edit.patchTask(withOptionalKey(raw, "instructions", e.target.value))
-          }
-        />
-      </label>
       <ProblemMarker problems={edit.problemsFor(taskId)} />
-      {onDelete !== undefined && (
-        <RowActions onRemove={() => onDelete(exerciseLabel(type, items))} />
+      <RowActions
+        onSettings={() => setSettingsOpen(true)}
+        settingsLabel="Exercise settings"
+        {...(onDelete !== undefined ? { onRemove: () => onDelete(label) } : {})}
+      />
+      {settingsOpen && (
+        <SettingsSheet
+          title={rowSheetTitle(label, "New exercise")}
+          onDismiss={() => setSettingsOpen(false)}
+        >
+          <label className="field">
+            Type
+            <select
+              value={type}
+              onChange={(e) => edit.patchTask({ ...raw, type: e.target.value })}
+            >
+              {typeOptions.map((option) => (
+                <option key={option} value={option}>
+                  {exerciseTypeLabel(option)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            Instructions
+            <textarea
+              rows={2}
+              value={
+                typeof raw.instructions === "string" ? raw.instructions : ""
+              }
+              onChange={(e) =>
+                // Optional, so an emptied box **deletes** the key rather
+                // than leaving `""` behind (same rule as every other
+                // optional field).
+                edit.patchTask(
+                  withOptionalKey(raw, "instructions", e.target.value),
+                )
+              }
+            />
+          </label>
+        </SettingsSheet>
       )}
     </li>
   );
@@ -706,13 +797,44 @@ export function UnitScreen({
   // Diff renders the union read-only with per-element tints (spec 0021-9
   // §3); Preview plays the draft for real, so it keeps the Practice bar.
   const diff = diffView(session);
-  // Which vocabulary row has its secondary fields open (transliteration
-  // today; slice 8 §2c adds the source and asset controls to the same row).
-  // Deliberately not reset when `unitId` changes — `App.tsx` reuses this
+  // Which row's `⚙` sheet is open (spec 0021-13 §2 — transliteration and
+  // `RowExtras` both live there now, not in an inline expansion), across
+  // Vocabulary, Concepts and Examples alike. One id serves every page: only
+  // one row's controls can be open at a time regardless of which page it's
+  // on. Deliberately not reset when `unitId` changes — `App.tsx` reuses this
   // instance across units (see the keyboard effect below), and an id from
   // the previous unit simply matches no row here, so the only effect is that
   // coming back re-opens the row you left open.
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
+  // Undo toast (spec 0021-13 §4): one snapshot for every `−` on Vocabulary,
+  // Concepts and Examples — Exercises keeps its own confirm-then-delete
+  // sheet instead (see `removeWithUndo`'s doc comment) — never a stack, same
+  // as slice 12's note-table undo.
+  const { message: undoMessage, capture, undo } = useUndoSnapshot();
+  /** `bookNoun` names the Book-owned case ("Concept" here, "Example" on the
+   * Examples page) — the lexicon case is always "Word" and always unlinks,
+   * regardless of page or item kind, which is the distinction slice 6 §2d
+   * exists to protect: do not merge the two.
+   *
+   * Exercises does **not** route through this: `UnitScreen.exercises.test.
+   * tsx` pins a confirm-then-delete flow for a task ("deletes an exercise
+   * behind a confirm that names it") that predates this slice and is a
+   * behavioural assertion, not a stale locator — spec 0021-13 §6 says stop
+   * rather than change one of those. It is also the wrong shape for this
+   * helper regardless: `isBookItem` only knows `items`, so a `taskId` would
+   * always take the `else` branch and read "Word deleted" for an exercise. */
+  function removeWithUndo(ops: UnitEditOps, id: string, bookNoun: string) {
+    const bookBefore = session?.book;
+    if (bookBefore === undefined) {
+      return;
+    }
+    if (ops.isBookItem(id)) {
+      capture(bookNoun, () => session?.changeBook(bookBefore), "deleted");
+    } else {
+      capture("Word", () => session?.changeBook(bookBefore), "unlinked");
+    }
+    ops.removeRow(id);
+  }
   // Exercises page (spec 0021-8 §1): whether the offer list is open, and
   // which exercise is awaiting a delete confirmation.
   const [showOffers, setShowOffers] = useState(false);
@@ -792,6 +914,10 @@ export function UnitScreen({
   const lexemesHaveAudio = lexemes.some(
     (item) => item.payload.audioRef !== undefined,
   );
+  // The row whose `⚙` opened a sheet (spec 0021-13 §2), or `undefined` on
+  // every other render — including every render of every other page, which
+  // is why this is looked up rather than stored as its own boolean.
+  const openLexeme = lexemes.find((item) => item.id === expandedRow);
   const concepts = items.filter(
     (item): item is ConceptItem => item.kind === "concept",
   );
@@ -900,10 +1026,16 @@ export function UnitScreen({
   const conceptChunks = chunk(concepts, CONCEPT_CHUNK_SIZE);
   const conceptRows =
     conceptChunks[Math.min(conceptPage, conceptChunks.length - 1)] ?? [];
+  // Same lookup as `openLexeme`, scoped to the current page's chunk: a row
+  // on a chunk the author has paginated away from was never shown expanded
+  // before this slice either.
+  const openConcept = conceptRows.find((item) => item.id === expandedRow);
 
   const exampleChunks = chunk(examples, EXAMPLE_CHUNK_SIZE);
   const exampleCards =
     exampleChunks[Math.min(examplePage, exampleChunks.length - 1)] ?? [];
+  // Same lookup as `openConcept`, scoped to the current page's chunk.
+  const openExample = exampleCards.find((item) => item.id === expandedRow);
 
   // The Book's other units, by title and grouped by lesson, for the two
   // unit-reference controls on Overview. A unit never references itself
@@ -1167,176 +1299,152 @@ export function UnitScreen({
           </p>
           {edit !== null &&
             !edit.canEditLexicon &&
-            lexemes.some((item) => edit.isLexiconEntry(item.id)) && (
+            (lexemes.length === 0 ||
+              lexemes.some((item) => edit.isLexiconEntry(item.id))) && (
               <p className="status">{SHARED_LEXICON_NOTE}</p>
             )}
-          <table className="vocab-table">
-            <thead>
-              <tr>
-                <th>Script</th>
-                <th>Gloss</th>
-                {lexemesHaveAudio ? <th>Audio</th> : null}
-                {edit !== null ? <th /> : null}
-              </tr>
-            </thead>
-            <tbody>
-              {lexemes.map((item) => {
-                const editable = edit !== null && edit.canEditRow(item.id);
-                return (
-                  <Fragment key={item.id}>
-                    <tr>
-                      <td>
-                        {editable ? (
-                          <>
-                            <input
-                              type="text"
-                              aria-label="Script"
-                              value={edit.payloadValue(item.id, "script")}
-                              onChange={(e) =>
-                                edit.patchEntity(
-                                  withPayload(
-                                    edit.raw(item.id) ?? { id: item.id },
-                                    ["script"],
-                                    e.target.value,
-                                  ),
-                                )
-                              }
-                            />
-                            <ProblemMarker
-                              problems={edit.fieldProblems(
-                                item.id,
-                                "payload.script",
-                              )}
-                            />
-                          </>
-                        ) : (
-                          <button
-                            type="button"
-                            className="plain tappable-token"
-                            onClick={() => setOpenEntryId(item.id)}
-                          >
-                            {item.payload.script}
-                          </button>
-                        )}
-                      </td>
-                      <td>
-                        {editable ? (
-                          <>
-                            <input
-                              type="text"
-                              aria-label="Gloss"
-                              value={edit.payloadValue(item.id, "gloss")}
-                              onChange={(e) =>
-                                edit.patchEntity(
-                                  withPayload(
-                                    edit.raw(item.id) ?? { id: item.id },
-                                    ["gloss"],
-                                    e.target.value,
-                                  ),
-                                )
-                              }
-                            />
-                            <ProblemMarker
-                              problems={edit.fieldProblems(
-                                item.id,
-                                "payload.gloss",
-                              )}
-                            />
-                          </>
-                        ) : (
-                          item.payload.gloss
-                        )}
-                      </td>
-                      {/* The speaker stays a speaker (§2c): setting
+          {/* Propose mode's gap, stated rather than a silent empty table
+              (spec 0021-13 §5): a book-owned lexeme item is schema-legal
+              (validate.ts class (x)), just unreachable from this UI today —
+              so this keys off `lexemes` itself, not the domain's shared
+              `entryKind`, the same row-based test the note above and the
+              Concepts page both use. Zero rows plus a read-only lexicon
+              means there is nothing this mode can show, not nothing there
+              is to show. */}
+          {edit !== null &&
+          !edit.canEditLexicon &&
+          lexemes.length === 0 ? null : (
+            <table className="vocab-table unit-row-table">
+              <thead>
+                <tr>
+                  <th>Script</th>
+                  <th>Gloss</th>
+                  {lexemesHaveAudio ? <th>Audio</th> : null}
+                  {edit !== null ? <th className="unit-row-actions" /> : null}
+                </tr>
+              </thead>
+              <tbody>
+                {lexemes.map((item) => {
+                  const editable = edit !== null && edit.canEditRow(item.id);
+                  return (
+                    <Fragment key={item.id}>
+                      <tr>
+                        <td>
+                          {editable ? (
+                            <>
+                              <input
+                                type="text"
+                                aria-label="Script"
+                                value={edit.payloadValue(item.id, "script")}
+                                onChange={(e) =>
+                                  edit.patchEntity(
+                                    withPayload(
+                                      edit.raw(item.id) ?? { id: item.id },
+                                      ["script"],
+                                      e.target.value,
+                                    ),
+                                  )
+                                }
+                              />
+                              <ProblemMarker
+                                problems={edit.fieldProblems(
+                                  item.id,
+                                  "payload.script",
+                                )}
+                              />
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              className="plain tappable-token"
+                              onClick={() => setOpenEntryId(item.id)}
+                            >
+                              {item.payload.script}
+                            </button>
+                          )}
+                        </td>
+                        <td>
+                          {editable ? (
+                            <>
+                              <input
+                                type="text"
+                                aria-label="Gloss"
+                                value={edit.payloadValue(item.id, "gloss")}
+                                onChange={(e) =>
+                                  edit.patchEntity(
+                                    withPayload(
+                                      edit.raw(item.id) ?? { id: item.id },
+                                      ["gloss"],
+                                      e.target.value,
+                                    ),
+                                  )
+                                }
+                              />
+                              <ProblemMarker
+                                problems={edit.fieldProblems(
+                                  item.id,
+                                  "payload.gloss",
+                                )}
+                              />
+                            </>
+                          ) : (
+                            item.payload.gloss
+                          )}
+                        </td>
+                        {/* The speaker stays a speaker (§2c): setting
                           `audioRef` is slice 8's expanded row, and a row
                           with no audio shows nothing rather than an empty
                           control. */}
-                      {lexemesHaveAudio ? (
-                        <td>
-                          <SpeakerButton
-                            text={item.payload.script}
-                            lang={readAloudLang}
-                            assetUrl={
-                              item.payload.audioRef !== undefined
-                                ? getLexiconAssetUrl(
-                                    domainId,
-                                    "audio",
-                                    item.payload.audioRef,
-                                  )
-                                : undefined
-                            }
-                          />
-                        </td>
-                      ) : null}
-                      {edit !== null ? (
-                        <td>
-                          {/* Shown even on a row whose fields are read-only:
+                        {lexemesHaveAudio ? (
+                          <td>
+                            <SpeakerButton
+                              text={item.payload.script}
+                              lang={readAloudLang}
+                              assetUrl={
+                                item.payload.audioRef !== undefined
+                                  ? getLexiconAssetUrl(
+                                      domainId,
+                                      "audio",
+                                      item.payload.audioRef,
+                                    )
+                                  : undefined
+                              }
+                            />
+                          </td>
+                        ) : null}
+                        {edit !== null ? (
+                          <td className="unit-row-actions">
+                            {/* Shown even on a row whose fields are read-only:
                               all three write `unit.itemIds`, which the Book
                               owns, never the lexicon. Reordering and
                               unlinking a borrowed word are the author's to
                               do; changing the word itself is not. */}
-                          <RowActions
-                            onUp={() => edit.moveRow(item.id, -1)}
-                            onDown={() => edit.moveRow(item.id, 1)}
-                            onRemove={() => edit.removeRow(item.id)}
-                            removeLabel={edit.removeLabel(item.id)}
-                          />
-                          {editable && (
-                            <button
-                              type="button"
-                              className="plain"
-                              onClick={() =>
-                                setExpandedRow((open) =>
-                                  open === item.id ? null : item.id,
-                                )
+                            <RowActions
+                              onUp={() => edit.moveRow(item.id, -1)}
+                              onDown={() => edit.moveRow(item.id, 1)}
+                              onRemove={() =>
+                                removeWithUndo(edit, item.id, "Word")
                               }
-                            >
-                              {expandedRow === item.id ? "Less" : "More"}
-                            </button>
-                          )}
-                          <ProblemMarker
-                            problems={edit.entityProblems(item.id)}
-                          />
-                        </td>
-                      ) : null}
-                    </tr>
-                    {editable && expandedRow === item.id ? (
-                      <tr>
-                        <td colSpan={lexemesHaveAudio ? 4 : 3}>
-                          <label className="field">
-                            Transliteration
-                            <input
-                              type="text"
-                              value={edit.payloadValue(
-                                item.id,
-                                "transliteration",
-                              )}
-                              onChange={(e) =>
-                                edit.patchEntity(
-                                  withPayload(
-                                    edit.raw(item.id) ?? { id: item.id },
-                                    ["transliteration"],
-                                    e.target.value,
-                                  ),
-                                )
-                              }
+                              removeLabel={edit.removeLabel(item.id)}
+                              {...(editable
+                                ? {
+                                    onSettings: () => setExpandedRow(item.id),
+                                    settingsLabel: "Word settings",
+                                  }
+                                : {})}
                             />
-                          </label>
-                          <ProblemMarker
-                            problems={edit.fieldProblems(
-                              item.id,
-                              "payload.transliteration",
-                            )}
-                          />
-                          <RowExtras item={item} edit={edit} />
-                        </td>
+                            <ProblemMarker
+                              problems={edit.entityProblems(item.id)}
+                            />
+                          </td>
+                        ) : null}
                       </tr>
-                    ) : null}
-                  </Fragment>
-                );
-              })}
-            </tbody>
-          </table>
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
           {edit !== null &&
             edit.entryKind === "lexeme" &&
             edit.canEditLexicon && (
@@ -1348,6 +1456,36 @@ export function UnitScreen({
                 + word
               </button>
             )}
+          {edit !== null && openLexeme !== undefined && (
+            <SettingsSheet
+              title={rowSheetTitle(openLexeme.payload.script, "New word")}
+              onDismiss={() => setExpandedRow(null)}
+            >
+              <label className="field">
+                Transliteration
+                <input
+                  type="text"
+                  value={edit.payloadValue(openLexeme.id, "transliteration")}
+                  onChange={(e) =>
+                    edit.patchEntity(
+                      withPayload(
+                        edit.raw(openLexeme.id) ?? { id: openLexeme.id },
+                        ["transliteration"],
+                        e.target.value,
+                      ),
+                    )
+                  }
+                />
+              </label>
+              <ProblemMarker
+                problems={edit.fieldProblems(
+                  openLexeme.id,
+                  "payload.transliteration",
+                )}
+              />
+              <RowExtras item={openLexeme} edit={edit} />
+            </SettingsSheet>
+          )}
         </>
       ) : null}
 
@@ -1377,12 +1515,12 @@ export function UnitScreen({
               }
             />
           ) : null}
-          <table className="vocab-table">
+          <table className="vocab-table unit-row-table">
             <thead>
               <tr>
                 <th>Term</th>
                 <th>Definition</th>
-                {edit !== null ? <th /> : null}
+                {edit !== null ? <th className="unit-row-actions" /> : null}
               </tr>
             </thead>
             <tbody>
@@ -1443,9 +1581,8 @@ export function UnitScreen({
                       <td>
                         {editable ? (
                           <>
-                            <input
-                              type="text"
-                              aria-label="Definition"
+                            <GrowingTextarea
+                              ariaLabel="Definition"
                               value={edit.payloadValue(item.id, "definition")}
                               onChange={(e) =>
                                 edit.patchEntity(
@@ -1469,39 +1606,27 @@ export function UnitScreen({
                         )}
                       </td>
                       {edit !== null ? (
-                        <td>
+                        <td className="unit-row-actions">
                           <RowActions
                             onUp={() => edit.moveRow(item.id, -1)}
                             onDown={() => edit.moveRow(item.id, 1)}
-                            onRemove={() => edit.removeRow(item.id)}
+                            onRemove={() =>
+                              removeWithUndo(edit, item.id, "Concept")
+                            }
                             removeLabel={edit.removeLabel(item.id)}
+                            {...(editable
+                              ? {
+                                  onSettings: () => setExpandedRow(item.id),
+                                  settingsLabel: "Concept settings",
+                                }
+                              : {})}
                           />
-                          {editable && (
-                            <button
-                              type="button"
-                              className="plain"
-                              onClick={() =>
-                                setExpandedRow((open) =>
-                                  open === item.id ? null : item.id,
-                                )
-                              }
-                            >
-                              {expandedRow === item.id ? "Less" : "More"}
-                            </button>
-                          )}
                           <ProblemMarker
                             problems={edit.entityProblems(item.id)}
                           />
                         </td>
                       ) : null}
                     </tr>
-                    {editable && expandedRow === item.id ? (
-                      <tr>
-                        <td colSpan={3}>
-                          <RowExtras item={item} edit={edit} />
-                        </td>
-                      </tr>
-                    ) : null}
                   </Fragment>
                 );
               })}
@@ -1532,6 +1657,14 @@ export function UnitScreen({
                 + word
               </button>
             )}
+          {edit !== null && openConcept !== undefined && (
+            <SettingsSheet
+              title={rowSheetTitle(openConcept.payload.term, "New concept")}
+              onDismiss={() => setExpandedRow(null)}
+            >
+              <RowExtras item={openConcept} edit={edit} />
+            </SettingsSheet>
+          )}
         </>
       ) : null}
 
@@ -1563,12 +1696,14 @@ export function UnitScreen({
                 item={item}
                 lookup={lookup}
                 bookDocId={`topic:${content.topic.id}`}
-                {...(edit !== null ? { edit } : {})}
+                {...(edit !== null
+                  ? {
+                      edit,
+                      onRemove: () => removeWithUndo(edit, item.id, "Example"),
+                      onSettings: () => setExpandedRow(item.id),
+                    }
+                  : {})}
                 {...(diff !== null ? { diff } : {})}
-                expanded={expandedRow === item.id}
-                onToggle={() =>
-                  setExpandedRow((open) => (open === item.id ? null : item.id))
-                }
               />
             ))}
           </ul>
@@ -1589,6 +1724,17 @@ export function UnitScreen({
                 + pair
               </button>
             </>
+          )}
+          {edit !== null && openExample !== undefined && (
+            <SettingsSheet
+              title={rowSheetTitle(
+                itemLabel(openExample),
+                openExample.kind === "sentence" ? "New sentence" : "New pair",
+              )}
+              onDismiss={() => setExpandedRow(null)}
+            >
+              <RowExtras item={openExample} edit={edit} />
+            </SettingsSheet>
           )}
         </>
       ) : null}
@@ -1723,6 +1869,9 @@ export function UnitScreen({
           onClose={() => setOpenEntryId(null)}
         />
       ) : null}
+      {undoMessage !== null && (
+        <UndoToast message={undoMessage} onUndo={undo} />
+      )}
     </main>
   );
 }

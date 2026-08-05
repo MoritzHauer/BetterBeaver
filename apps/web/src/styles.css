@@ -1158,6 +1158,58 @@ main.unit-screen {
   border-bottom: 1px solid var(--card-border);
 }
 
+/* A Unit row's own cell control (spec 0021-13 §1): borderless and filling
+ * the cell until touched, so the row reads as a table row and the caret is
+ * the only thing that says it's editable — hover shows a faint border,
+ * focus shows `--primary`'s. Scoped to `.unit-row-table`, not bare
+ * `.vocab-table`: the note table (spec 0021-12 §3) reuses `.vocab-table`
+ * too and keeps its own always-bordered inputs on purpose. `.unit-row-card`
+ * is the same treatment for the Examples page's cards, which have no table
+ * to scope to — one rule, not a second declaration of the same look. */
+.unit-row-table input[type="text"],
+.unit-row-table textarea,
+.unit-row-card input[type="text"],
+.unit-row-card textarea {
+  display: block;
+  width: 100%;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid transparent;
+  border-radius: 0.4rem;
+  background: none;
+  font: inherit;
+  color: inherit;
+  resize: none;
+  overflow: hidden;
+}
+
+.unit-row-table input[type="text"]:hover,
+.unit-row-table textarea:hover,
+.unit-row-card input[type="text"]:hover,
+.unit-row-card textarea:hover {
+  border-color: var(--card-border);
+}
+
+.unit-row-table input[type="text"]:focus,
+.unit-row-table textarea:focus,
+.unit-row-card input[type="text"]:focus,
+.unit-row-card textarea:focus {
+  border-color: var(--primary);
+}
+
+/* The trailing action column stays as narrow as its icon rail, never as
+ * wide as the widest data cell — same fix the note table's action column
+ * needed (spec 0021-12 §3), applied here so ⚙/−/↑/↓ never wrap onto a
+ * second line (spec 0021-13 §1). A dedicated class, not `td:last-child`
+ * (bug found in review): the note table's action column is edit-only by
+ * construction, but this one's table renders in the learner view too, sans
+ * action column — `:last-child` would then land on Gloss/Definition and
+ * stop *that* from wrapping instead, clipping exactly what §1 exists to
+ * stop clipping. */
+.unit-row-table .unit-row-actions {
+  width: 1%;
+  white-space: nowrap;
+}
+
 /* Tap-to-lookup (plan 0006 step 4). */
 .tappable-text {
   display: inline;
@@ -1372,14 +1424,24 @@ body.bb-editing main {
   padding: 0.2rem 0.6rem;
 }
 
-/* Undo toast (spec 0021-12 §5): fixed at the edit bar's own height above it,
- * so the two never overlap — same fixed-strip pattern as `.edit-bar` itself,
- * one slot higher. */
+/* Undo toast (spec 0021-12 §5). Originally fixed at the edit bar's own
+ * height above it — but the Unit trail's Practice bar (`.action-bar`) is
+ * *also* lifted to exactly that slot while `body.bb-editing` is set (see
+ * `.edit-bar`'s comment below), and stays mounted through Preview, which
+ * doesn't unmount the session: delete a row, flip to Preview inside the 6s
+ * window, and the two collided at the same offset (spec 0021-13, bug found
+ * in review). Anchored to the top instead — but `top: 0` alone reopened the
+ * same bug one level up: both mounts of this component sit inside
+ * `main.unit-screen`, whose own `.screen-header` (Back button, trail dots)
+ * is the first thing in that main's flow, so the toast covered the page's
+ * own navigation instead. Offset by that header's height: `main`'s 1rem
+ * top padding plus one row of 44px buttons (the button system's own floor,
+ * styles.css:193) — the header has no other padding/border to add. */
 .undo-toast {
   position: fixed;
   left: 0;
   right: 0;
-  bottom: var(--edit-bar-height);
+  top: calc(1rem + 44px);
   z-index: 2;
   display: flex;
   align-items: center;
@@ -1387,7 +1449,7 @@ body.bb-editing main {
   gap: 0.75rem;
   padding: 0.5rem 0.9rem;
   background: var(--card-bg);
-  border-top: 1px solid var(--card-border);
+  border-bottom: 1px solid var(--card-border);
 }
 
 .update-banner {
