@@ -1,6 +1,6 @@
 # Plan 0021: In-place editing (edit the page you are looking at)
 
-Status: **designed** · Owner: Moe · Date: 2026-07-31 · Direction pinned by a 15-question grilling session (2026-07-31) over the shipped editor, `validate.ts`, the asset pipeline and the content backend migration
+Status: **slices 1–11 landed; 12–14 designed** · Owner: Moe · Date: 2026-07-31, extended 2026-08-05 · Direction pinned by a 15-question grilling session (2026-07-31) over the shipped editor, `validate.ts`, the asset pipeline and the content backend migration; §14 added after a 9-question grilling (2026-08-05) over the shipped result, driven in a browser against the live Kyrgyz Book
 
 ## Purpose
 
@@ -251,6 +251,25 @@ Ids disappear from the UI. `EntityPicker` shows them today for a reason: validat
 
 The replacement is deep-linking: an error's leading id maps through the existing `EditTarget` / `initialView` machinery to the screen that owns that entity, opened in Diff or Edit mode. Every error line in the publish panel is a link. Ids remain in the underlying data, in exported files and in the JSON tooling (`scripts/pull-book.ts`) — they are hidden, not removed.
 
+### 14. Edit mode looks like the page it edits (added 2026-08-05)
+
+Slices 1–11 landed and the vision is architecturally complete: you edit where you were reading, and nothing navigates away. What it is *not* yet is recognisable. Reviewing the shipped result against the real Kyrgyz Book turned up one cause that is embarrassingly cheap and several that are not.
+
+**`NoteEditor.tsx` emits ten class names — `.note-editor`, `.note-editor-table-block`, `.note-editor-table-row` and seven more — and none of them exists in `styles.css`.** The block editor shipped entirely unstyled. An 11×2 table therefore renders as 22 stacked full-width inputs (`input[type="text"] { width: 100% }` at `styles.css:779` has nothing overriding it) separated by red "Delete row" links. Paragraphs are `rows={3}` textareas that clip mid-sentence. `[icon:magnifying_glass]` and `**Ң**` sit on screen as literal source. On the Book screen, edit mode replaces cover art, the Continue-learning card and the lesson cards with a stack of labelled grey boxes — the form editor's shape, surviving inside the screen that replaced it.
+
+Six decisions, from an owner grilling on 2026-08-05:
+
+| #  | Decision | Rationale |
+|----|----------|-----------|
+| 16 | **Form controls dressed as the page**, never `contenteditable` | Non-goal 3 stands unchanged, and its reasons are unchanged: caret across inline spans, IME composition for Cyrillic, paste normalisation, Android soft keyboards. This is a presentation problem, and the presentation was simply never written. |
+| 17 | **Prose blocks render when idle and become a textarea on tap** | A `<textarea>` cannot render bold, so "reading typography" alone still leaves `**…**` on screen. Rendering until touched costs one integer of state and reuses `NoteView`'s own renderer. Tables, lists and rows stay plain inputs — they carry no inline markup, and a cell that changes element on focus makes tabbing jump. |
+| 18 | **Icons replace the red words**; `−` deletes at once, one **Undo toast** catches it | "Delete block", "Delete row", "Delete", "More" are words doing an icon's job, and they dominate the page. A 24px `−` is easy to hit by accident and the editor has no undo at all, so the icons and the toast are one decision, not two. A single snapshot, not a stack. |
+| 19 | **`⚙` opens a settings sheet over the page** | Everything that is configuration rather than content — a row's source and asset refs, a callout's variant, a table's columns, the Book's icon, cover art and Sources. Inline expansion pushes the rest of the list down and the author loses their place; `components/Sheet.tsx` already exists and already backs two other surfaces. |
+| 20 | **All three screens keep their reading layout**, not just the Unit trail | §Purpose already promised it. The Book screen is where it is least true and where the form editor's residue is most visible. |
+| 21 | A note table's **first row is content**; a Concepts table's headings are **not** | `NoteBlock` is `{ rows: string[][] }` and `NoteView.tsx:170` renders `rowIndex === 0` as `<th>` — so "Letter / Reads as" is authored markdown and must edit. `<th>Term</th>` in `UnitScreen.tsx` is screen furniture and must not. Same visual device, opposite rule; getting them backwards is the likeliest implementation error. |
+
+Also fixed while reviewing, outside the redesign (recorded here because they were found against this plan's surfaces): the seed's hardcoded `published_version: 0`, which offered a content update on the first boot of every fresh install; a scoped `✎` edit staying invisible in the question underneath, which needed a seeded shuffle before the questions could safely re-derive; and an accept-time asset inventory that ignored an unchanged document's cached stems, which would reject any asset-bearing Book whose Book and lexicon were not published together.
+
 ### 12. What gets deleted, and when
 
 Deleted outright, 1271 lines: `BookEditor.tsx` (563), `fields.tsx` (438), `DomainEditor.tsx` (203), `EditScreen.tsx`'s dispatcher (67). Replaced rather than removed, 1355 lines: `MaintainEditScreen.tsx` (557), `ProposeEditScreen.tsx` (399), `PrivateEditScreen.tsx` (399), whose three lifecycles collapse into `EditSession` as branches on `mode` — expect a meaningful part of that to reappear there, since it is real I/O, not duplication. `ProposalReview` (205) and `AssetsManager` (239) survive unchanged, rehomed.
@@ -308,8 +327,13 @@ Visible first, foundation second (decision 15). Each slice is delegable and leav
 | 9 | Preview / Diff / What-changed index. **Spec: [0021-9-preview-diff](../specs/0021-9-preview-diff.md)** | Needs a real account — private Books have no Diff |
 | 10 | Book+lexicon creation, seeded resource, publish-error deep-linking. **Spec: [0021-10-creation-and-error-links](../specs/0021-10-creation-and-error-links.md)** | Verified: needs no migration |
 | 11 | Delete the form editor. **Spec: [0021-11-delete-form-editor](../specs/0021-11-delete-form-editor.md)** | Gated on 1–10 landed **and** browser-verified. Also builds decision 13's scoped sheet, without which `EditScreen` cannot go |
+| 12 | Edit chrome + the note editor's presentation. **Spec: [0021-12-edit-chrome-and-notes](../specs/0021-12-edit-chrome-and-notes.md)** | Added 2026-08-05 (§14). Ships the icon set, the settings sheet and the undo toast that 13 and 14 reuse, and applies them where the damage is worst. Mostly the ten missing CSS rules |
+| 13 | Unit rows + `⚙` settings. **Spec: [0021-13-unit-rows-and-settings](../specs/0021-13-unit-rows-and-settings.md)** | Depends on 12. `UnitScreen.tsx` is 1725 lines — read in named ranges, and split by page rather than read past the budget |
+| 14 | Book and Lesson keep their layout. **Spec: [0021-14-book-lesson-layout](../specs/0021-14-book-lesson-layout.md)** | Depends on 12, independent of 13. Where §Purpose is currently least true |
 
 Slices 1 and 2 were each measured against design.md:145's budget when their specs were written: ~1000 and ~1150 lines of required reading respectively, both comfortably inside it, so neither splits. Later slices are unmeasured — measure before delegating, do not assume.
+
+Slices 12–14 were measured when written, and the measurement is why there are three of them rather than one: `styles.css` (1752), `UnitScreen.tsx` (1725), `NoteEditor.tsx` (1134), `BookScreen.tsx` (724) and `inPlace.tsx` (611) cannot be read together. The cut is by screen, which is also the shippable increment — each slice is independently visible and independently verifiable — rather than the horizontal "build the components, then wire them" cut design.md:145 rejects.
 
 ## Done-criteria
 
@@ -322,6 +346,14 @@ Slices 1 and 2 were each measured against design.md:145's budget when their spec
 - One `Publish` covers the Book and its lexicon; the word "domain" appears nowhere.
 - Creating a Book yields a Book, its lexicon and one seeded resource, and its first item is valid on creation.
 - `EditScreen.tsx` and its form tree are gone.
+
+Added with §14:
+
+- Edit mode is recognisably the same page as learner mode on Book, Lesson and Unit — same layout, same typography, same tables.
+- A note table edits as a table, its authored header row included; a Concepts heading stays fixed.
+- Prose renders as prose until tapped; markers show only in the block being edited.
+- No editing affordance is a red word; `+ − ↑ ↓ ⚙` do that work, and every deletion is undoable once.
+- Configuration lives behind `⚙` in a sheet, and opening one never moves the page underneath.
 
 ## Verification
 
