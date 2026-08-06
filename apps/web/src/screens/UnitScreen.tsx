@@ -14,6 +14,7 @@ import { TappableText } from "../components/TappableText";
 import { NoteView } from "../components/NoteView";
 import { NoteEditor } from "../components/NoteEditor";
 import { EntryPopup } from "../components/EntryPopup";
+import { ArrowDownIcon, ArrowUpIcon } from "../components/icons";
 import { useEditSession } from "./edit/EditSessionContext";
 import {
   ProblemMarker,
@@ -189,6 +190,40 @@ export function GrowingTextarea({
  * Picture become permanently unreachable, since §1a greys them for exactly
  * these refs.
  */
+/**
+ * Reordering, inside a row's `⚙` sheet rather than on the row (owner
+ * decision 2026-08-06, from browser-verifying slice 13). The rail's four
+ * 44px targets — spec 0021-12 §1's floor, which does not shrink — measured a
+ * fixed 196px at every viewport: 55% of a 390px phone's table, leaving the
+ * Definition column 88px against the 274px a learner reads. Spec 0021-13 §1
+ * already scopes `↑ ↓` to the rail "where order is content", so the two that
+ * squeeze a real table column move here and `⚙ −` stay on the row.
+ *
+ * Cards keep theirs inline (Examples, Exercises): they are full-width and
+ * have no column to squeeze.
+ */
+function MoveRowButtons({
+  onUp,
+  onDown,
+  noun,
+}: {
+  onUp: () => void;
+  onDown: () => void;
+  /** "And its subject" (spec 0021-12 §1) — never a bare "Move up". */
+  noun: string;
+}) {
+  return (
+    <div className="row-sheet-order">
+      <button type="button" onClick={onUp} aria-label={`Move ${noun} up`}>
+        <ArrowUpIcon /> Move up
+      </button>
+      <button type="button" onClick={onDown} aria-label={`Move ${noun} down`}>
+        <ArrowDownIcon /> Move down
+      </button>
+    </div>
+  );
+}
+
 export function RowExtras({ item, edit }: { item: Item; edit: UnitEditOps }) {
   const raw = edit.raw(item.id) ?? { id: item.id };
   /** The one optional prose field per kind that `EntryPopup` renders and no
@@ -1435,19 +1470,20 @@ export function UnitScreen({
                               owns, never the lexicon. Reordering and
                               unlinking a borrowed word are the author's to
                               do; changing the word itself is not. */}
+                            {/* No `↑ ↓` here — see `MoveRowButtons`: on a
+                                table row they cost 92px of column width.
+                                The `⚙` is therefore offered even on a
+                                read-only row, because reordering now lives
+                                inside it and reordering is this Book's to
+                                do — without it a borrowed word could not be
+                                moved at all. */}
                             <RowActions
-                              onUp={() => edit.moveRow(item.id, -1)}
-                              onDown={() => edit.moveRow(item.id, 1)}
                               onRemove={() =>
                                 removeWithUndo(edit, item.id, "Word")
                               }
                               removeLabel={edit.removeLabel(item.id)}
-                              {...(editable
-                                ? {
-                                    onSettings: () => setExpandedRow(item.id),
-                                    settingsLabel: "Word settings",
-                                  }
-                                : {})}
+                              onSettings={() => setExpandedRow(item.id)}
+                              settingsLabel="Word settings"
                             />
                             <ProblemMarker
                               problems={edit.entityProblems(item.id)}
@@ -1477,29 +1513,45 @@ export function UnitScreen({
               title={rowSheetTitle(openLexeme.payload.script, "New word")}
               onDismiss={() => setExpandedRow(null)}
             >
-              <label className="field">
-                Transliteration
-                <input
-                  type="text"
-                  value={edit.payloadValue(openLexeme.id, "transliteration")}
-                  onChange={(e) =>
-                    edit.patchEntity(
-                      withPayload(
-                        edit.raw(openLexeme.id) ?? { id: openLexeme.id },
-                        ["transliteration"],
-                        e.target.value,
-                      ),
-                    )
-                  }
-                />
-              </label>
-              <ProblemMarker
-                problems={edit.fieldProblems(
-                  openLexeme.id,
-                  "payload.transliteration",
-                )}
+              {/* The word itself is only editable when this Book maintains
+                  the lexicon. The sheet still opens for a borrowed word,
+                  because reordering moved into it and that is the Book's
+                  own `unit.itemIds` — so the fields guard, not the sheet. */}
+              {edit.canEditRow(openLexeme.id) ? (
+                <>
+                  <label className="field">
+                    Transliteration
+                    <input
+                      type="text"
+                      value={edit.payloadValue(
+                        openLexeme.id,
+                        "transliteration",
+                      )}
+                      onChange={(e) =>
+                        edit.patchEntity(
+                          withPayload(
+                            edit.raw(openLexeme.id) ?? { id: openLexeme.id },
+                            ["transliteration"],
+                            e.target.value,
+                          ),
+                        )
+                      }
+                    />
+                  </label>
+                  <ProblemMarker
+                    problems={edit.fieldProblems(
+                      openLexeme.id,
+                      "payload.transliteration",
+                    )}
+                  />
+                  <RowExtras item={openLexeme} edit={edit} />
+                </>
+              ) : null}
+              <MoveRowButtons
+                onUp={() => edit.moveRow(openLexeme.id, -1)}
+                onDown={() => edit.moveRow(openLexeme.id, 1)}
+                noun="word"
               />
-              <RowExtras item={openLexeme} edit={edit} />
             </SettingsSheet>
           )}
         </>
@@ -1623,9 +1675,8 @@ export function UnitScreen({
                       </td>
                       {edit !== null ? (
                         <td className="unit-row-actions">
+                          {/* No `↑ ↓` here — see `MoveRowButtons`. */}
                           <RowActions
-                            onUp={() => edit.moveRow(item.id, -1)}
-                            onDown={() => edit.moveRow(item.id, 1)}
                             onRemove={() =>
                               removeWithUndo(edit, item.id, "Concept")
                             }
@@ -1679,6 +1730,11 @@ export function UnitScreen({
               onDismiss={() => setExpandedRow(null)}
             >
               <RowExtras item={openConcept} edit={edit} />
+              <MoveRowButtons
+                onUp={() => edit.moveRow(openConcept.id, -1)}
+                onDown={() => edit.moveRow(openConcept.id, 1)}
+                noun="concept"
+              />
             </SettingsSheet>
           )}
         </>

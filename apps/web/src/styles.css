@@ -1219,6 +1219,24 @@ main.unit-screen {
   white-space: nowrap;
 }
 
+/* Reordering lives in the row's `⚙` sheet, not on the row (owner decision
+ * 2026-08-06). Measured in a browser at 390px: the four-icon rail was a
+ * fixed 196px at every viewport — 55% of the table — leaving Definition
+ * 88px against the 274px the learner reads. Dropping `↑ ↓` to two icons
+ * gives that width back; in the sheet there is room for the words too. */
+.row-sheet-order {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.row-sheet-order button {
+  display: flex;
+  flex: 1;
+  gap: 0.4rem;
+  align-items: center;
+  justify-content: center;
+}
+
 /* Tap-to-lookup (plan 0006 step 4). */
 .tappable-text {
   display: inline;

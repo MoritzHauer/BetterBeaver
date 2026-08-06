@@ -297,9 +297,13 @@ describe("UnitScreen in edit mode", () => {
     // Reorder and Unlink stay: they write `unit.itemIds`, which this Book
     // owns. Only the word itself is somebody else's.
     expect(screen.getByRole("button", { name: "Unlink" })).toBeTruthy();
-    expect(
-      screen.getAllByRole("button", { name: "Move up" }).length,
-    ).toBeGreaterThan(0);
+    // Reorder moved off the row and into the `⚙` sheet (owner decision
+    // 2026-08-06 — the four-icon rail took 55% of the row on a phone), so
+    // the sheet is offered on a borrowed word too. Same capability, one tap
+    // further in; the word's own fields stay absent from it.
+    fireEvent.click(screen.getByRole("button", { name: "Word settings" }));
+    expect(screen.getByRole("button", { name: "Move word up" })).toBeTruthy();
+    expect(screen.queryByLabelText("Transliteration")).toBeNull();
 
     goToPage(CONCEPTS);
     expect(screen.getByLabelText("Term")).toBeTruthy();
