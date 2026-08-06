@@ -89,8 +89,10 @@ const content = draftContent(BOOK, DOMAIN, NO_STEMS).content;
 describe("resolving an error's id to a screen", () => {
   it("sends each shape in the table to the screen that owns it", () => {
     expect(entityTarget(content, "topic")).toEqual({});
-    // A resource has no screen of its own: Sources lives on the Book.
-    expect(entityTarget(content, "bk-r1")).toEqual({});
+    // A resource has no screen of its own, and since slice 14 §3 it has no
+    // spot on the Book *page* either — Sources moved into the settings
+    // sheet, so the link has to open that sheet or it lands on nothing.
+    expect(entityTarget(content, "bk-r1")).toEqual({ bookSettings: true });
     expect(entityTarget(content, "bk-l1")).toEqual({ lessonId: "bk-l1" });
     expect(entityTarget(content, "bk-u1")).toEqual({
       lessonId: "bk-l1",

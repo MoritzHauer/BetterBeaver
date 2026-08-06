@@ -525,6 +525,7 @@ function NoteCard({
   edit,
   stem,
   inSession,
+  onDelete,
 }: {
   markdown: string;
   lookup: TapLookup;
@@ -539,6 +540,9 @@ function NoteCard({
   stem: string;
   /** True in Preview: the learner tree renders, but nothing writes. */
   inSession?: boolean;
+  /** Deletes the whole note, through the screen's undo snapshot. Only read
+   * in edit mode, where the button that calls it renders. */
+  onDelete?: () => void;
 }) {
   if (edit !== undefined) {
     return (
@@ -554,15 +558,11 @@ function NoteCard({
         />
         {/* No pin control: pinning a draft note into your own review queue
             is meaningless. Not `danger` (spec 0021-12 done-criteria: "no red
-            word"): a whole-note delete still has no undo (ponytail: this
-            component now sits beside a hoisted `useUndoSnapshot` (spec
-            0021-13 §4, used by Vocabulary/Concepts/Examples below), but
-            routing `removeNoteByStem` through it is Theory-page behaviour,
-            and spec 0021-13 says "Not in this slice" — upgrade path is
-            wiring it up when that page's own slice touches this button), so
-            it still reads as plain text rather than the icon vocabulary's
-            un-confirmed `−`. */}
-        <button className="plain" onClick={() => edit.removeNoteByStem(stem)}>
+            word"), and it now routes through the same one-step undo as every
+            other `−` (`onDelete`, wired in 2026-08-06). It keeps its words
+            rather than becoming a bare `−`: this deletes a whole note, not a
+            row, and the icon vocabulary's `−` means "this row". */}
+        <button className="plain" onClick={onDelete}>
           Delete this note
         </button>
       </section>
@@ -834,6 +834,19 @@ export function UnitScreen({
       capture("Word", () => session?.changeBook(bookBefore), "unlinked");
     }
     ops.removeRow(id);
+  }
+  /** The Theory page's whole-note delete, on the same one snapshot. Added
+   * 2026-08-06 as a follow-up to slice 13, which deferred it as Theory-page
+   * behaviour; it was the last destructive action in edit mode with no undo,
+   * and the largest — a note goes in one tap. `removeNoteByStem` is a
+   * `changeBook`, so the same restore closure covers it. */
+  function removeNoteWithUndo(ops: UnitEditOps, noteStem: string) {
+    const bookBefore = session?.book;
+    if (bookBefore === undefined) {
+      return;
+    }
+    capture("Note", () => session?.changeBook(bookBefore), "deleted");
+    ops.removeNoteByStem(noteStem);
   }
   // Exercises page (spec 0021-8 §1): whether the offer list is open, and
   // which exercise is awaiting a delete confirmation.
@@ -1275,6 +1288,9 @@ export function UnitScreen({
                 bookId={content.topic.id}
                 noteId={note.noteId}
                 stem={note.stem}
+                {...(edit !== null
+                  ? { onDelete: () => removeNoteWithUndo(edit, note.stem) }
+                  : {})}
                 inSession={session !== null}
                 {...(edit !== null ? { edit } : {})}
               />

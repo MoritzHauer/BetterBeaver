@@ -21,6 +21,10 @@ export type ChangedTarget = {
    * "one tap from the thing that caused it" and "one tap from its unit"
    * (spec 0021-10 §3). */
   page?: string;
+  /** Open the Book screen with its settings sheet up: the same rule as
+   * `page`, for the resources that live in the sheet rather than on the
+   * page (slice 14 §3). */
+  bookSettings?: boolean;
 };
 
 interface Row {
@@ -185,7 +189,9 @@ export function entityTarget(
     return {};
   }
   if (content.resources.some((resource) => resource.id === id)) {
-    return {};
+    // Sources live in the Book settings sheet since slice 14 §3, so landing
+    // on the Book screen alone would show nothing of what the error names.
+    return { bookSettings: true };
   }
   const lesson = content.lessons.find((l) => l.id === id);
   if (lesson !== undefined) {

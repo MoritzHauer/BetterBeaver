@@ -99,7 +99,11 @@ const lookup = {
   onWordsChanged: () => {},
 } as unknown as TapLookup;
 
-function renderUnit(session: EditSessionValue | null, content?: Content) {
+function renderUnit(
+  session: EditSessionValue | null,
+  content?: Content,
+  noteMarkdown: (stem: string) => string | undefined = () => undefined,
+) {
   const tree = (
     <UnitScreen
       content={content ?? build(BOOK, DOMAIN)}
@@ -110,7 +114,7 @@ function renderUnit(session: EditSessionValue | null, content?: Content) {
       onPinNote={() => {}}
       isNotePinned={async () => false}
       onBack={() => {}}
-      noteMarkdown={() => undefined}
+      noteMarkdown={noteMarkdown}
     />
   );
   return render(
@@ -169,6 +173,7 @@ function goToPage(index: number) {
     screen.getAllByRole("button", { name: /^Page \d+ of/ })[index]!,
   );
 }
+const THEORY = 1;
 const VOCABULARY = 2;
 const CONCEPTS = 3;
 const EXAMPLES = 4;
@@ -405,6 +410,34 @@ describe("UnitScreen in edit mode", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Undo" }));
     expect(books.at(-1)!.items).toHaveLength(2);
+  });
+
+  it("deletes a whole note behind a 'deleted' toast, and undo restores it", () => {
+    // The last destructive action in edit mode that had no undo (wired
+    // 2026-08-06, deferred by slice 13 as Theory-page behaviour). A note goes
+    // in one tap and takes all its markdown with it, so this is the delete
+    // the toast matters most for.
+    // A document note is `{ stem, markdown }`; the id the unit points at
+    // derives as `<topic.code>-note-<stem>` inside `validateContent`.
+    const markdown = "# Intro\n\nProse.";
+    const withNote: BookDocument = {
+      ...BOOK,
+      units: [{ ...BOOK.units[0]!, noteIds: ["bk-note-intro"] }],
+      notes: [{ stem: "intro", markdown }],
+    };
+    const { session, books } = makeSession({
+      book: withNote,
+      content: build(withNote, DOMAIN),
+    });
+    renderUnit(session, build(withNote, DOMAIN), () => markdown);
+
+    goToPage(THEORY);
+    fireEvent.click(screen.getByRole("button", { name: "Delete this note" }));
+    expect(screen.getByText("Note deleted")).toBeTruthy();
+    expect(books.at(-1)!.notes).toHaveLength(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(books.at(-1)!.notes).toEqual([{ stem: "intro", markdown }]);
   });
 
   it("deletes an Example behind a 'deleted' toast, and undo restores it", () => {

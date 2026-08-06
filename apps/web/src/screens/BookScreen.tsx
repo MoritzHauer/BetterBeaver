@@ -73,6 +73,7 @@ export function BookScreen({
   onEdit,
   onBack,
   unpublishedChanges = false,
+  atSettings = false,
 }: {
   content: Content;
   attemptedTaskIds: ReadonlySet<string>;
@@ -95,6 +96,10 @@ export function BookScreen({
   /** Authors only (plan 0012): opens this book's document in the editor. */
   onEdit?: () => void;
   onBack: () => void;
+  /** Arrive with the settings sheet already up, for a publish-error link to
+   * a resource — Sources moved into it in slice 14 §3, so the page alone has
+   * nothing to show. The Unit trail's `atPage` does the same job. */
+  atSettings?: boolean;
 }) {
   const lessonById = new Map(
     content.lessons.map((lesson) => [lesson.id, lesson]),
@@ -116,7 +121,16 @@ export function BookScreen({
   );
   // The Book settings sheet (spec 0021-14 §3): icon, cover art and Sources,
   // none of which has a learner-visible spot on this page.
-  const [bookSettingsOpen, setBookSettingsOpen] = useState(false);
+  const [bookSettingsOpen, setBookSettingsOpen] = useState(atSettings);
+  // An effect, not just the seed above: the publish panel is reachable *from*
+  // the Book screen, so a resource error usually re-renders this component
+  // rather than remounting it, and a seed-only version would never fire in
+  // the commonest case. Keyed on the flag, so dismissing the sheet sticks.
+  useEffect(() => {
+    if (atSettings) {
+      setBookSettingsOpen(true);
+    }
+  }, [atSettings]);
   // Which lesson's "Unlocks after" sheet is open, across every card — same
   // one-id-serves-every-row shape as `UnitScreen`'s `expandedRow` (spec
   // 0021-13 §2).

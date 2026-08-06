@@ -101,7 +101,16 @@ import {
 // in it.
 type Screen =
   | { screen: "books" }
-  | { screen: "book"; bookId: string; editing?: boolean }
+  | {
+      screen: "book";
+      bookId: string;
+      editing?: boolean;
+      /** Open the Book settings sheet on arrival — the same "one tap from the
+       * thing that caused it" rule `atPage` follows for the Unit trail. A
+       * publish error about a resource has nothing to show on the page since
+       * slice 14 moved Sources into the sheet. */
+      atSettings?: boolean;
+    }
   // The lesson level sits between book and unit (plan 0008).
   | { screen: "lesson"; bookId: string; lessonId: string; editing?: boolean }
   | {
@@ -1958,6 +1967,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
                 screen: "book",
                 bookId: editingBookId,
                 editing: true,
+                ...(target.bookSettings === true ? { atSettings: true } : {}),
               });
             }
           }}
@@ -1972,6 +1982,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
       return inSession(
         <BookScreen
           content={shown}
+          atSettings={screen.atSettings === true}
           unpublishedChanges={unpublishedBookIds.has(screen.bookId)}
           attemptedTaskIds={shownAttempted}
           store={shownStore}
