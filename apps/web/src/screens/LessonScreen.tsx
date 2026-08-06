@@ -2,6 +2,8 @@ import { Fragment, useState } from "react";
 import type { Content } from "@betterbeaver/schema";
 import { isUnitComplete, isUnitUnlocked } from "@betterbeaver/engine";
 import { ConfirmSheet } from "../components/Sheet";
+import { SettingsSheet } from "../components/SettingsSheet";
+import { UndoToast, useUndoSnapshot } from "../components/UndoToast";
 import { LockableProgress } from "../components/ProgressBar";
 import { FeedbackWidget } from "../components/FeedbackWidget";
 import { BookWatermark } from "../components/BookWatermark";
@@ -9,9 +11,12 @@ import { useEditSession } from "./edit/EditSessionContext";
 import { ProblemMarker, lessonEditOps, withOptionalKey } from "./edit/inPlace";
 import { diffView } from "./edit/diffView";
 import { EntityPicker, RowActions } from "./edit/fields";
-import { optionsFrom } from "./entityPicker";
+import { optionsFrom, unitPoolOptionsGroupedByLesson } from "./entityPicker";
 import type { PracticeTarget } from "./BookScreen";
 import { lessonPracticeTargets } from "./BookScreen";
+// The multiline in-place control (spec 0021-13 §1): Goal on each unit card,
+// same as the Book screen reaches across for its own lesson cards.
+import { GrowingTextarea } from "./UnitScreen";
 
 /**
  * A lesson's units (plan 0008): the navigation level between BookScreen's
@@ -40,11 +45,21 @@ export function LessonScreen({
   // conditional.
   const [pendingUnitId, setPendingUnitId] = useState<string | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  // Which unit's "Unlocks after" sheet is open, across every card — same
+  // one-id-serves-every-row shape as `BookScreen`'s `openLessonSettingsId`
+  // (spec 0021-14 §2).
+  const [openUnitSettingsId, setOpenUnitSettingsId] = useState<string | null>(
+    null,
+  );
   // Edit mode (plan 0021 §2), same shape as the Book and Unit screens.
   const session = useEditSession();
   const edit = lessonEditOps(session, lessonId);
   // Diff renders the union read-only with per-element tints (spec 0021-9 §3).
   const diff = diffView(session);
+  // Undo toast for the unit delete (spec 0021-14 §4) — captured inside the
+  // existing confirm's `onConfirm`, not instead of it, same as BookScreen's
+  // lesson delete.
+  const { message: undoMessage, capture, undo } = useUndoSnapshot();
 
   const lesson = content.lessons.find((l) => l.id === lessonId);
   if (lesson === undefined) {
@@ -139,31 +154,38 @@ export function LessonScreen({
         </>
       ) : (
         <>
-          <label className="field">
-            Title
+          {/* Title and goal at their learner type (spec 0021-14 §2): the
+              same `.book-edit-card` borderless treatment the Book screen
+              gives its own h1/description — the title stays an <h1>, not a
+              labelled box. */}
+          <h1 className="book-edit-card">
             <input
               type="text"
+              aria-label="Title"
               value={lesson.title}
               onChange={(e) =>
                 edit.patchLesson({ ...edit.rawLesson, title: e.target.value })
               }
             />
-          </label>
+          </h1>
           <ProblemMarker problems={edit.fieldProblems(lesson.id, "title")} />
-          <label className="field">
-            Goal
-            <textarea
-              rows={3}
+          <div className="book-edit-card">
+            <GrowingTextarea
+              ariaLabel="Goal"
               value={lesson.goal}
               onChange={(e) =>
                 edit.patchLesson({ ...edit.rawLesson, goal: e.target.value })
               }
             />
-          </label>
+          </div>
           <ProblemMarker problems={edit.fieldProblems(lesson.id, "goal")} />
           <ProblemMarker problems={edit.entityProblems(lesson.id)} />
           {/* Edited here, on the entity it belongs to, even though its
-              learner surface is the lock on the Book screen's card. */}
+              learner surface is the lock on the Book screen's card. Stays
+              inline rather than behind a header `⚙` (spec 0021-14 §3): the
+              Lesson screen has no card of its own to carry one, and the
+              Book screen's lesson card already carries this same field —
+              a second sheet for one control is what §3 rules out. */}
           <EntityPicker
             label="Unlocks after"
             options={optionsFrom(
@@ -213,31 +235,37 @@ export function LessonScreen({
           ).length;
           if (edit !== null) {
             const raw = edit.rawUnit(unit.id) ?? { id: unit.id };
+            // The card can't stay one big <button> once it holds inputs, so
+            // opening the unit becomes its own control — same move the Book
+            // screen made for its lesson cards (spec 0021-14 §1/§2). Title
+            // and goal keep the card's own learner treatment, and "Unlocks
+            // after" moves behind the card's own `⚙`.
             return (
-              <li key={unit.id} className={`card${unlocked ? "" : " locked"}`}>
-                <label className="field">
-                  {unlocked ? "Unit" : "\u{1F512} Unit"}
+              <li
+                key={unit.id}
+                className={`card book-edit-card${unlocked ? "" : " locked"}`}
+              >
+                <strong>
+                  {unlocked ? "" : "\u{1F512} "}
                   <input
                     type="text"
+                    aria-label="Unit title"
                     value={unit.title}
                     onChange={(e) =>
                       edit.patchUnit({ ...raw, title: e.target.value })
                     }
                   />
-                </label>
+                </strong>
                 <ProblemMarker
                   problems={edit.fieldProblems(unit.id, "title")}
                 />
-                <label className="field">
-                  Goal
-                  <textarea
-                    rows={2}
-                    value={unit.goal}
-                    onChange={(e) =>
-                      edit.patchUnit({ ...raw, goal: e.target.value })
-                    }
-                  />
-                </label>
+                <GrowingTextarea
+                  ariaLabel="Unit goal"
+                  value={unit.goal}
+                  onChange={(e) =>
+                    edit.patchUnit({ ...raw, goal: e.target.value })
+                  }
+                />
                 <ProblemMarker problems={edit.fieldProblems(unit.id, "goal")} />
                 {/* A brand-new unit reads "unit has zero tasks" straight
                     away; slice 8's Exercises page is where that resolves. */}
@@ -250,6 +278,8 @@ export function LessonScreen({
                 <RowActions
                   onUp={() => edit.moveUnit(unit.id, -1)}
                   onDown={() => edit.moveUnit(unit.id, 1)}
+                  onSettings={() => setOpenUnitSettingsId(unit.id)}
+                  settingsLabel="Unit settings"
                   onRemove={() => setPendingDeleteId(unit.id)}
                 />
                 <button className="plain" onClick={() => onSelectUnit(unit.id)}>
@@ -322,6 +352,13 @@ export function LessonScreen({
           onCancel={() => setPendingDeleteId(null)}
           onConfirm={() => {
             setPendingDeleteId(null);
+            // Snapshot before the mutation (spec 0021-14 §4) — a unit's own
+            // items, tasks and notes go with it, so Undo has to hand back
+            // the whole book, not just the unit.
+            const bookBefore = session?.book;
+            if (bookBefore !== undefined) {
+              capture("Unit", () => session?.changeBook(bookBefore));
+            }
             edit?.removeUnit(pendingDelete.id);
           }}
         />
@@ -343,6 +380,49 @@ export function LessonScreen({
             onSelectUnit(pendingUnit.id);
           }}
         />
+      )}
+      {/* One unit's "Unlocks after" (spec 0021-14 §2/§3): the only control
+          the card's own `⚙` carries — not a whole Unit settings sheet with
+          more, the card already carries everything else. */}
+      {edit !== null &&
+        (() => {
+          const openUnit = units.find((u) => u.id === openUnitSettingsId);
+          if (openUnit === undefined) {
+            return null;
+          }
+          const raw = edit.rawUnit(openUnit.id) ?? { id: openUnit.id };
+          return (
+            <SettingsSheet
+              title={openUnit.title.trim() === "" ? "New unit" : openUnit.title}
+              onDismiss={() => setOpenUnitSettingsId(null)}
+            >
+              <EntityPicker
+                label="Unlocks after"
+                options={unitPoolOptionsGroupedByLesson(
+                  content.topic.lessonIds.flatMap((id) => {
+                    const l = content.lessons.find((x) => x.id === id);
+                    return l !== undefined ? [l] : [];
+                  }),
+                  content.units.filter((u) => u.id !== openUnit.id),
+                )}
+                selected={
+                  openUnit.unlocksAfterUnitId !== undefined
+                    ? [openUnit.unlocksAfterUnitId]
+                    : []
+                }
+                onChange={(ids) =>
+                  edit.patchUnit(
+                    withOptionalKey(raw, "unlocksAfterUnitId", ids[0]),
+                  )
+                }
+                multiple={false}
+                groupBy
+              />
+            </SettingsSheet>
+          );
+        })()}
+      {undoMessage !== null && (
+        <UndoToast message={undoMessage} onUndo={undo} />
       )}
     </main>
   );

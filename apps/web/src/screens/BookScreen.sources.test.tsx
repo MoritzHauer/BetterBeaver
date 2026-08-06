@@ -155,6 +155,8 @@ describe("Sources on the Book screen", () => {
     const { session, books } = makeSession();
     renderBook(session);
 
+    // Spec 0021-14 §3: Sources moved into the header's Book settings sheet.
+    fireEvent.click(screen.getByRole("button", { name: "Book settings" }));
     fireEvent.click(screen.getByText("+ source"));
     const resources = books[0]!.resources as { id: string; title: string }[];
     expect(resources).toHaveLength(2);
@@ -170,6 +172,8 @@ describe("Sources on the Book screen", () => {
     const { session, books } = makeSession();
     renderBook(session);
 
+    // Spec 0021-14 §3: Sources moved into the header's Book settings sheet.
+    fireEvent.click(screen.getByRole("button", { name: "Book settings" }));
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     // One book item plus one lexicon entry — the entry counts, and missing
     // it is the easy mistake.
@@ -195,6 +199,8 @@ describe("Sources on the Book screen", () => {
     });
     renderBook(session, bare);
 
+    // Spec 0021-14 §3: Sources moved into the header's Book settings sheet.
+    fireEvent.click(screen.getByRole("button", { name: "Book settings" }));
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     expect(screen.getByText(/is not used by anything yet/)).toBeTruthy();
   });

@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import type {
   BookDocument,
   Content,
@@ -180,10 +186,13 @@ describe("BookScreen", () => {
 
   it("offers cover art to a maintained Book but never to a private one", () => {
     renderBook(makeSession().session);
+    // Spec 0021-14 §3: Cover art moved into the header's Book settings sheet.
+    fireEvent.click(screen.getByRole("button", { name: "Book settings" }));
     expect(screen.getByLabelText("Cover art")).toBeTruthy();
 
     cleanup();
     renderBook(makeSession({ mode: "private" }).session);
+    fireEvent.click(screen.getByRole("button", { name: "Book settings" }));
     // Hidden rather than disabled: the watermark lives in the app's public
     // assets, which a private Book can never reach.
     expect(screen.queryByLabelText("Cover art")).toBeNull();
@@ -236,6 +245,96 @@ describe("BookScreen", () => {
     // Navigation is App's job; carrying `editing` is asserted there. What
     // this owns is that the card still opens at all now that it holds inputs.
     expect(opened).toEqual(["bk-l1"]);
+  });
+
+  // Spec 0021-14 §1, §6: the gap this slice closes — entering edit mode used
+  // to replace the cover art, the progress cards and the lesson cards with a
+  // stack of labelled grey boxes. It no longer does.
+
+  it("still renders lesson cards with their progress in edit mode", () => {
+    renderBook(makeSession().session);
+    // Both lessons have zero units, so both read "0/0" — the progress text
+    // that used to disappear behind the form editor's grey boxes.
+    expect(screen.getAllByText("0/0")).toHaveLength(2);
+  });
+
+  it("edits the title in place, at its learner (heading) size", () => {
+    const { session, books } = makeSession();
+    renderBook(session);
+
+    const title = screen.getByDisplayValue("Book title");
+    // Not a labelled box: the input sits inside the learner's own <h1>.
+    expect(title.closest("h1")).not.toBeNull();
+    fireEvent.change(title, { target: { value: "Renamed" } });
+    expect((books[0]!.topic as { title: string }).title).toBe("Renamed");
+  });
+
+  it("moves icon, cover art and every source behind the header ⚙, off the page", () => {
+    const withResource: BookDocument = {
+      ...BOOK,
+      resources: [{ id: "bk-r1", title: "The book", path: "b.md" }],
+    };
+    const { session } = makeSession({
+      book: withResource,
+      content: build(withResource),
+    });
+    renderBook(session, undefined, build(withResource));
+
+    expect(screen.queryByLabelText("Icon")).toBeNull();
+    expect(screen.queryByLabelText("Cover art")).toBeNull();
+    expect(screen.queryByDisplayValue("The book")).toBeNull();
+    expect(screen.queryByText("Sources")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Book settings" }));
+    expect(screen.getByLabelText("Icon")).toBeTruthy();
+    expect(screen.getByLabelText("Cover art")).toBeTruthy();
+    expect(screen.getByDisplayValue("The book")).toBeTruthy();
+  });
+
+  it("deletes a lesson behind an undo toast that restores it and its units", () => {
+    const withUnit: BookDocument = {
+      ...BOOK,
+      units: [
+        {
+          id: "bk-u1",
+          lessonId: "bk-l1",
+          title: "Unit",
+          goal: "",
+          itemIds: [],
+          taskIds: [],
+          noteIds: [],
+        },
+      ],
+    };
+    const { session, books } = makeSession({
+      book: withUnit,
+      content: build(withUnit),
+    });
+    renderBook(session, undefined, build(withUnit));
+
+    // Behind the same confirm the reorder/delete test above pins — the toast
+    // is what is new here, not the confirm.
+    fireEvent.click(screen.getAllByRole("button", { name: "Delete" })[0]!);
+    fireEvent.click(
+      screen
+        .getByRole("dialog")
+        .querySelector<HTMLButtonElement>("button.primary")!,
+    );
+    expect(books.at(-1)!.lessons).toHaveLength(1);
+    expect(screen.getByText("Lesson deleted")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    const restored = books.at(-1)!;
+    expect(restored.lessons).toHaveLength(2);
+    // The whole subtree, not just the lesson: `bk-u1` comes back too.
+    expect(restored.units.map((u) => (u as { id: string }).id)).toContain(
+      "bk-u1",
+    );
+  });
+
+  it("hides the Book settings gear in learner mode", () => {
+    renderBook(null);
+    expect(screen.queryByRole("button", { name: "Book settings" })).toBeNull();
   });
 });
 
@@ -294,5 +393,74 @@ describe("LessonScreen", () => {
     // `=== undefined` would pass on the bug: the key has to be gone, or it
     // survives in memory and vanishes across the JSON round-trip to storage.
     expect("unlocksAfterLessonId" in lesson).toBe(false);
+  });
+
+  // Spec 0021-14 §2, §6: the same gap closed one level down — a unit card
+  // used to shrink into a labelled grey box the moment edit mode opened.
+
+  const withUnit: BookDocument = {
+    ...BOOK,
+    lessons: [
+      { ...(BOOK.lessons[0] as object), unitIds: ["bk-u1"] },
+      BOOK.lessons[1],
+    ],
+    units: [
+      {
+        id: "bk-u1",
+        lessonId: "bk-l1",
+        title: "Unit",
+        goal: "",
+        itemIds: [],
+        taskIds: [],
+        noteIds: [],
+      },
+    ],
+  };
+
+  it("still renders unit cards with their progress in edit mode", () => {
+    const { session } = makeSession({
+      book: withUnit,
+      content: build(withUnit),
+    });
+    renderLesson(session, withUnit);
+    // The zero-task unit reads "0/0" — the progress text that used to
+    // disappear behind the form editor's grey boxes.
+    expect(screen.getByText("0/0")).toBeTruthy();
+  });
+
+  it("deletes a unit behind an undo toast that restores it", () => {
+    const { session, books } = makeSession({
+      book: withUnit,
+      content: build(withUnit),
+    });
+    renderLesson(session, withUnit);
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    fireEvent.click(
+      screen
+        .getByRole("dialog")
+        .querySelector<HTMLButtonElement>("button.primary")!,
+    );
+    expect(books.at(-1)!.units).toHaveLength(0);
+    expect(screen.getByText("Unit deleted")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    const restored = books.at(-1)!;
+    expect(restored.units.map((u) => (u as { id: string }).id)).toContain(
+      "bk-u1",
+    );
+  });
+
+  it("opens a unit's own settings sheet with Unlocks after", () => {
+    const { session } = makeSession({
+      book: withUnit,
+      content: build(withUnit),
+    });
+    renderLesson(session, withUnit);
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Unit settings" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("Unlocks after")).toBeTruthy();
   });
 });

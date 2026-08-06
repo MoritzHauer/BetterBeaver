@@ -11,6 +11,8 @@ import {
 } from "@betterbeaver/engine";
 import { BOOK_ICONS } from "@betterbeaver/schema";
 import { ConfirmSheet } from "../components/Sheet";
+import { SettingsSheet } from "../components/SettingsSheet";
+import { UndoToast, useUndoSnapshot } from "../components/UndoToast";
 import { LockableProgress } from "../components/ProgressBar";
 import { FeedbackWidget } from "../components/FeedbackWidget";
 import { ChatThread } from "../components/ChatThread";
@@ -19,6 +21,11 @@ import { useEditSession } from "./edit/EditSessionContext";
 import { ProblemMarker, bookEditOps, withOptionalKey } from "./edit/inPlace";
 import { diffView } from "./edit/diffView";
 import { EntityPicker, RowActions } from "./edit/fields";
+import { optionsFrom } from "./entityPicker";
+// The multiline in-place control (spec 0021-13 §1): Description here, Goal
+// on each lesson card. Imported rather than re-declared — `SessionEditSheet`
+// already reaches across screens for the same component.
+import { GrowingTextarea } from "./UnitScreen";
 
 const CHAT_ENABLED = false;
 
@@ -107,6 +114,21 @@ export function BookScreen({
   const [pendingResourceId, setPendingResourceId] = useState<string | null>(
     null,
   );
+  // The Book settings sheet (spec 0021-14 §3): icon, cover art and Sources,
+  // none of which has a learner-visible spot on this page.
+  const [bookSettingsOpen, setBookSettingsOpen] = useState(false);
+  // Which lesson's "Unlocks after" sheet is open, across every card — same
+  // one-id-serves-every-row shape as `UnitScreen`'s `expandedRow` (spec
+  // 0021-13 §2).
+  const [openLessonSettingsId, setOpenLessonSettingsId] = useState<
+    string | null
+  >(null);
+  // Undo toast for the lesson delete (spec 0021-14 §4) — captured inside the
+  // existing confirm's `onConfirm`, not instead of it: `BookLesson.edit.test.
+  // tsx`'s "reorders and deletes lessons" pins the confirm-dialog flow, and
+  // §4 only says the delete *lands* on the toast, not that nothing may come
+  // before it.
+  const { message: undoMessage, capture, undo } = useUndoSnapshot();
 
   useEffect(() => {
     let cancelled = false;
@@ -210,6 +232,15 @@ export function BookScreen({
             {streak.length}
           </span>
         ) : null}
+        {/* Icon, cover art and Sources (spec 0021-14 §3): none of them has a
+            learner-visible spot on this page, so they live behind the
+            header's own gear rather than as fields in the flow below. */}
+        {edit !== null && (
+          <RowActions
+            onSettings={() => setBookSettingsOpen(true)}
+            settingsLabel="Book settings"
+          />
+        )}
       </header>
       {edit === null ? (
         <>
@@ -252,72 +283,34 @@ export function BookScreen({
         </>
       ) : (
         <>
-          <label className="field">
-            Title
+          {/* Title and description at their learner type (spec 0021-14 §1):
+              borderless in place, the same `.book-edit-card` treatment slice
+              13 gives a table cell — the title stays an `<h1>`, sized and
+              weighted like the learner's own heading, not a labelled box. */}
+          <h1 className="book-edit-card">
             <input
               type="text"
+              aria-label="Title"
               value={content.topic.title}
               // Not `patchBook`: the title also names this Book's lexicon
               // (decision 11), and that is where `VocabularyScreen`'s heading
               // comes from.
               onChange={(e) => edit.setTitle(e.target.value)}
             />
-          </label>
+          </h1>
           <ProblemMarker problems={edit.fieldProblems("topic", "title")} />
-          <label className="field">
-            Description
-            <textarea
-              rows={3}
+          <div className="book-edit-card">
+            <GrowingTextarea
+              ariaLabel="Description"
               value={content.topic.description}
               onChange={(e) =>
                 edit.patchBook({ ...edit.rawBook, description: e.target.value })
               }
             />
-          </label>
+          </div>
           <ProblemMarker
             problems={edit.fieldProblems("topic", "description")}
           />
-          <label className="field">
-            Icon
-            <select
-              value={content.topic.icon ?? ""}
-              onChange={(e) =>
-                edit.patchBook(
-                  withOptionalKey(edit.rawBook, "icon", e.target.value),
-                )
-              }
-            >
-              <option value="">(none)</option>
-              {BOOK_ICONS.map((icon) => (
-                <option key={icon} value={icon}>
-                  {icon}
-                </option>
-              ))}
-            </select>
-          </label>
-          {/* Hidden for a private Book, not disabled: the watermark is loaded
-              from `art/icons/<book.id>.png` in the app's *public* assets,
-              which a private Book can never reach — offering a control that
-              could only ever silently fail is worse than not offering it —
-              the same rationale the deleted form editor recorded. */}
-          {!edit.isPrivate && (
-            <label className="field">
-              Cover art
-              <input
-                type="checkbox"
-                checked={content.topic.hasCoverArt === true}
-                onChange={(e) =>
-                  edit.patchBook(
-                    withOptionalKey(
-                      edit.rawBook,
-                      "hasCoverArt",
-                      e.target.checked,
-                    ),
-                  )
-                }
-              />
-            </label>
-          )}
           <ProblemMarker problems={edit.entityProblems("topic")} />
         </>
       )}
@@ -425,34 +418,37 @@ export function BookScreen({
             // progress bar stay (§1c): a lock is the learner-visible face of
             // `unlocksAfterLessonId`, and seeing it is how the author checks
             // the chain they just authored.
+            // Title and goal keep the card's own learner treatment (spec
+            // 0021-14 §1) rather than a labelled box — `<strong>`/wrapping
+            // text in place of the form fields the card used to grow.
+            // "Unlocks after" moves behind the card's own `⚙`, the same move
+            // slice 13 made for a row's secondary fields.
             return (
               <li
                 key={lesson.id}
-                className={`card${unlocked ? "" : " locked"}`}
+                className={`card book-edit-card${unlocked ? "" : " locked"}`}
               >
-                <label className="field">
-                  {unlocked ? "Lesson" : "\u{1F512} Lesson"}
+                <strong>
+                  {unlocked ? "" : "\u{1F512} "}
                   <input
                     type="text"
+                    aria-label="Lesson title"
                     value={lesson.title}
                     onChange={(e) =>
                       edit.patchLesson({ ...raw, title: e.target.value })
                     }
                   />
-                </label>
+                </strong>
                 <ProblemMarker
                   problems={edit.fieldProblems(lesson.id, "title")}
                 />
-                <label className="field">
-                  Goal
-                  <textarea
-                    rows={2}
-                    value={lesson.goal}
-                    onChange={(e) =>
-                      edit.patchLesson({ ...raw, goal: e.target.value })
-                    }
-                  />
-                </label>
+                <GrowingTextarea
+                  ariaLabel="Goal"
+                  value={lesson.goal}
+                  onChange={(e) =>
+                    edit.patchLesson({ ...raw, goal: e.target.value })
+                  }
+                />
                 <ProblemMarker
                   problems={edit.fieldProblems(lesson.id, "goal")}
                 />
@@ -465,6 +461,8 @@ export function BookScreen({
                 <RowActions
                   onUp={() => edit.moveLesson(lesson.id, -1)}
                   onDown={() => edit.moveLesson(lesson.id, 1)}
+                  onSettings={() => setOpenLessonSettingsId(lesson.id)}
+                  settingsLabel="Lesson settings"
                   onRemove={() => setPendingDeleteId(lesson.id)}
                 />
                 <button
@@ -533,61 +531,6 @@ export function BookScreen({
           <ProblemMarker problems={edit.fieldProblems("topic", "lessonIds")} />
           <button type="button" className="editor-add" onClick={edit.addLesson}>
             + lesson
-          </button>
-          {/* Sources (spec 0021-8 §2a). On the Book, not the Unit trail:
-              `resources` is a field of the Book, shared across every unit.
-              Edit-only — a resource is never shown to a learner. */}
-          <h2>Sources</h2>
-          <p className="status">
-            Where this Book&rsquo;s content comes from. Every word, concept and
-            example points at one.
-          </p>
-          <ul className="editor-list">
-            {edit.resources.map((resource) => (
-              <li key={resource.id}>
-                <label className="field">
-                  Title
-                  <input
-                    type="text"
-                    value={
-                      typeof resource.title === "string" ? resource.title : ""
-                    }
-                    onChange={(e) =>
-                      edit.patchResource({ ...resource, title: e.target.value })
-                    }
-                  />
-                </label>
-                <ProblemMarker
-                  problems={edit.fieldProblems(resource.id, "title")}
-                />
-                <label className="field">
-                  Link
-                  <input
-                    type="text"
-                    value={
-                      typeof resource.path === "string" ? resource.path : ""
-                    }
-                    onChange={(e) =>
-                      edit.patchResource({ ...resource, path: e.target.value })
-                    }
-                  />
-                </label>
-                <ProblemMarker
-                  problems={edit.fieldProblems(resource.id, "path")}
-                />
-                <ProblemMarker problems={edit.entityProblems(resource.id)} />
-                <RowActions
-                  onRemove={() => setPendingResourceId(resource.id)}
-                />
-              </li>
-            ))}
-          </ul>
-          <button
-            type="button"
-            className="editor-add"
-            onClick={edit.addResource}
-          >
-            + source
           </button>
           {/* This Book's words, at the level that owns them (spec 0021-11
               §1). Both settings belong to the lexicon, so both are hidden
@@ -676,6 +619,13 @@ export function BookScreen({
           onCancel={() => setPendingDeleteId(null)}
           onConfirm={() => {
             setPendingDeleteId(null);
+            // Snapshot *before* the mutation (spec 0021-14 §4) — the most
+            // destructive `−` in the app, so Undo has to hand back the whole
+            // book, not just the lesson.
+            const bookBefore = session?.book;
+            if (bookBefore !== undefined) {
+              capture("Lesson", () => session?.changeBook(bookBefore));
+            }
             edit?.removeLesson(pendingDelete.id);
           }}
         />
@@ -718,6 +668,155 @@ export function BookScreen({
             onSelectLesson(pendingLesson.id);
           }}
         />
+      )}
+      {/* The Book settings sheet (spec 0021-14 §3): everything that has no
+          learner-visible spot on this page — icon, cover art, and Sources,
+          which was the single largest block of form on the screen. */}
+      {edit !== null && bookSettingsOpen && (
+        <SettingsSheet
+          title="Book settings"
+          onDismiss={() => setBookSettingsOpen(false)}
+        >
+          <label className="field">
+            Icon
+            <select
+              value={content.topic.icon ?? ""}
+              onChange={(e) =>
+                edit.patchBook(
+                  withOptionalKey(edit.rawBook, "icon", e.target.value),
+                )
+              }
+            >
+              <option value="">(none)</option>
+              {BOOK_ICONS.map((icon) => (
+                <option key={icon} value={icon}>
+                  {icon}
+                </option>
+              ))}
+            </select>
+          </label>
+          {/* Hidden for a private Book, not disabled: the watermark is loaded
+              from `art/icons/<book.id>.png` in the app's *public* assets,
+              which a private Book can never reach — offering a control that
+              could only ever silently fail is worse than not offering it —
+              the same rationale the deleted form editor recorded. */}
+          {!edit.isPrivate && (
+            <label className="field">
+              Cover art
+              <input
+                type="checkbox"
+                checked={content.topic.hasCoverArt === true}
+                onChange={(e) =>
+                  edit.patchBook(
+                    withOptionalKey(
+                      edit.rawBook,
+                      "hasCoverArt",
+                      e.target.checked,
+                    ),
+                  )
+                }
+              />
+            </label>
+          )}
+          {/* Sources (spec 0021-8 §2a). On the Book, not the Unit trail:
+              `resources` is a field of the Book, shared across every unit.
+              Edit-only — a resource is never shown to a learner. */}
+          <h3>Sources</h3>
+          <p className="status">
+            Where this Book&rsquo;s content comes from. Every word, concept and
+            example points at one.
+          </p>
+          <ul className="editor-list">
+            {edit.resources.map((resource) => (
+              <li key={resource.id}>
+                <label className="field">
+                  Title
+                  <input
+                    type="text"
+                    value={
+                      typeof resource.title === "string" ? resource.title : ""
+                    }
+                    onChange={(e) =>
+                      edit.patchResource({ ...resource, title: e.target.value })
+                    }
+                  />
+                </label>
+                <ProblemMarker
+                  problems={edit.fieldProblems(resource.id, "title")}
+                />
+                <label className="field">
+                  Link
+                  <input
+                    type="text"
+                    value={
+                      typeof resource.path === "string" ? resource.path : ""
+                    }
+                    onChange={(e) =>
+                      edit.patchResource({ ...resource, path: e.target.value })
+                    }
+                  />
+                </label>
+                <ProblemMarker
+                  problems={edit.fieldProblems(resource.id, "path")}
+                />
+                <ProblemMarker problems={edit.entityProblems(resource.id)} />
+                <RowActions
+                  onRemove={() => setPendingResourceId(resource.id)}
+                />
+              </li>
+            ))}
+          </ul>
+          <button
+            type="button"
+            className="editor-add"
+            onClick={edit.addResource}
+          >
+            + source
+          </button>
+        </SettingsSheet>
+      )}
+      {/* One lesson's "Unlocks after" (spec 0021-14 §3): the only control the
+          card's own `⚙` carries — not a whole Lesson settings sheet for one
+          field, the card already carries everything else. */}
+      {edit !== null &&
+        (() => {
+          const openLesson =
+            openLessonSettingsId !== null
+              ? lessonById.get(openLessonSettingsId)
+              : undefined;
+          if (openLesson === undefined) {
+            return null;
+          }
+          const raw = edit.rawLesson(openLesson.id) ?? { id: openLesson.id };
+          return (
+            <SettingsSheet
+              title={
+                openLesson.title.trim() === "" ? "New lesson" : openLesson.title
+              }
+              onDismiss={() => setOpenLessonSettingsId(null)}
+            >
+              <EntityPicker
+                label="Unlocks after"
+                options={optionsFrom(
+                  content.lessons.filter((l) => l.id !== openLesson.id),
+                )}
+                selected={
+                  openLesson.unlocksAfterLessonId !== undefined
+                    ? [openLesson.unlocksAfterLessonId]
+                    : []
+                }
+                onChange={(ids) =>
+                  edit.patchLesson(
+                    withOptionalKey(raw, "unlocksAfterLessonId", ids[0]),
+                  )
+                }
+                multiple={false}
+              />
+            </SettingsSheet>
+          );
+        })()}
+      {undoMessage !== null && (
+        <UndoToast message={undoMessage} onUndo={undo} />
       )}
     </main>
   );

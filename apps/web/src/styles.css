@@ -1165,11 +1165,16 @@ main.unit-screen {
  * `.vocab-table`: the note table (spec 0021-12 §3) reuses `.vocab-table`
  * too and keeps its own always-bordered inputs on purpose. `.unit-row-card`
  * is the same treatment for the Examples page's cards, which have no table
- * to scope to — one rule, not a second declaration of the same look. */
+ * to scope to — one rule, not a second declaration of the same look.
+ * `.book-edit-card` (spec 0021-14 §1) is the same look again, for the Book
+ * screen's title/description and its lesson cards' title/goal — a fourth
+ * scope on the same rule rather than a fourth declaration of it. */
 .unit-row-table input[type="text"],
 .unit-row-table textarea,
 .unit-row-card input[type="text"],
-.unit-row-card textarea {
+.unit-row-card textarea,
+.book-edit-card input[type="text"],
+.book-edit-card textarea {
   display: block;
   width: 100%;
   padding: 0.3rem 0.5rem;
@@ -1185,14 +1190,18 @@ main.unit-screen {
 .unit-row-table input[type="text"]:hover,
 .unit-row-table textarea:hover,
 .unit-row-card input[type="text"]:hover,
-.unit-row-card textarea:hover {
+.unit-row-card textarea:hover,
+.book-edit-card input[type="text"]:hover,
+.book-edit-card textarea:hover {
   border-color: var(--card-border);
 }
 
 .unit-row-table input[type="text"]:focus,
 .unit-row-table textarea:focus,
 .unit-row-card input[type="text"]:focus,
-.unit-row-card textarea:focus {
+.unit-row-card textarea:focus,
+.book-edit-card input[type="text"]:focus,
+.book-edit-card textarea:focus {
   border-color: var(--primary);
 }
 
