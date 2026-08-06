@@ -1,6 +1,23 @@
 import { useState } from "react";
+import {
+  type CalloutVariant,
+  type NoteBlock,
+  parseNoteBlocks,
+} from "@betterbeaver/engine";
+import { getAssetUrl } from "../content/bundled";
 import type { TapLookup } from "./TappableText";
 import { EntryPopup } from "./EntryPopup";
+
+/** Glyph per callout variant (spec 0021-2 §1b) — every one of these PNGs
+ * already exists in `public/art/icons/`. Exported: `NoteEditor`'s
+ * `.note-editor-callout-block` shows the same glyph its idle `NoteView`
+ * counterpart does (spec 0021-12 §3), rather than re-deriving the mapping. */
+export const CALLOUT_ICON: Record<CalloutVariant, string> = {
+  note: "book_front",
+  tip: "lightbulb",
+  warning: "stop_sign",
+  example: "beaver_pencil",
+};
 
 /** One inline run within a line of note markdown: `**bold**` is purely
  * visual, `*kyrgyz*` is the one tappable+italic unit (the plan 0006
@@ -33,106 +50,24 @@ function parseInline(text: string): InlineSegment[] {
     });
 }
 
-type Block =
-  | { kind: "paragraph"; text: string }
-  | { kind: "heading"; text: string }
-  | { kind: "list"; items: string[] }
-  | { kind: "table"; rows: string[][] };
-
-/** A `| --- | :--- |` alignment row, which carries no content. */
-function isTableRule(cells: string[]): boolean {
-  return cells.every((cell) => /^:?-{3,}:?$/.test(cell));
-}
-
-/** `| a | b |` → `["a", "b"]` (the empty runs outside the outer pipes drop). */
-function tableCells(line: string): string[] {
-  return line
-    .replace(/^\||\|$/g, "")
-    .split("|")
-    .map((cell) => cell.trim());
-}
-
-/** Turns one blank-line-separated chunk into blocks: `## ` lines are their
- * own heading, runs of `| a | b |` lines a table, runs of `- ` lines a list
- * (wrapped continuation lines join onto the preceding item), and everything
- * between them a paragraph. A chunk can hold several of these — an author
- * writing a heading straight above its table gets both, not one run-on
- * paragraph. */
-function parseChunk(chunkLines: string[]): Block[] {
-  const blocks: Block[] = [];
-  let paragraph: string[] = [];
-  const flush = (): void => {
-    if (paragraph.length > 0) {
-      blocks.push({ kind: "paragraph", text: paragraph.join(" ") });
-      paragraph = [];
-    }
-  };
-
-  for (const line of chunkLines) {
-    if (line.startsWith("## ")) {
-      flush();
-      blocks.push({ kind: "heading", text: line.slice(3).trim() });
-      continue;
-    }
-    if (line.startsWith("|")) {
-      const cells = tableCells(line);
-      const last = blocks[blocks.length - 1];
-      if (paragraph.length === 0 && last?.kind === "table") {
-        if (!isTableRule(cells)) {
-          last.rows.push(cells);
-        }
-        continue;
-      }
-      flush();
-      blocks.push({ kind: "table", rows: [cells] });
-      continue;
-    }
-    if (line.startsWith("- ")) {
-      const last = blocks[blocks.length - 1];
-      if (paragraph.length === 0 && last?.kind === "list") {
-        last.items.push(line.slice(2).trim());
-        continue;
-      }
-      flush();
-      blocks.push({ kind: "list", items: [line.slice(2).trim()] });
-      continue;
-    }
-    // A continuation of whatever is open: a wrapped list item stays with its
-    // bullet, anything else keeps building the current paragraph.
-    const last = blocks[blocks.length - 1];
-    if (paragraph.length === 0 && last?.kind === "list") {
-      last.items[last.items.length - 1] += ` ${line}`;
-      continue;
-    }
-    paragraph.push(line);
+/** Splits a note's raw markdown into its display title and body blocks,
+ * via the shared `parseNoteBlocks` (engine, spec 0021-1 §1). Unlike the
+ * editor, which keeps every block for round-tripping, the renderer drops
+ * everything before the first `title` block — a learner never saw that
+ * content before this slice, and rendering it now would be a visible
+ * behaviour change this slice must not make (§2). No title block at all
+ * (an untitled note) keeps every block instead of dropping the lot. */
+function parseBody(markdown: string): { title: string; blocks: NoteBlock[] } {
+  const blocks = parseNoteBlocks(markdown);
+  const titleIndex = blocks.findIndex((block) => block.kind === "title");
+  if (titleIndex === -1) {
+    return { title: "", blocks };
   }
-  flush();
-  return blocks;
-}
-
-/** Splits a note's raw markdown into its display title and body blocks:
- * the `# ` line is the title, and each blank-line-separated chunk below it
- * (ported from the old `UnitScreen.parseNote`) becomes one or more blocks. */
-function parseBody(markdown: string): { title: string; blocks: Block[] } {
-  const lines = markdown.split("\n");
-  const headingIndex = lines.findIndex((line) => line.startsWith("# "));
-  const title =
-    headingIndex === -1 ? "" : (lines[headingIndex] ?? "").slice(2).trim();
-  const bodyLines = headingIndex === -1 ? lines : lines.slice(headingIndex + 1);
-
-  const blocks = bodyLines
-    .join("\n")
-    .split(/\n\s*\n/)
-    .map((chunk) =>
-      chunk
-        .split("\n")
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0),
-    )
-    .filter((chunkLines) => chunkLines.length > 0)
-    .flatMap(parseChunk);
-
-  return { title, blocks };
+  const title = blocks[titleIndex];
+  return {
+    title: title?.kind === "title" ? title.text : "",
+    blocks: blocks.slice(titleIndex + 1),
+  };
 }
 
 /** Renders one line's inline segments: `**bold**` as plain `<strong>`,
@@ -144,7 +79,17 @@ function InlineRun({
   onTap,
 }: {
   text: string;
-  onTap: (span: string) => void;
+  /** Absent inside `NoteEditor`'s idle prose blocks (spec 0021-12 §2): that
+   * wrapper is itself `role="button"` (tap-to-edit), so a nested
+   * `<button>` here would both be invalid-ish (a button inside a button's
+   * accessible-name computation) and steal the tap instead of opening the
+   * textarea. A non-interactive `<span className="tappable-kyrgyz">` keeps
+   * the same look — italic plus the dotted underline, the same class the
+   * tappable `<button>` below carries — without the interactive element, so
+   * the word doesn't drift between the two renderers (§2); `NoteView` always
+   * passes `onTap`, so its own markup — and every `NoteView.test.tsx`
+   * assertion on it — is unchanged. */
+  onTap?: (span: string) => void;
 }) {
   return (
     <>
@@ -153,7 +98,11 @@ function InlineRun({
           case "bold":
             return <strong key={index}>{segment.text}</strong>;
           case "kyrgyz":
-            return (
+            return onTap === undefined ? (
+              <span key={index} className="tappable-kyrgyz">
+                <em>{segment.text}</em>
+              </span>
+            ) : (
               <button
                 key={index}
                 type="button"
@@ -181,35 +130,65 @@ function InlineRun({
 }
 
 /**
+ * How one prose block (`title`/`heading`/`paragraph`, and a `callout`'s
+ * body) renders, shared with `NoteEditor`'s idle blocks (spec 0021-12 §2) so
+ * the two never drift into showing an author different text in the two
+ * modes. `title` matches today's `NoteView` exactly — plain text, no
+ * `InlineRun` — a note's `# ` line has never carried inline markup here.
+ */
+export function ProseBlock({
+  as,
+  text,
+  onTap,
+}: {
+  as: "h2" | "h3" | "p";
+  text: string;
+  onTap?: (span: string) => void;
+}) {
+  const Tag = as;
+  return (
+    <Tag>{as === "h2" ? text : <InlineRun text={text} onTap={onTap} />}</Tag>
+  );
+}
+
+/**
  * Renders a unit note's raw markdown (plan 0006 note-rendering fix): the
  * `# ` line as a plain `<h2>` title, `## ` lines as `<h3>`,
  * blank-line-separated paragraphs, `- ` bullet lists and `| a | b |` tables
- * as `<p>`/`<ul><li>`/`<table>`, and within each, `*kyrgyz*` inline spans
- * as the only tappable content (via a local `EntryPopup`, same
- * one-popup-at-a-time pattern as `TappableText` — not routed through
- * `TappableText` itself, since that re-tokenizes by whitespace, which would
- * wrongly re-split a multi-word starred span).
+ * as `<p>`/`<ul><li>`/`<table>`, `> [!variant] title` callouts as a tinted
+ * `<aside>` and `[img:stem] caption` figures as a `<figure>` (spec 0021-2),
+ * and within each, `*kyrgyz*` inline spans as the only tappable content (via
+ * a local `EntryPopup`, same one-popup-at-a-time pattern as `TappableText` —
+ * not routed through `TappableText` itself, since that re-tokenizes by
+ * whitespace, which would wrongly re-split a multi-word starred span).
  */
 export function NoteView({
   markdown,
   lookup,
+  bookId,
 }: {
   markdown: string;
   lookup: TapLookup;
+  /** The bare Book id `getAssetUrl` expects (never a `topic:`-prefixed
+   * document id) — resolves a figure's `stem` to a URL (spec 0021-2 §2c). */
+  bookId: string;
 }) {
   const [tappedSpan, setTappedSpan] = useState<string | null>(null);
   const { title, blocks } = parseBody(markdown);
 
   return (
     <>
-      {title !== "" ? <h2>{title}</h2> : null}
+      {title !== "" ? <ProseBlock as="h2" text={title} /> : null}
       {blocks.map((block, index) => {
         switch (block.kind) {
           case "heading":
             return (
-              <h3 key={index}>
-                <InlineRun text={block.text} onTap={setTappedSpan} />
-              </h3>
+              <ProseBlock
+                key={index}
+                as="h3"
+                text={block.text}
+                onTap={setTappedSpan}
+              />
             );
           case "list":
             return (
@@ -244,10 +223,38 @@ export function NoteView({
             );
           case "paragraph":
             return (
-              <p key={index}>
-                <InlineRun text={block.text} onTap={setTappedSpan} />
-              </p>
+              <ProseBlock
+                key={index}
+                as="p"
+                text={block.text}
+                onTap={setTappedSpan}
+              />
             );
+          case "callout":
+            return (
+              <aside key={index} className={`note-callout ${block.variant}`}>
+                <img
+                  className="icon-glyph"
+                  src={`${import.meta.env.BASE_URL}art/icons/${CALLOUT_ICON[block.variant]}.png`}
+                  alt=""
+                />
+                {block.title !== "" && <strong>{block.title}</strong>}
+                <ProseBlock as="p" text={block.text} onTap={setTappedSpan} />
+              </aside>
+            );
+          case "figure": {
+            // A stem that doesn't resolve (spec 0021-2 §2c) still renders
+            // the caption — the useful part — rather than `<img src="undefined">`.
+            const url = getAssetUrl(bookId, "img", block.stem);
+            return (
+              <figure key={index} className="note-figure">
+                {url !== undefined && <img src={url} alt={block.caption} />}
+                {block.caption !== "" && (
+                  <figcaption>{block.caption}</figcaption>
+                )}
+              </figure>
+            );
+          }
         }
       })}
       {tappedSpan !== null ? (

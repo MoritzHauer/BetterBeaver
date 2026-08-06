@@ -8,17 +8,23 @@ description: Build/launch/drive recipe for verifying apps/web changes end-to-end
 Launch: `corepack pnpm dev --host 127.0.0.1 --port 5199` from the repo root
 (Vite, ready in <1s; `curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5199/`).
 
-Drive: no Playwright in the repo. Install `playwright-core` in a scratch dir
-and launch the system browser:
+Drive: `playwright` is a root dev dependency (`corepack pnpm exec playwright
+install chromium` once per machine). Throwaway scripts go in `scratch.local/`,
+which is git-, prettier- and eslint-ignored:
 
 ```js
-import { chromium } from "playwright-core";
-const browser = await chromium.launch({
-  executablePath: "/usr/bin/chromium-browser",
-  headless: true,
-  args: ["--no-sandbox", "--autoplay-policy=no-user-gesture-required"],
-});
+import { chromium } from "playwright";
+const browser = await chromium.launch({ headless: true });
 ```
+
+Use `chromium.launchPersistentContext("scratch.local/profile", …)` when a
+check needs state — My Books, drafts, progress — to survive across runs.
+
+To drive the **authoring** half you need a signed-in account. Magic-link
+sign-in is scriptable without an inbox: `node scripts/test-session.ts` prints
+a one-shot link that lands you in the app as a throwaway author, and an
+access token for curling the RPCs. Full recipe in `supabase/README.md`.
+Publishing writes to the real backend — that Book is production content.
 
 Flows worth driving: topic list → topic → unit → task session (all question
 kinds render under `SessionScreen`; detect the kind from the DOM:

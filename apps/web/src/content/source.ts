@@ -20,6 +20,7 @@ import {
   bundledDomainDocuments,
   bundledBookDocuments,
   mergeAssetStems,
+  seedDocumentVersions,
 } from "./bundled";
 import {
   readCachedDocuments,
@@ -33,9 +34,10 @@ import {
   deletePrivateBook,
   type PrivateBookRecord,
 } from "./private-store";
+import { newEntityId } from "./entity-ids";
 import { newPrivateId } from "./private-ids";
 import { registerPrivateAssets, privateAssetStems } from "./private-assets";
-import { registerRemoteAssets } from "./remote-assets";
+import { registerRemoteAssets, remoteAssetStems } from "./remote-assets";
 import {
   listDocumentAssets,
   downloadRemoteAsset,
@@ -107,6 +109,19 @@ export interface ContentInit {
   acceptUpdate(update: ContentUpdate): Promise<void>;
   /** Fetches a Book from the Library, validates it against the current My Books set, caches it, and reloads. Throws a human-readable message on failure; membership is untouched on failure. */
   addBook(bookId: string, domainId: string): Promise<void>;
+  /** Adds a hosted Book the signed-in author just created (spec 0021-10 §1)
+   * to this device, so its Book screen can resolve. NOT `addBook`: that
+   * fetches through the catalog view, which carries only listed+published
+   * documents — a Book created a second ago is neither, so creation reported
+   * "could not add this book — it may no longer be available" and dropped
+   * the author back on the author screen. The documents are already in hand
+   * here; there is nothing to fetch. */
+  addCreatedBook(
+    bookId: string,
+    book: BookDocument,
+    domainId: string,
+    domain: DomainDocument,
+  ): Promise<void>;
   /** Book ids currently in the private store (plan 0017 §3) — lets the view
    * layer ungate the ✎ Edit buttons and route to the private editor for a
    * private Book without re-reading IndexedDB itself. */
@@ -192,30 +207,72 @@ function toCachedDocument(
   };
 }
 
-/** The onboarding Book's bundled seed, shaped as catalog rows (version 0) — the offline Add/recovery source for `demo` (plan 0015 decisions 3/9). */
+/**
+ * The onboarding Book's bundled seed, shaped as catalog rows — the offline
+ * Add/recovery source for `demo` (plan 0015 decisions 3/9).
+ *
+ * `published_version` comes from `content/seed-versions.json`, the version
+ * each document was actually exported at. It used to be hardcoded `0`, which
+ * made a content update appear on the **first boot of every fresh install**:
+ * first run caches these rows, `planUpdate` compares their version against
+ * the catalog's, and 0 never equals a published version. Nothing about it
+ * was intermittent — it fired for every user, every time, and only stopped
+ * once they took an update they never needed.
+ */
 function seedCatalogRows(): (CatalogRow & { published: unknown })[] {
   const bookDoc = bundledBookDocuments().get("demo");
   const domainDoc = bundledDomainDocuments().get("demo");
+  const versions = seedDocumentVersions();
   const rows: (CatalogRow & { published: unknown })[] = [];
   if (bookDoc !== undefined) {
+    const id = documentId("topic", "demo");
     rows.push({
-      id: documentId("topic", "demo"),
+      id,
       kind: "topic",
-      published_version: 0,
+      published_version: versions.get(id) ?? 0,
       schema_version: CONTENT_SCHEMA_VERSION,
       published: bookDoc,
     });
   }
   if (domainDoc !== undefined) {
+    const id = documentId("domain", "demo");
     rows.push({
-      id: documentId("domain", "demo"),
+      id,
       kind: "domain",
-      published_version: 0,
+      published_version: versions.get(id) ?? 0,
       schema_version: CONTENT_SCHEMA_VERSION,
       published: domainDoc,
     });
   }
   return rows;
+}
+
+/**
+ * `stems` with every entry belonging to `docIds` removed — the accept dry
+ * run's way of saying "a freshly listed document's inventory *replaces* what
+ * is registered for it, it does not add to it". `mergeAssetStems`
+ * concatenates by design, so without this a stem the maintainer **deleted**
+ * would survive from the last boot's overlay and the dry run would approve an
+ * update whose refs are already dangling.
+ */
+export function withoutDocStems(
+  stems: AssetStems,
+  docIds: string[],
+): AssetStems {
+  const drop = (byId: Map<string, string[]>, ids: Set<string>) =>
+    new Map([...byId].filter(([id]) => !ids.has(id)));
+  const bookIds = new Set(
+    docIds.filter((id) => id.startsWith("topic:")).map(contentIdOf),
+  );
+  const domainIds = new Set(
+    docIds.filter((id) => id.startsWith("domain:")).map(contentIdOf),
+  );
+  return {
+    audioByBook: drop(stems.audioByBook, bookIds),
+    imageByBook: drop(stems.imageByBook, bookIds),
+    audioByDomain: drop(stems.audioByDomain, domainIds),
+    imageByDomain: drop(stems.imageByDomain, domainIds),
+  };
 }
 
 /**
@@ -573,13 +630,17 @@ export async function initContentSource(): Promise<ContentInit> {
 
         // Only this Book's *changed* documents get a fresh Storage listing
         // (spec 0012-B §6: "the stems just listed for the documents in
-        // that dry run") — the rest of the member set's stems come from
-        // bundled/private only, same as before this spec; their own
-        // already-registered remote stems are last boot's state, not this
-        // accept's concern, and a stale mismatch here only weakens this
-        // discarded dry run's cross-Book check, never causes a false
-        // rejection (the real source rebuilds from `allAssetStems()` at
-        // next boot).
+        // that dry run"). Every **unchanged** document keeps the stems
+        // already registered for it from the cached blobs — which is the
+        // half that used to be missing, and it was not harmless: the
+        // inventory was bundled ∪ private ∪ changed-listing, so a Book
+        // whose lexicon did not change contributed *zero* lexicon stems and
+        // every lexicon `audioRef` in it read as dangling. Publishing a
+        // change to one of a Book's two documents — the ordinary case,
+        // since most edits touch the Book or the words, not both — then
+        // rejected the whole update with "update kept the current version
+        // for: <book>: dangling audioRef …". Only a Book with no assets at
+        // all escaped it.
         const changedDocIds = [
           ...(downloaded.has(documentId("topic", bookId))
             ? [documentId("topic", bookId)]
@@ -641,7 +702,12 @@ export async function initContentSource(): Promise<ContentInit> {
         }
         books.set(bookId, newDoc); // last — see comment above
         const dryRunStems = mergeAssetStems(
-          mergeAssetStems(bundledAssetStems(), privateAssetStems()),
+          mergeAssetStems(
+            mergeAssetStems(bundledAssetStems(), privateAssetStems()),
+            // Registered-from-cache stems, minus the documents this accept
+            // just listed fresh — those are replaced, not added to.
+            withoutDocStems(remoteAssetStems(), changedDocIds),
+          ),
           assetStemsFromListing(listingEntries),
         );
         const dryRunX = createDocumentContentSource(
@@ -897,6 +963,40 @@ export async function initContentSource(): Promise<ContentInit> {
       reloadAfterMembershipChange();
     },
 
+    async addCreatedBook(
+      bookId: string,
+      book: BookDocument,
+      domainId: string,
+      domain: DomainDocument,
+    ): Promise<void> {
+      // Version 0: nothing is published yet. `planUpdate` only considers
+      // catalog rows, and an unlisted document has none, so this pair is
+      // simply invisible to update checks until the author publishes and an
+      // admin lists it — at which point version 1 vs. 0 offers the update
+      // through the normal path.
+      //
+      // No dry run, for `createPrivateBook`'s reason: both codes derive from
+      // freshly generated UUIDs, so there is nothing they can collide with.
+      await putCachedDocuments([
+        {
+          id: documentId("topic", bookId),
+          kind: "topic",
+          version: 0,
+          schemaVersion: CONTENT_SCHEMA_VERSION,
+          doc: book,
+        },
+        {
+          id: documentId("domain", domainId),
+          kind: "domain",
+          version: 0,
+          schemaVersion: CONTENT_SCHEMA_VERSION,
+          doc: domain,
+        },
+      ]);
+      addToMyBooks(bookId);
+      reloadAfterMembershipChange();
+    },
+
     async createPrivateBook(title: string): Promise<void> {
       const bookId = newPrivateId();
       const domainId = newPrivateId();
@@ -920,7 +1020,13 @@ export async function initContentSource(): Promise<ContentInit> {
         units: [],
         items: [],
         tasks: [],
-        resources: [],
+        // One seeded resource (spec 0021-10 §1d). Every item and every
+        // lexicon entry requires a `sourceRef` that resolves, so without
+        // this the very first word an author adds is invalid — the error
+        // wave the plan's §1 names, and the only reason
+        // `EntityPicker.freeTextWhenEmpty` ever existed. New items default
+        // to it (slice 8 §2b), so a new Book is valid from its first word.
+        resources: [{ id: newEntityId(code), title, path: "" }],
         notes: [],
       };
       const domain: DomainDocument = {

@@ -21,6 +21,7 @@ export function MyBooksScreen({
   broken,
   archivedBooks,
   privateBookIds,
+  unpublishedChanges,
   onSelectBook,
   onVocabulary,
   onReview,
@@ -54,6 +55,10 @@ export function MyBooksScreen({
    * `private` marker, its Export action, and Remove's branched confirm
    * (spec 0017-5). */
   privateBookIds: Set<string>;
+  /** Book ids with authored work that has not left the device (spec 0021-5
+   * §3) — read from the draft/proposal storage keys, not from any session,
+   * so it shows precisely when no editor is open. */
+  unpublishedChanges: Set<string>;
   onSelectBook: (bookId: string) => void;
   /** Domain-scoped (plan 0006); reached per-card now that the front list is
    * flat (no more domain-header row to hang these off of). */
@@ -164,6 +169,9 @@ export function MyBooksScreen({
                   <strong>{book.title}</strong>
                   {privateBookIds.has(book.id) && (
                     <span className="status">private</span>
+                  )}
+                  {unpublishedChanges.has(book.id) && (
+                    <span className="status">unpublished changes</span>
                   )}
                 </span>
                 <p>{book.description}</p>

@@ -5,7 +5,7 @@ import {
   type DomainDocument,
 } from "@betterbeaver/schema";
 import type { AssetStems } from "@betterbeaver/engine";
-import { buildMembers } from "./source";
+import { buildMembers, withoutDocStems } from "./source";
 import type { CachedDocument } from "./cache";
 import type { PrivateBookRecord } from "./private-store";
 
@@ -152,5 +152,61 @@ describe("buildMembers extraStems (spec 0012-B §4b)", () => {
       extraStems,
     );
     expect(built.broken).toEqual([]);
+  });
+});
+
+/**
+ * The accept dry run's inventory rule (see `withoutDocStems`): a document
+ * this accept just listed fresh has its registered stems **replaced**, every
+ * other document keeps them.
+ *
+ * Both halves are load-bearing and they fail in opposite directions. Keeping
+ * an unchanged document's stems is what stops a Book from being rejected for
+ * a `dangling audioRef` the moment you publish a change to only one of its
+ * two documents — the common case, since most edits touch the Book or the
+ * words, not both. Dropping a changed document's stems is what stops a
+ * *deleted* asset surviving from the last boot's overlay and an update
+ * committing with references that already point at nothing.
+ */
+describe("withoutDocStems", () => {
+  const registered: AssetStems = {
+    audioByBook: new Map([["book-a", ["a-old"]]]),
+    imageByBook: new Map([["book-a", ["a-img"]]]),
+    audioByDomain: new Map([["dom-a", ["d-old"]]]),
+    imageByDomain: new Map([["dom-a", ["d-img"]]]),
+  };
+
+  it("drops both pools of a listed topic document, leaving the domain's", () => {
+    const out = withoutDocStems(registered, [documentId("topic", "book-a")]);
+    expect(out.audioByBook.has("book-a")).toBe(false);
+    expect(out.imageByBook.has("book-a")).toBe(false);
+    expect(out.audioByDomain.get("dom-a")).toEqual(["d-old"]);
+    expect(out.imageByDomain.get("dom-a")).toEqual(["d-img"]);
+  });
+
+  it("drops both pools of a listed domain document, leaving the Book's", () => {
+    const out = withoutDocStems(registered, [documentId("domain", "dom-a")]);
+    expect(out.audioByDomain.has("dom-a")).toBe(false);
+    expect(out.imageByDomain.has("dom-a")).toBe(false);
+    expect(out.audioByBook.get("book-a")).toEqual(["a-old"]);
+    expect(out.imageByBook.get("book-a")).toEqual(["a-img"]);
+  });
+
+  it("keeps everything when nothing was listed", () => {
+    const out = withoutDocStems(registered, []);
+    expect(out.audioByBook.get("book-a")).toEqual(["a-old"]);
+    expect(out.audioByDomain.get("dom-a")).toEqual(["d-old"]);
+  });
+
+  it("never lets a topic id drop a same-named domain's stems", () => {
+    const shared: AssetStems = {
+      audioByBook: new Map([["same", ["book-clip"]]]),
+      imageByBook: new Map(),
+      audioByDomain: new Map([["same", ["lexicon-clip"]]]),
+      imageByDomain: new Map(),
+    };
+    const out = withoutDocStems(shared, [documentId("topic", "same")]);
+    expect(out.audioByBook.has("same")).toBe(false);
+    expect(out.audioByDomain.get("same")).toEqual(["lexicon-clip"]);
   });
 });

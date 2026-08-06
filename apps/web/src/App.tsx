@@ -3,6 +3,7 @@ import type { ReactElement } from "react";
 import type {
   BookDocument,
   Content,
+  DomainDocument,
   Item,
   Task,
   Unit,
@@ -42,6 +43,8 @@ import { resolvedLinksByEntryId } from "./content/links";
 import { readCachedDocuments } from "./content/cache";
 import { readPrivateBooks } from "./content/private-store";
 import { readArchived } from "./content/myBooks";
+import { newEntityId } from "./content/entity-ids";
+import { newPrivateId } from "./content/private-ids";
 import { createLocalStorageProgressStore } from "./progress/local-storage";
 import { createLocalStorageVocabListStore } from "./progress/vocab-lists";
 import { createLocalStorageUserEntryStore } from "./progress/user-entries";
@@ -62,13 +65,15 @@ import {
 import { ErrorScreen } from "./screens/ErrorScreen";
 import { StartScreen } from "./screens/StartScreen";
 import { AuthorScreen } from "./screens/AuthorScreen";
-import { EditScreen, type EditTarget } from "./screens/EditScreen";
+import type { EditTarget } from "./screens/edit/types";
+import { SessionEditSheet } from "./screens/edit/SessionEditSheet";
 import { PrivacyScreen } from "./screens/PrivacyScreen";
 import { ImpressumScreen } from "./screens/ImpressumScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { StatsScreen } from "./screens/StatsScreen";
 import { LessonSummaryScreen } from "./screens/LessonSummaryScreen";
 import {
+  createBookDocuments,
   currentUser,
   getSupabase,
   listMyDocuments,
@@ -77,15 +82,37 @@ import {
 import {
   type AnyDoc,
   draftKey,
+  hasUnpublishedChanges,
   proposalKey,
   type StoredProposal,
 } from "./screens/edit/types";
+import { EditSession, useEditSessionState } from "./screens/edit/EditSession";
+import type { EditMode } from "./screens/edit/EditSessionContext";
+import {
+  bookScopeChanged,
+  lessonScopeChanged,
+  unitScopeChanged,
+} from "./screens/edit/diffView";
 
+// Edit mode is a flag on the three learner routes, not a screen of its own
+// (plan 0021 §8): `✎` sets `editing` on the screen you are already reading,
+// and navigating book → lesson → unit carries it through. That is the whole
+// point — entering edit mode never moves you, and neither does moving while
+// in it.
 type Screen =
   | { screen: "books" }
-  | { screen: "book"; bookId: string }
+  | {
+      screen: "book";
+      bookId: string;
+      editing?: boolean;
+      /** Open the Book settings sheet on arrival — the same "one tap from the
+       * thing that caused it" rule `atPage` follows for the Unit trail. A
+       * publish error about a resource has nothing to show on the page since
+       * slice 14 moved Sources into the sheet. */
+      atSettings?: boolean;
+    }
   // The lesson level sits between book and unit (plan 0008).
-  | { screen: "lesson"; bookId: string; lessonId: string }
+  | { screen: "lesson"; bookId: string; lessonId: string; editing?: boolean }
   | {
       screen: "unit";
       bookId: string;
@@ -94,6 +121,10 @@ type Screen =
       /** Open the trail on its last content page rather than the Overview —
        * set only by the practice session's back-swipe. */
       atEnd?: boolean;
+      /** Open on a named trail page — set by a What-changed row or a publish
+       * error deep-link (spec 0021-10 §3). */
+      atPage?: string;
+      editing?: boolean;
     }
   | {
       screen: "task";
@@ -101,6 +132,9 @@ type Screen =
       lessonId: string;
       unitId: string;
       taskId: string;
+      /** Set only by Preview (spec 0021-9 §1): the session then runs over
+       * the draft's own content, against a store that records nothing. */
+      editing?: boolean;
     }
   // Pooled unit-level practice (plan 0010): one shuffled session across an
   // entire unit's task set, launched by UnitScreen's sticky Practice bar.
@@ -109,6 +143,7 @@ type Screen =
       bookId: string;
       lessonId: string;
       unitId: string;
+      editing?: boolean;
     }
   // Cross-unit recall session (plan 0016): practice-only over a sample of
   // the LINKED unit's tasks; onDone returns to the LINKING unit's Overview.
@@ -118,6 +153,7 @@ type Screen =
       lessonId: string;
       unitId: string; // the linking unit, for onDone back-nav
       recallUnitId: string; // the linked unit whose tasks are sampled
+      editing?: boolean;
     }
   // Lesson summary (plan 0020 §5): shown after the unit session that
   // completed the lesson. Derived tiles only — nothing is persisted for it.
@@ -133,22 +169,6 @@ type Screen =
   // Authoring (plan 0012 step 2): sign-in + document list, the editor, and
   // the static privacy note. Learner flows never route here.
   | { screen: "author" }
-  // `target` deep-links into a level (lesson/unit/note); `back` returns to
-  // the learner screen the Edit button was tapped on (default: author list).
-  // `mode` (plan 0012 §5): "propose" for a non-maintainer suggesting edits.
-  // Leave it unset and the edit branch derives it from `maintainedDocIds`;
-  // set it only to pin a route (AuthorScreen's two lists, which already know
-  // which list the row came from).
-  // "private" (plan 0017 §3): the Book being viewed has no account behind
-  // it at all — always pinned explicitly by the ✎ call sites, never left
-  // for the maintainedDocIds fallback to guess at.
-  | {
-      screen: "edit";
-      docId: string;
-      target?: EditTarget;
-      mode?: "maintain" | "propose" | "private";
-      back?: Screen;
-    }
   // The two legal pages (§ 5 DDG, Art. 13 GDPR), reached from the legal links
   // on the cover and the home screen. `back` returns to the sign-in form for
   // the one link that isn't the footer (AuthorScreen's "privacy note").
@@ -162,10 +182,34 @@ type Screen =
 type ContentSourceResult = { source: ContentSource } | { errors: string[] };
 
 const progressStore = createLocalStorageProgressStore();
+
+/** Preview plays the draft's exercises for real and **records nothing**
+ * (spec 0021-9 §1) — inspecting your own draft must not schedule half of it
+ * into your review queue. Reads are empty rather than delegating: a state
+ * read from the real store would show a card as "seen" in a preview of
+ * content nobody has published yet. */
+const PREVIEW_STORE: ProgressStore = {
+  getItemState: async () => null,
+  setItemState: async () => {},
+  getAttemptedTaskIds: async () => [],
+  markTaskAttempted: async () => {},
+  getStreak: async () => null,
+  setStreak: async () => {},
+  incrementReps: async () => {},
+};
 const vocabListStore = createLocalStorageVocabListStore();
 const userEntryStore = createLocalStorageUserEntryStore();
 
-/** Resolves the author Edit button's `EditScreen` deep-link target for one
+/** Set just before creating a Book adds it to this device (spec 0021-10 §1:
+ * "then routes to `{ screen: "book", bookId, editing: true }`"). Adding is a
+ * membership change, and every membership change ends in a full
+ * `window.location.reload()` — that reload is what makes the new Book
+ * resolvable at all, and it throws away any `setScreen` that follows it. So
+ * the destination crosses the reload in sessionStorage, the same hand-off
+ * `SKIP_COVER_KEY` already makes across the same reload. */
+const OPEN_EDITING_KEY = "bb.openEditing";
+
+/** Resolves the author Edit button's scoped-sheet target for one
  * non-matching question's scheduling unit, shared by `TaskSession`,
  * `UnitSession`, and `ReviewSession`: a lexeme/concept item routes to the
  * domain's entry view; any other kind (sentence/pair) routes to its book's
@@ -193,11 +237,43 @@ function itemEditTarget(
   return { docId: documentId("topic", bookId), target: { itemId } };
 }
 
+/**
+ * A deterministic `rng` for the session builders, seeded from the session's
+ * own id. This is what lets the three `useMemo`s below depend on `content`
+ * at all.
+ *
+ * They used to key on the id alone, deliberately — `Math.random` meant any
+ * rebuild reshuffled the questions mid-session, so the only safe guard was
+ * never to rebuild. The cost was the bug this replaces: edit a word through
+ * the question screen's `✎` sheet and the question underneath went on
+ * showing the old text, publish or no publish, because its questions were
+ * frozen at mount. Seeding removes the reason for the freeze — the same id
+ * always yields the same order, so a rebuild is positionally identical and
+ * only the *content* of each question moves.
+ *
+ * mulberry32 over a string hash: not cryptographic, and it does not need to
+ * be — it shuffles flashcards.
+ */
+function rngFor(seed: string): () => number {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < seed.length; i += 1) {
+    hash = Math.imul(hash ^ seed.charCodeAt(i), 0x01000193) >>> 0;
+  }
+  return () => {
+    hash = (hash + 0x6d2b79f5) >>> 0;
+    let t = hash;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 /** Wires the engine's task-session building and grading to `SessionScreen`.
  * Questions are built once per mount (keyed by `task.id` via `useMemo`), so
  * they don't reshuffle across re-renders. An attempt is recorded only once
  * every question has been answered, matching the plan's completion rule. */
 function TaskSession({
+  store = progressStore,
   content,
   lookup,
   task,
@@ -205,6 +281,9 @@ function TaskSession({
   onOpenEdit,
   onDone,
 }: {
+  /** Preview passes a no-op store so the draft's exercises play for
+   * real and record nothing (spec 0021-9 §1). */
+  store?: ProgressStore;
   content: Content;
   /** Tap-to-lookup dependencies (plan 0006 step 4), for post-answer reveal
    * surfaces (SessionScreen's pinned rules). */
@@ -214,19 +293,20 @@ function TaskSession({
    * author, plan 0017 §3 for a private Book, which has no account behind it
    * at all); gates the session screen's Edit button. */
   canEdit: boolean;
-  /** Opens `EditScreen` at the given deep-link target. */
+  /** Opens the scoped edit sheet on the given target (decision 13). */
   onOpenEdit: (docId: string, target: EditTarget) => void;
   onDone: () => void;
 }) {
   const domainId = content.topic.domainId;
   const questions = useMemo(
-    () => buildTaskSession(task, content, Math.random),
-    // Keyed by taskId only: `content` is reloaded (new reference) on every
-    // screen change, but the session must not reshuffle across re-renders.
-    [task.id],
+    () => buildTaskSession(task, content, rngFor(task.id)),
+    // `content` is reloaded (new reference) on every screen change and
+    // changes for real when the `✎` sheet edits the draft — both rebuild,
+    // and neither reshuffles, because `rngFor` is seeded by the task id.
+    [task.id, content],
   );
   async function handleGrade(unitId: string, quality: Quality) {
-    await recordGrade(progressStore, unitId, quality, new Date(), domainId);
+    await recordGrade(store, unitId, quality, new Date(), domainId);
   }
 
   const onEdit = canEdit
@@ -263,10 +343,10 @@ function TaskSession({
       lookup={lookup}
       onEdit={onEdit}
       onGrade={handleGrade}
-      onAllAnswered={() => void progressStore.markTaskAttempted(task.id)}
+      onAllAnswered={() => void store.markTaskAttempted(task.id)}
       onFinished={onDone}
       onExit={onDone}
-      loadStreak={() => progressStore.getStreak(domainId)}
+      loadStreak={() => store.getStreak(domainId)}
     />
   );
 }
@@ -277,6 +357,7 @@ function TaskSession({
  * report `onTaskAnswered` granularly (rather than only at session-end, the
  * way `TaskSession`'s single-task `onAllAnswered` does). */
 function UnitSession({
+  store = progressStore,
   content,
   unit,
   lookup,
@@ -288,6 +369,9 @@ function UnitSession({
   onSwipeBack,
   nextAction,
 }: {
+  /** Preview passes a no-op store so the draft's exercises play for
+   * real and record nothing (spec 0021-9 §1). */
+  store?: ProgressStore;
   content: Content;
   unit: Unit;
   /** Tap-to-lookup dependencies (plan 0006 step 4), for post-answer reveal
@@ -299,7 +383,7 @@ function UnitSession({
    * author, plan 0017 §3 for a private Book, which has no account behind it
    * at all); gates the session screen's Edit button. */
   canEdit: boolean;
-  /** Opens `EditScreen` at the given deep-link target. */
+  /** Opens the scoped edit sheet on the given target (decision 13). */
   onOpenEdit: (docId: string, target: EditTarget) => void;
   onDone: () => void;
   /** Exit back to the unit's last content page (owner request); forwarded to
@@ -312,15 +396,15 @@ function UnitSession({
 }) {
   const domainId = content.topic.domainId;
   const pairs = useMemo(
-    () => buildUnitSession(unit, content, Math.random),
-    // Keyed by unit.id only, same reshuffle-guard rule as TaskSession.
-    [unit.id],
+    () => buildUnitSession(unit, content, rngFor(unit.id)),
+    // Same seeded-rebuild rule as TaskSession.
+    [unit.id, content],
   );
   const questions = useMemo(() => pairs.map((pair) => pair.question), [pairs]);
   const taskIds = useMemo(() => pairs.map((pair) => pair.taskId), [pairs]);
 
   async function handleGrade(unitId: string, quality: Quality) {
-    await recordGrade(progressStore, unitId, quality, new Date(), domainId);
+    await recordGrade(store, unitId, quality, new Date(), domainId);
   }
 
   const onEdit = canEdit
@@ -362,12 +446,12 @@ function UnitSession({
       onTogglePin={onTogglePin}
       onEdit={onEdit}
       onGrade={handleGrade}
-      onTaskAnswered={(taskId) => void progressStore.markTaskAttempted(taskId)}
+      onTaskAnswered={(taskId) => void store.markTaskAttempted(taskId)}
       onFinished={onDone}
       nextAction={nextAction}
       onExit={onDone}
       onSwipeBack={onSwipeBack}
-      loadStreak={() => progressStore.getStreak(domainId)}
+      loadStreak={() => store.getStreak(domainId)}
     />
   );
 }
@@ -378,11 +462,15 @@ function UnitSession({
  * unit isn't rescheduled); no `markTaskAttempted` — the linking unit's
  * completion must stay derived from its own taskIds, not this session. */
 function RecallSession({
+  store = progressStore,
   content,
   linkedUnit,
   lookup,
   onDone,
 }: {
+  /** Preview passes a no-op store so the draft's exercises play for
+   * real and record nothing (spec 0021-9 §1). */
+  store?: ProgressStore;
   content: Content;
   linkedUnit: Unit;
   lookup: TapLookup;
@@ -390,14 +478,14 @@ function RecallSession({
 }) {
   const domainId = content.topic.domainId;
   const pairs = useMemo(
-    () => buildRecallSession(linkedUnit, content, Math.random),
-    // Keyed by linkedUnit.id only, same reshuffle-guard as UnitSession.
-    [linkedUnit.id],
+    () => buildRecallSession(linkedUnit, content, rngFor(linkedUnit.id)),
+    // Same seeded-rebuild rule as UnitSession.
+    [linkedUnit.id, content],
   );
   const questions = useMemo(() => pairs.map((pair) => pair.question), [pairs]);
 
   async function handleGrade(unitId: string, quality: Quality) {
-    await recordGrade(progressStore, unitId, quality, new Date(), domainId);
+    await recordGrade(store, unitId, quality, new Date(), domainId);
   }
 
   return (
@@ -409,7 +497,7 @@ function RecallSession({
       onGrade={handleGrade}
       onFinished={onDone}
       onExit={onDone}
-      loadStreak={() => progressStore.getStreak(domainId)}
+      loadStreak={() => store.getStreak(domainId)}
     />
   );
 }
@@ -438,7 +526,7 @@ function ReviewSession({
    * author, plan 0017 §3 for a private Book, which has no account behind it
    * at all); gates the session screen's Edit button. */
   canEdit: boolean;
-  /** Opens `EditScreen` at the given deep-link target. */
+  /** Opens the scoped edit sheet on the given target (decision 13). */
   onOpenEdit: (docId: string, target: EditTarget) => void;
   onDone: () => void;
 }) {
@@ -677,7 +765,17 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     await acceptUpdateNow(update);
   }
 
-  const [screen, setScreen] = useState<Screen>({ screen: "books" });
+  const [screen, setScreen] = useState<Screen>(() => {
+    try {
+      const bookId = sessionStorage.getItem(OPEN_EDITING_KEY);
+      if (bookId !== null) {
+        return { screen: "book", bookId, editing: true };
+      }
+    } catch {
+      // Same private-mode-webview throw the cover flag below guards against.
+    }
+    return { screen: "books" };
+  });
   // The ✎ Edit button *inside* a practice session opens the editor over the
   // running session instead of navigating to `screen: "edit"`: the session
   // subtree stays mounted (hidden — see `withSessionEdit`), so closing the
@@ -731,6 +829,20 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   function isPrivateBook(bookId: string): boolean {
     return contentInit.privateBookIds.has(bookId);
   }
+  /** Who may enter edit mode (plan 0021 §8) — one predicate behind every ✎.
+   * `isAuthor` means *signed in at all*, not *maintainer*: it flips once
+   * `listMyDocuments()` settles, deliberately, because propose mode exists
+   * for everyone else. The name misleads; do not narrow it. */
+  function canEdit(bookId: string): boolean {
+    return isAuthor || isPrivateBook(bookId);
+  }
+  /** The Book's own mode. Its lexicon's is resolved separately inside the
+   * session (spec 0021-5 §1b): a user can maintain the Book and not it. */
+  function bookEditMode(bookId: string): EditMode {
+    return isPrivateBook(bookId)
+      ? "private"
+      : editModeFor(documentId("topic", bookId));
+  }
   // ponytail: welcome cover shows on every load (plan 0009); persist a
   // "seen" flag if the extra tap ever annoys. The one exception is a reload
   // the app itself triggered from My Books (add/remove/archive/restore/
@@ -750,6 +862,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   useEffect(() => {
     try {
       sessionStorage.removeItem(SKIP_COVER_KEY);
+      sessionStorage.removeItem(OPEN_EDITING_KEY);
     } catch {
       // Nothing was stored either, so nothing to clear.
     }
@@ -935,9 +1048,9 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
       .then((ids) => setAttemptedTaskIds(new Set(ids)));
   }
 
-  function goToBook(bookId: string) {
+  function goToBook(bookId: string, editing?: boolean) {
     setBookEpoch((epoch) => epoch + 1);
-    setScreen({ screen: "book", bookId });
+    setScreen({ screen: "book", bookId, editing });
   }
 
   /** Which editor a document opens in when the route doesn't pin one (plan
@@ -949,11 +1062,59 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   }
 
   /**
+   * The Book a document is edited on, now that editing happens on the Book's
+   * own screens (spec 0021-5 §2c): a Book document is its own Book, and a
+   * **domain** document belongs to whichever Book uses it — those words are
+   * never named as a document in the UI. `undefined` when neither resolves
+   * to something loadable on this device.
+   */
+  function editableBookFor(docId: string): string | undefined {
+    const id = contentIdOf(docId);
+    if (docId.startsWith("domain:")) {
+      return books.find((book) => book.domainId === id)?.id;
+    }
+    // `isPrivateBook` as well as `books` (spec 0021-11 §2): a private Book
+    // whose documents don't validate is absent from `books` — that absence
+    // *is* what makes its card the broken one — and it is still editable,
+    // because the session reads the private store directly and
+    // `draftContent` cannot fail. This is the route behind the broken card's
+    // Edit, which is the only way back into such a Book.
+    return books.some((book) => book.id === id) || isPrivateBook(id)
+      ? id
+      : undefined;
+  }
+
+  /**
+   * Why a document cannot be edited here, or `undefined` when it can (spec
+   * 0021-11 §3). Every route into the old form editor now ends in one of
+   * these two sentences instead: with the form tree gone there is no
+   * fallback that can open a document out of context, and slice 10 §2's rule
+   * is to **say so** rather than dead-end.
+   */
+  function noEditorReason(docId: string): string | undefined {
+    if (editableBookFor(docId) !== undefined) {
+      return undefined;
+    }
+    return docId.startsWith("domain:")
+      ? "add the Book that uses these words to edit them"
+      : "add this Book to your books first — editing happens on the Book itself";
+  }
+
+  /** Where a document id opens: its Book, in edit mode, or the Library —
+   * which is where adding the missing Book actually happens. */
+  function editorRouteFor(docId: string): Screen {
+    const bookId = editableBookFor(docId);
+    return bookId !== undefined
+      ? { screen: "book", bookId, editing: true }
+      : { screen: "library" };
+  }
+
+  /**
    * Settings → "Import book/domain…": stores each imported document under
    * the key the editor it will open actually reads, then opens the first.
    *
    * The import used to write `bb.author.draft.*` and pin maintain mode for
-   * everyone, so a non-maintainer landed in `MaintainEditScreen`, whose
+   * everyone, so a non-maintainer landed in the maintainer's editor, whose
    * `loadDocument` is a `.single()` over a table RLS shows them no rows of
    * — surfacing as a bare "Cannot coerce the result to a single JSON
    * object". Routing through `editModeFor` is what makes "import a file and
@@ -991,12 +1152,17 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     }
     const first = entries[0];
     if (first !== undefined) {
-      setScreen({
-        screen: "edit",
-        docId: first.id,
-        mode: editModeFor(first.id),
-        back: { screen: "settings" },
-      });
+      // The storage half above is unchanged; only the destination moved
+      // (spec 0021-11 §3). An imported document with no Book to open it on
+      // — a lexicon whose Book is not here, a Book not in My Books — is
+      // reported rather than dropping the author on an unrelated screen.
+      // The draft/proposal key is already written either way, so adding the
+      // Book afterwards picks the import straight up.
+      const reason = noEditorReason(first.id);
+      if (reason !== undefined) {
+        throw new Error(`${first.id} was imported, but ${reason}`);
+      }
+      setScreen(editorRouteFor(first.id));
     }
   }
 
@@ -1030,48 +1196,41 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     );
   }
 
-  /** Re-runs the update check after the author publishes. The learner-facing
-   * content source is built from the document cache at boot and only a
-   * reload swaps it (`content/source.ts`), so a just-published edit does not
-   * appear in the running session — this is what turns it into an update
-   * offer on My Books rather than leaving the author to wonder why their
-   * text didn't change. Deliberately never auto-accepts, even with
-   * auto-update on: accepting reloads the page, and the author is
-   * mid-session. */
-  function recheckForUpdate(): void {
-    // Cannot reject: `checkForUpdate` catches its own fetch failures.
-    void contentInit.checkForUpdate().then(setUpdate);
-  }
+  // `recheckForUpdate` lived here, re-running the update check when the form
+  // editor reported a publish. Its last two callers were the `forms` route
+  // and the session ✎'s full editor, both gone — and `EditSession` has had
+  // no publish callback since slice 5, so this had already stopped covering
+  // the in-place path. Publishing still leaves the author's own learner view
+  // on the cached copy until the next reload; that is the same open gap
+  // STATUS records for an unlisted Book, where a recheck would not have
+  // helped either (`planUpdate` only considers catalog rows).
 
-  /** Renders a session with the ✎ editor layered over it while one is open.
-   * The session is hidden, NOT unmounted — that is the whole point (see
-   * `sessionEdit`): React keeps its state, so closing the editor resumes
-   * exactly where the author left off. */
+  /** Renders a session with the scoped ✎ sheet over it while one is open
+   * (plan decision 13). The session stays mounted and, since spec 0021-11
+   * §3, stays *visible* too: the sheet is a modal `<dialog>`, so it makes
+   * its own backdrop and inerts what is behind it — the `hidden` this
+   * wrapper used to need was for a full-screen editor, and hiding the
+   * question you are fixing a typo in was never the intent. */
   function withSessionEdit(session: ReactElement): ReactElement {
     const close = () => setSessionEdit(null);
     if (sessionEdit !== null) {
-      // Hardware back closes the editor and leaves the session running,
+      // Hardware back closes the sheet and leaves the session running,
       // rather than exiting the session underneath it.
       backActionRef.current = close;
     }
     // The wrapper is unconditional, and so is the session's position inside
-    // it: returning the bare session while no editor is open would put a
+    // it: returning the bare session while no sheet is open would put a
     // different element type at this position, and React would unmount and
     // rebuild the session on every open and close — the exact thing this
     // whole arrangement exists to avoid.
     return (
       <>
-        <div hidden={sessionEdit !== null}>{session}</div>
-        {sessionEdit !== null && (
-          <EditScreen
-            docId={sessionEdit.docId}
+        <div>{session}</div>
+        {sessionEdit !== null && editSession.value !== null && (
+          <SessionEditSheet
+            session={editSession.value}
             target={sessionEdit.target}
-            mode={sessionEdit.mode ?? editModeFor(sessionEdit.docId)}
-            onBack={close}
-            onPublished={() => {
-              close();
-              recheckForUpdate();
-            }}
+            onClose={close}
           />
         )}
       </>
@@ -1290,12 +1449,20 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
         }
         if (loadedContent !== undefined) {
           setContent(loadedContent);
-        } else if (isBookFamilyScreen) {
+        } else if (
+          isBookFamilyScreen &&
+          !("editing" in screen && screen.editing === true)
+        ) {
           // The active book failed to load (stale snapshot, spec 0019 §3a):
           // `content` would otherwise stay whatever it was (or `null`, which
           // renders a permanent "Loading…" on book-family screens) — send
           // the learner back to the books list, where the broken card for
           // this id now shows via `runtimeBrokenBookIds`.
+          //
+          // Never in edit mode (spec 0021-11 §2): a Book that does not
+          // validate is exactly the one you came here to repair, and the
+          // session renders it from the draft. Bailing would bounce you off
+          // the screen the moment you arrived.
           setScreen({ screen: "books" });
         }
         if (loadedDomain !== undefined) {
@@ -1327,6 +1494,126 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
       cancelled = true;
     };
   }, [contentSourceResult, screen, books, domainEpoch]);
+
+  // Edit mode (plan 0021 §8). The session is owned here, not inside the
+  // book/lesson/unit branch, because spec 0021-5 §2d resolves what those
+  // screens render from the *draft* — and that resolution point is above
+  // the branch. Every effect inside returns early while `enabled` is false,
+  // so a learner pays nothing for the hook being mounted.
+  const editingBookId =
+    (screen.screen === "book" ||
+      screen.screen === "lesson" ||
+      screen.screen === "unit" ||
+      // Preview's Practice launches a real session over the draft (spec
+      // 0021-9 §1), so the session has to stay mounted across those routes
+      // or the task ids it just offered resolve against published content.
+      screen.screen === "task" ||
+      screen.screen === "unit-session" ||
+      screen.screen === "recall-session") &&
+    screen.editing === true
+      ? screen.bookId
+      : null;
+  // The scoped session sheet (plan decision 13) needs the same documents,
+  // reached from a *learner* route — a question screen carries no `editing`
+  // flag. It reuses this one hook rather than mounting a second session
+  // underneath the first: two sessions over one Book would each autosave
+  // their own copy of it.
+  //
+  // The Book is the one whose units actually reference the tapped entity,
+  // not simply the first that uses its lexicon. `itemEditTarget` points a
+  // word at `domain:<id>`, and `ReviewSession` pools items across **every**
+  // Book of a domain — so resolving the document alone would open a session
+  // over Book A for a word tapped in Book B, and the sheet, walking Book A's
+  // units, would report content that plainly exists as gone.
+  const sheetTarget =
+    sessionEdit === null
+      ? undefined
+      : (sessionEdit.target.taskId ??
+        sessionEdit.target.itemId ??
+        sessionEdit.target.entryId);
+  const sheetBookId =
+    sessionEdit === null
+      ? null
+      : ([...booksContentMap].find(([, bookContent]) =>
+          bookContent.units.some(
+            (unit) =>
+              unit.itemIds.includes(sheetTarget ?? "") ||
+              unit.taskIds.includes(sheetTarget ?? ""),
+          ),
+        )?.[0] ??
+        editableBookFor(sessionEdit.docId) ??
+        null);
+  /**
+   * The Book whose draft a running session renders from, once that session's
+   * `✎` has been used — and **after the sheet closes**, which is the part
+   * that makes the fix worth anything. `sessionEdit` is the sheet, and it is
+   * cleared the moment you tap "Back to the question"; hanging the draft off
+   * it meant the edit was visible only while the sheet covered the question,
+   * and the question reverted to published content underneath. Sticky until
+   * the screen changes: the effect below clears it on exactly the navigation
+   * that already ends `sessionEdit`, so leaving the session tears the draft
+   * session down with it.
+   */
+  const [sessionDraftBookId, setSessionDraftBookId] = useState<string | null>(
+    null,
+  );
+  useEffect(() => {
+    if (sheetBookId !== null) {
+      setSessionDraftBookId(sheetBookId);
+    }
+  }, [sheetBookId]);
+  useEffect(() => setSessionDraftBookId(null), [screen]);
+  const sessionBookId = editingBookId ?? sheetBookId ?? sessionDraftBookId;
+  const editSession = useEditSessionState({
+    bookId: sessionBookId ?? "",
+    mode: sessionBookId === null ? "maintain" : bookEditMode(sessionBookId),
+    enabled: sessionBookId !== null,
+    resolveMode: editModeFor,
+  });
+  /** The session **as a route flag** — what the learner screens render from,
+   * and what carries Edit/Preview/Diff (spec 0021-5 §2d). Stays null while
+   * only the sheet has one open: those three modes belong to a screen you
+   * navigated into edit mode on, not to a question you tapped `✎` in. */
+  const routeSession = editingBookId === null ? null : editSession.value;
+  /**
+   * The draft the *content* of a screen resolves against, which the scoped
+   * sheet (decision 13) also has to feed. Editing a word through a
+   * question's `✎` used to leave the question underneath showing the old
+   * text until the author published and took a content update — the session
+   * rendered published content and never re-derived.
+   *
+   * This was previously ruled out as "not swap to the draft mid-answer", and
+   * that objection was about *reshuffling*, not about the text: the builders
+   * now seed their rng from the session's own id, so re-deriving keeps every
+   * question in place and changes only what each one says.
+   */
+  const sheetContentSession =
+    routeSession !== null || sessionDraftBookId === null
+      ? null
+      : sessionDraftBookId === ("bookId" in screen ? screen.bookId : undefined)
+        ? // Only once the lexicon has settled. The Book document loads
+          // first, so until the second fetch lands the draft's units
+          // reference words it does not yet hold — questions built from it
+          // would drop every lexicon-backed one and then get them back a
+          // moment later. (Harmless now rather than fatal: `buildTaskSession`
+          // no longer asserts those references resolve.) A lexicon that
+          // *fails* to load never settles, and this correctly leaves that
+          // session showing published content instead of a Book with no words.
+          editSession.value?.lexiconLoaded === true
+          ? editSession.value
+          : null
+        : null;
+
+  // Spec 0021-5 §3: leaving edit mode with an unsynced draft used to leave
+  // it invisible — the learner screens render published content and nothing
+  // said a draft existed. Read from the storage keys at render, not from
+  // session state and not once at mount: the whole point is that it shows
+  // when no session is open, including the one that just closed.
+  const unpublishedBookIds = new Set(
+    books
+      .map((book) => book.id)
+      .filter((id) => hasUnpublishedChanges(documentId("topic", id))),
+  );
 
   if ("errors" in contentSourceResult) {
     return <ErrorScreen errors={contentSourceResult.errors} />;
@@ -1369,44 +1656,74 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           setScreen({ screen: "books" });
           setNamingBook(true);
         }}
-        onOpenDocument={(docId, mode) =>
-          setScreen({ screen: "edit", docId, mode })
-        }
+        onCreateHostedBook={async (title) => {
+          // Ids first, codes derived from them (spec 0021-10 §1b):
+          // `validateContentSet` enforces globally unique *domain* codes but
+          // never Book codes, so a code derived from a user-chosen title can
+          // collide where a duplicate Book code would not — and the
+          // collision would surface in somebody else's Book at listing time.
+          const bookId = newPrivateId();
+          const domainId = newPrivateId();
+          const code = bookId.slice(0, 8);
+          const book: BookDocument = {
+            topic: {
+              id: bookId,
+              code,
+              title,
+              domainId,
+              lessonIds: [],
+              description: "",
+            },
+            lessons: [],
+            units: [],
+            items: [],
+            tasks: [],
+            // §1d, same seed the private path gets: without it the first
+            // word an author adds is invalid.
+            resources: [{ id: newEntityId(code), title, path: "" }],
+            notes: [],
+          };
+          const domain: DomainDocument = {
+            domain: {
+              id: domainId,
+              code,
+              kind: "general",
+              title,
+              glossLanguage: "en",
+            },
+            entries: [],
+            families: [],
+          };
+          await createBookDocuments(
+            documentId("topic", bookId),
+            book,
+            documentId("domain", domainId),
+            domain,
+          );
+          // Where to land after the reload `addCreatedBook` ends in. Written
+          // first: that reload is synchronous with the call.
+          try {
+            sessionStorage.setItem(OPEN_EDITING_KEY, bookId);
+          } catch {
+            // Storage denied — the Book is still created and still added;
+            // the author just arrives on My Books and taps it.
+          }
+          // Adds it to this device so the Book route can resolve it. Not the
+          // Library's Add: that reads the catalog, which a Book created a
+          // second ago (unlisted, unpublished) is not in.
+          await contentInit.addCreatedBook(bookId, book, domainId, domain);
+        }}
+        // No `mode`: the route carries only the Book, and the session
+        // resolves maintain/propose/private from the document itself
+        // (`bookEditMode`) — the same answer `editModeFor` gave here.
+        onOpenDocument={(docId) => setScreen(editorRouteFor(docId))}
+        noEditorReason={noEditorReason}
         // Pinned back: the note is read from the sign-in form, and losing a
         // half-typed email to a Back tap would be its own little betrayal.
         onPrivacy={() =>
           setScreen({ screen: "privacy", back: { screen: "author" } })
         }
         onBack={onBack}
-      />
-    );
-  }
-  if (screen.screen === "edit") {
-    const back = screen.back ?? { screen: "author" as const };
-    const onBack = () => setScreen(back);
-    backActionRef.current = onBack;
-    return (
-      <EditScreen
-        docId={screen.docId}
-        target={screen.target}
-        // An explicit `mode` still wins; otherwise `editModeFor` decides,
-        // the same way every other route into the editor does.
-        mode={screen.mode ?? editModeFor(screen.docId)}
-        onBack={onBack}
-        // Only for the routes that pin a `back` — every learner ✎ button
-        // and the settings import. Publishing ends that errand, so the
-        // editor closes itself and hands the user back where they came
-        // from. Entered from the authoring area instead (no `back`), it
-        // stays open: that is a workspace, and its publish confirmation is
-        // the feedback there.
-        onPublished={
-          screen.back !== undefined
-            ? () => {
-                onBack();
-                recheckForUpdate();
-              }
-            : undefined
-        }
       />
     );
   }
@@ -1491,14 +1808,16 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           onArchive={contentInit.archiveBook}
           onRestore={contentInit.restoreBook}
           onRemove={contentInit.removeBook}
+          // The only ✎ on a Book that does not load — a broken card is
+          // exactly where there is no Book screen to reach ✎ from. It is
+          // offered on private Books alone, whose documents live nowhere
+          // else, and it now opens the Book screen in edit mode like every
+          // other ✎: the session reads the private store directly, so it
+          // does not need the Book to validate (spec 0021-11 §2).
           onEdit={(bookId) =>
-            setScreen({
-              screen: "edit",
-              docId: documentId("topic", bookId),
-              mode: "private",
-              back: { screen: "books" },
-            })
+            setScreen(editorRouteFor(documentId("topic", bookId)))
           }
+          unpublishedChanges={unpublishedBookIds}
           onLibrary={
             getSupabase() !== null
               ? () => setScreen({ screen: "library" })
@@ -1549,73 +1868,177 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     // domainContent is gated here too (not just content): unit notes and
     // task-session post-answer reveals need the domain's merged entry pool
     // for tap-to-lookup (plan 0006 step 4).
-    if (content === null || domainContent === null) {
+    //
+    // Both fall back to the session's own copies (spec 0021-11 §2), and that
+    // fallback is the whole editing route for a Book whose published copy
+    // does not validate. `content` comes from the validated content source,
+    // so a Book with, say, a unit that has no tasks yet — the state `+ unit`
+    // leaves behind, per plan §1 — loads as nothing at all, and until now
+    // its only way in was the form editor. The draft has no such gate:
+    // `draftContent` cannot fail by construction.
+    //
+    // Spec 0021-5 §2d: in edit mode the screens render the draft through
+    // `draftContent` instead of the validated published content. One
+    // conditional, here at the resolution point; the screens are unchanged.
+    // Resolved *above* the gate now, so the gate can be about what will
+    // actually render rather than about what the content source managed.
+    const editView = routeSession?.view ?? "edit";
+    const preview =
+      editView === "preview" ? (routeSession?.preview ?? null) : null;
+    const shown =
+      preview !== null
+        ? preview.content
+        : editView === "diff" && routeSession?.diff != null
+          ? // The **union** — base ∪ draft (spec 0021-9 §2) — so an entity
+            // the draft removed still has a row to tint red.
+            routeSession.diff.content
+          : (routeSession?.content ?? sheetContentSession?.content ?? content);
+    const shownLookup = domainContent ?? routeSession?.domainContent;
+    if (shown === null || shownLookup === undefined || shownLookup === null) {
       return <p>Loading&hellip;</p>;
     }
     const lookup: TapLookup = {
-      domainContent,
+      domainContent: shownLookup,
       listStore: vocabListStore,
       userEntryStore,
       onWordsChanged: () => setDomainEpoch((epoch) => epoch + 1),
     };
+    // Preview opens everything (§1b): inspecting unit 12 must not cost
+    // eleven skip-ahead confirms, and a bad unlock chain is caught
+    // structurally anyway. A prop swap, deliberately, not a store change.
+    const shownAttempted =
+      preview !== null
+        ? new Set(shown.tasks.map((task) => task.id))
+        : attemptedTaskIds;
+    const shownStore = preview !== null ? PREVIEW_STORE : progressStore;
+    // In Diff the draft has no copy of a note it deleted, and `UnitScreen`
+    // drops any note whose markdown is undefined — so without this fallback
+    // the one entity a diff most needs to show never reaches the screen.
+    const diffBefore = routeSession?.diff?.before;
+    const shownNoteMarkdown =
+      preview !== null
+        ? preview.noteMarkdown
+        : editView === "diff" && diffBefore !== undefined
+          ? (stem: string) => {
+              const draft = routeSession?.noteMarkdown(stem);
+              if (draft !== undefined) {
+                return draft;
+              }
+              const base = (diffBefore.get(stem) as { markdown?: unknown })
+                ?.markdown;
+              return typeof base === "string" ? base : undefined;
+            }
+          : routeSession?.noteMarkdown;
+    /** Wraps a learner screen in the session while `editing` is set. Exiting
+     * clears the flag and leaves you exactly where you were. */
+    const inSession = (
+      node: ReactElement,
+      exitTo: Screen,
+      // Whether *this* screen has anything to diff (spec 0021-9 §3a) — only
+      // App knows which screen is under the session.
+      diffHere = false,
+    ): ReactElement =>
+      editingBookId === null ? (
+        node
+      ) : (
+        <EditSession
+          session={editSession}
+          onExit={() => setScreen(exitTo)}
+          diffHere={diffHere}
+          onNavigate={(target) => {
+            if (target.unitId !== undefined && target.lessonId !== undefined) {
+              setScreen({
+                screen: "unit",
+                bookId: editingBookId,
+                lessonId: target.lessonId,
+                unitId: target.unitId,
+                atPage: target.page,
+                editing: true,
+              });
+            } else if (target.lessonId !== undefined) {
+              setScreen({
+                screen: "lesson",
+                bookId: editingBookId,
+                lessonId: target.lessonId,
+                editing: true,
+              });
+            } else {
+              setScreen({
+                screen: "book",
+                bookId: editingBookId,
+                editing: true,
+                ...(target.bookSettings === true ? { atSettings: true } : {}),
+              });
+            }
+          }}
+        >
+          {node}
+        </EditSession>
+      );
 
     if (screen.screen === "book") {
       const onBack = () => setScreen({ screen: "books" });
       backActionRef.current = onBack;
-      return (
+      return inSession(
         <BookScreen
-          content={content}
-          attemptedTaskIds={attemptedTaskIds}
-          store={progressStore}
+          content={shown}
+          atSettings={screen.atSettings === true}
+          unpublishedChanges={unpublishedBookIds.has(screen.bookId)}
+          attemptedTaskIds={shownAttempted}
+          store={shownStore}
           epoch={bookEpoch}
           onSelectLesson={(lessonId) =>
-            setScreen({ screen: "lesson", bookId: screen.bookId, lessonId })
+            setScreen({
+              screen: "lesson",
+              bookId: screen.bookId,
+              lessonId,
+              editing: screen.editing,
+            })
           }
           onPracticeTask={(target) =>
             setScreen({
               screen: "task",
               bookId: screen.bookId,
               ...target,
+              // Carried so Preview's Practice plays the draft (§1).
+              editing: screen.editing,
             })
           }
           onReview={() =>
-            setScreen({ screen: "review", domainId: content.topic.domainId })
+            setScreen({ screen: "review", domainId: shown.topic.domainId })
           }
           onVocabulary={() =>
-            setScreen({ screen: "vocab", domainId: content.topic.domainId })
+            setScreen({ screen: "vocab", domainId: shown.topic.domainId })
           }
           // Cannot reject — see the My Books call site.
           onPlay={() => void playBook(screen.bookId)}
           onEdit={
-            isAuthor || isPrivateBook(screen.bookId)
-              ? () =>
-                  setScreen({
-                    screen: "edit",
-                    docId: documentId("topic", screen.bookId),
-                    mode: isPrivateBook(screen.bookId) ? "private" : undefined,
-                    back: screen,
-                  })
+            canEdit(screen.bookId)
+              ? () => setScreen({ ...screen, editing: true })
               : undefined
           }
           onBack={onBack}
-        />
+        />,
+        { screen: "book", bookId: screen.bookId },
+        routeSession !== null && bookScopeChanged(routeSession),
       );
     }
 
     if (screen.screen === "lesson") {
-      const onBack = () => goToBook(screen.bookId);
+      const onBack = () => goToBook(screen.bookId, screen.editing);
       backActionRef.current = onBack;
-      return (
+      return inSession(
         <LessonScreen
-          content={content}
+          content={shown}
           lessonId={screen.lessonId}
-          attemptedTaskIds={attemptedTaskIds}
+          attemptedTaskIds={shownAttempted}
           onSelectUnit={(unitId) =>
             setScreen({
               screen: "unit",
               bookId: screen.bookId,
               lessonId: screen.lessonId,
               unitId,
+              editing: screen.editing,
             })
           }
           onPracticeTask={(target) =>
@@ -1623,22 +2046,24 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
               screen: "task",
               bookId: screen.bookId,
               ...target,
+              // Carried so Preview's Practice plays the draft (§1).
+              editing: screen.editing,
             })
           }
           onEdit={
-            isAuthor || isPrivateBook(screen.bookId)
-              ? () =>
-                  setScreen({
-                    screen: "edit",
-                    docId: documentId("topic", screen.bookId),
-                    target: { lessonId: screen.lessonId },
-                    mode: isPrivateBook(screen.bookId) ? "private" : undefined,
-                    back: screen,
-                  })
+            canEdit(screen.bookId)
+              ? () => setScreen({ ...screen, editing: true })
               : undefined
           }
           onBack={onBack}
-        />
+        />,
+        {
+          screen: "lesson",
+          bookId: screen.bookId,
+          lessonId: screen.lessonId,
+        },
+        routeSession !== null &&
+          lessonScopeChanged(routeSession, screen.lessonId),
       );
     }
 
@@ -1648,19 +2073,24 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           screen: "lesson",
           bookId: screen.bookId,
           lessonId: screen.lessonId,
+          editing: screen.editing,
         });
       backActionRef.current = onBack;
-      return (
+      return inSession(
         <UnitScreen
-          content={content}
+          content={shown}
           unitId={screen.unitId}
           lookup={lookup}
+          // Draft note text in edit mode; the module-global `getNoteMarkdown`
+          // only knows what has been published (spec 0021-5 §2d).
+          noteMarkdown={shownNoteMarkdown}
           onPractice={() =>
             setScreen({
               screen: "unit-session",
               bookId: screen.bookId,
               lessonId: screen.lessonId,
               unitId: screen.unitId,
+              editing: screen.editing,
             })
           }
           onRecall={(recallUnitId) =>
@@ -1670,6 +2100,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
               lessonId: screen.lessonId,
               unitId: screen.unitId,
               recallUnitId,
+              editing: screen.editing,
             })
           }
           onPinNote={(noteId) => {
@@ -1680,7 +2111,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
               noteUnitId(noteId),
               recallQuality("again"),
               new Date(),
-              content.topic.domainId,
+              shown.topic.domainId,
             );
           }}
           isNotePinned={(noteId) =>
@@ -1689,29 +2120,26 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
               .then((state) => state !== null)
           }
           onEdit={
-            isAuthor || isPrivateBook(screen.bookId)
-              ? (target) =>
-                  setScreen({
-                    screen: "edit",
-                    docId: documentId("topic", screen.bookId),
-                    target: {
-                      lessonId: screen.lessonId,
-                      unitId: screen.unitId,
-                      ...target,
-                    },
-                    mode: isPrivateBook(screen.bookId) ? "private" : undefined,
-                    back: screen,
-                  })
+            canEdit(screen.bookId)
+              ? () => setScreen({ ...screen, editing: true })
               : undefined
           }
           onBack={onBack}
           startAtEnd={screen.atEnd}
-        />
+          startAtPage={screen.atPage}
+        />,
+        {
+          screen: "unit",
+          bookId: screen.bookId,
+          lessonId: screen.lessonId,
+          unitId: screen.unitId,
+        },
+        routeSession !== null && unitScopeChanged(routeSession, screen.unitId),
       );
     }
 
     if (screen.screen === "unit-session") {
-      const unit = content.units.find((u) => u.id === screen.unitId);
+      const unit = shown.units.find((u) => u.id === screen.unitId);
       if (unit === undefined) {
         return (
           <main>
@@ -1741,7 +2169,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           atEnd: true,
         });
       };
-      const lesson = content.lessons.find((l) => l.id === screen.lessonId);
+      const lesson = shown.lessons.find((l) => l.id === screen.lessonId);
       // Plan 0020 §4: does finishing THIS unit finish the lesson? Every
       // OTHER unit's completion is already accurate in `attemptedTaskIds`
       // (state) — this session only ever marks this unit's own tasks — so
@@ -1758,7 +2186,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
         lesson !== undefined &&
         isLessonComplete(
           lesson,
-          content.units,
+          shown.units,
           new Set([...attemptedTaskIds, ...unit.taskIds]),
         );
       // Plan 0020 §4: resolve the next step from the POST-session attempted
@@ -1770,7 +2198,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
         setAttemptedTaskIds(ids);
         if (
           lesson !== undefined &&
-          isLessonComplete(lesson, content.units, ids)
+          isLessonComplete(lesson, shown.units, ids)
         ) {
           setScreen({
             screen: "lesson-summary",
@@ -1782,7 +2210,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
         // Two branches, and they're total (plan 0020 §4): an incomplete
         // lesson always contains an incomplete unit, so `next` is null here
         // only defensively.
-        const next = nextUnit(content, ids);
+        const next = nextUnit(shown, ids);
         // Never send the learner back into the unit they just finished. That
         // happens when `finishesLesson` (optimistic, computed from
         // attemptedTaskIds ∪ unit.taskIds) and this fresh read disagree —
@@ -1808,15 +2236,16 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
       };
       return withSessionEdit(
         <UnitSession
-          content={content}
+          store={shownStore}
+          content={shown}
           unit={unit}
           lookup={lookup}
           pinnedUnitIds={pinnedUnitIds}
           onTogglePin={(unitIds) => {
-            togglePinnedUnits(content.topic.domainId, unitIds);
+            togglePinnedUnits(shown.topic.domainId, unitIds);
             setPinEpoch((epoch) => epoch + 1);
           }}
-          canEdit={isAuthor || isPrivateBook(screen.bookId)}
+          canEdit={canEdit(screen.bookId)}
           onOpenEdit={openSessionEdit}
           onDone={onDone}
           onSwipeBack={onSwipeBack}
@@ -1833,7 +2262,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
       backActionRef.current = onBack;
       return (
         <LessonSummaryScreen
-          content={content}
+          content={shown}
           lessonId={screen.lessonId}
           attemptedTaskIds={attemptedTaskIds}
           store={progressStore}
@@ -1851,9 +2280,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     }
 
     if (screen.screen === "recall-session") {
-      const linkedUnit = content.units.find(
-        (u) => u.id === screen.recallUnitId,
-      );
+      const linkedUnit = shown.units.find((u) => u.id === screen.recallUnitId);
       if (linkedUnit === undefined) {
         return (
           <main>
@@ -1871,7 +2298,8 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
       backActionRef.current = onDone;
       return (
         <RecallSession
-          content={content}
+          store={shownStore}
+          content={shown}
           linkedUnit={linkedUnit}
           lookup={lookup}
           onDone={onDone}
@@ -1880,7 +2308,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     }
 
     // screen.screen === "task"
-    const task = content.tasks.find((t) => t.id === screen.taskId);
+    const task = shown.tasks.find((t) => t.id === screen.taskId);
     if (task === undefined) {
       return (
         <main>
@@ -1900,10 +2328,11 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     backActionRef.current = onTaskDone;
     return withSessionEdit(
       <TaskSession
-        content={content}
+        store={shownStore}
+        content={shown}
         lookup={lookup}
         task={task}
-        canEdit={isAuthor || isPrivateBook(screen.bookId)}
+        canEdit={canEdit(screen.bookId)}
         onOpenEdit={openSessionEdit}
         onDone={onTaskDone}
       />,

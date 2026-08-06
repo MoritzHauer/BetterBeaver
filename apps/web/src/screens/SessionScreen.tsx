@@ -258,6 +258,7 @@ function NoteReview({
   markdown,
   fallbackStem,
   lookup,
+  bookId,
   unitId,
   applySelf,
   advance,
@@ -265,6 +266,10 @@ function NoteReview({
   markdown: string | undefined;
   fallbackStem: string;
   lookup: TapLookup;
+  /** The bare Book id (spec 0021-2 §2c), for a figure's `getAssetUrl` call —
+   * not to be confused with `AudioPlayer`/`ImageDisplay`'s own `bookId` prop
+   * above, a different component's copy of the same value. */
+  bookId: string;
   unitId: string;
   applySelf: (unitId: string, grade: SelfGrade) => Promise<void>;
   advance: () => void;
@@ -283,7 +288,7 @@ function NoteReview({
   return (
     <div>
       {markdown !== undefined ? (
-        <NoteView markdown={markdown} lookup={lookup} />
+        <NoteView markdown={markdown} lookup={lookup} bookId={bookId} />
       ) : (
         <p className="prompt">{fallbackStem}</p>
       )}
@@ -827,6 +832,7 @@ function renderInteraction(
           markdown={getNoteMarkdown(bookId, question.stem)}
           fallbackStem={question.stem}
           lookup={lookup}
+          bookId={bookId}
           unitId={question.unitId}
           applySelf={applySelf}
           advance={advance}
@@ -997,8 +1003,8 @@ export function SessionScreen({
   pinnedUnitIds?: ReadonlySet<string>;
   onTogglePin?: (unitIds: string[]) => void;
   /** Edit affordance for whoever may edit this content (a maintainer, a
-   * proposer, or a private Book's owner): opens `EditScreen` at the current
-   * question's item/entry/task, layered over this session rather than
+   * proposer, or a private Book's owner): opens the scoped sheet on the
+   * current question's item/entry/task, over this session rather than
    * navigating away, so closing it resumes right here. Hidden on
    * `NoteQuestion` (no resolvable target) but otherwise independent of
    * `taskIds` — unlike Pin, it renders in `TaskSession`/`ReviewSession` too,
@@ -1047,7 +1053,13 @@ export function SessionScreen({
   }, [taskIds]);
   const taskAnsweredCount = useRef(new Map<string, number>());
 
-  const question = questions[index];
+  // Clamped, not a bare `questions[index]`: the questions now re-derive from
+  // the draft while the scoped `✎` sheet is open, and the sheet's exercise
+  // card can drop an item — shrinking the list under a session already past
+  // that point. `index` would then read past the end and the body rendered
+  // blank with no way forward. Empty list still lands on `undefined`, which
+  // the render below already handles.
+  const question = questions[Math.min(index, questions.length - 1)];
 
   function advance() {
     if (index + 1 >= questions.length) {

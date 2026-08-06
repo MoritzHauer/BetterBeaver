@@ -7,13 +7,17 @@ import { initContentSource } from "./content/source";
 /**
  * Settings → "Import book…" used to pin `mode: "maintain"` for everyone and
  * write `bb.author.draft.*`. For an account that does not maintain the
- * imported document that opened `MaintainEditScreen`, whose `loadDocument`
- * is a `.single()` over rows RLS hides — the learner saw a bare "Cannot
- * coerce the result to a single JSON object" and the file was unusable.
+ * imported document that opened the maintainer's form editor, whose
+ * `loadDocument` is a `.single()` over rows RLS hides — the learner saw a
+ * bare "Cannot coerce the result to a single JSON object" and the file was
+ * unusable.
  *
  * Importing to propose is the whole point of the file being importable at
  * all when you are not a maintainer, so this asserts the storage key and
- * the editor the import lands in.
+ * where the import lands. Since spec 0021-11 §3 that is the Book's own
+ * screen in edit mode — the storage half is unchanged, only the
+ * destination — and a document with no Book on this device is reported
+ * rather than dropping the author somewhere unrelated.
  */
 vi.mock("./backend/supabase", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./backend/supabase")>();
@@ -25,7 +29,7 @@ vi.mock("./backend/supabase", async (importOriginal) => {
     // Maintains nothing — the case the old route got wrong.
     listMyDocuments: async () => [],
     loadCatalogEntry: async (id: string) =>
-      id === "topic:demo"
+      id === "topic:demo" || id === "topic:elsewhere"
         ? {
             id,
             kind: "topic" as const,
@@ -78,10 +82,30 @@ describe("Settings book import", () => {
     expect(stored.baseVersion).toBe(7);
     expect(localStorage.getItem("bb.author.draft.topic:demo")).toBeNull();
 
-    // `ProposeEditScreen`'s resume prompt — reached only in propose mode.
+    // The session's resume prompt — reached only in propose mode, and only
+    // on the Book's own screen, which is where the import now lands.
     expect(
       await screen.findByRole("button", { name: "Resume your suggestion" }),
     ).toBeTruthy();
+  });
+
+  it("reports an imported Book that is not on this device", async () => {
+    await openSettings();
+    const input = (await screen.findByText("Import book…"))
+      .closest("div")
+      ?.querySelector('input[type="file"]');
+
+    fireEvent.change(input!, {
+      target: { files: [exportFile("topic:elsewhere")] },
+    });
+
+    // Editing happens on the Book, and this one has no screen here — so say
+    // so (spec 0021-11 §3). The proposal is still written, so adding the
+    // Book afterwards picks the import straight up.
+    expect(
+      await screen.findByText(/add this Book to your books first/),
+    ).toBeTruthy();
+    expect(localStorage.getItem("bb.proposal.topic:elsewhere")).not.toBeNull();
   });
 
   it("reports a document that has nothing published to propose against", async () => {

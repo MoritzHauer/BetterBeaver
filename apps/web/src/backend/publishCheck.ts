@@ -20,11 +20,24 @@ import { getSupabase } from "./supabase";
  * a domain draft against every published book of that domain — because the
  * whole listed set is always assembled. Returns human-readable errors;
  * empty means publishable.
+ *
+ * `also` overlays further documents on that set, and covers the two ways
+ * the catalog alone is not enough. The catalog is `where listed` — a Book
+ * an admin has not listed yet is not in it, so a lexicon publish would be
+ * checked against a set containing nothing that references it. And a Book
+ * whose own draft is not part of this publish still has to be *present*,
+ * at whatever version this publish would leave it at, or a deleted word
+ * cannot be seen to break the task that points at it.
  */
 export async function validateForPublish(
   docId: string,
   kind: "topic" | "domain",
   draft: BookDocument | DomainDocument,
+  also: {
+    docId: string;
+    kind: "topic" | "domain";
+    doc: BookDocument | DomainDocument;
+  }[] = [],
 ): Promise<string[]> {
   const supabase = getSupabase();
   if (supabase === null) {
@@ -56,10 +69,12 @@ export async function validateForPublish(
       domains.set(contentIdOf(row.id), row.published as DomainDocument);
     }
   }
-  if (kind === "topic") {
-    books.set(contentIdOf(docId), draft as BookDocument);
-  } else {
-    domains.set(contentIdOf(docId), draft as DomainDocument);
+  for (const entry of [{ docId, kind, doc: draft }, ...also]) {
+    if (entry.kind === "topic") {
+      books.set(contentIdOf(entry.docId), entry.doc as BookDocument);
+    } else {
+      domains.set(contentIdOf(entry.docId), entry.doc as DomainDocument);
+    }
   }
 
   // Storage listing for every document in the assembled set (spec 0012-B
@@ -70,6 +85,9 @@ export async function validateForPublish(
     (data as { id: string }[]).map((row) => row.id),
   );
   assembledDocIds.add(docId);
+  for (const entry of also) {
+    assembledDocIds.add(entry.docId);
+  }
   let listingEntries: { documentId: string; assets: RemoteAsset[] }[];
   try {
     listingEntries = await Promise.all(
@@ -94,7 +112,18 @@ export async function validateForPublish(
   // itself or, on a cross-Book collision, an existing published Book —
   // fails the publish.
   const built = createDocumentContentSource(books, domains, assetStems);
+  // The Book being published is the subject of the whole panel, so naming it
+  // adds nothing — and it actively breaks spec 0021-10 §3: the deep-link
+  // resolver takes the first id in the message it can own, and a leading
+  // Book id shadows the entity id after it, sending every error to the Book
+  // screen. It also puts a bare UUID in front of every line. Other Books —
+  // a cross-Book collision — still need naming.
+  const publishing = new Set(
+    [{ docId }, ...also].map((entry) => contentIdOf(entry.docId)),
+  );
   return built.broken.flatMap((b) =>
-    b.errors.map((error) => `${b.bookId}: ${error}`),
+    b.errors.map((error) =>
+      publishing.has(b.bookId) ? error : `${b.bookId}: ${error}`,
+    ),
   );
 }

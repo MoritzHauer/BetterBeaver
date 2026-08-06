@@ -14,6 +14,19 @@
     <link rel="icon" type="image/png" href="/favicon.png?v=4" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=2" />
     <title>BetterBeaver</title>
+    <!-- GitHub Pages serves this same build at moritzhauer.github.io/BetterBeaver
+         too (custom domains don't disable the default URL); bounce it to the
+         real site before anything else runs. -->
+    <script>
+      if (location.hostname === "moritzhauer.github.io") {
+        location.replace(
+          "https://betterbeaver.de" +
+            location.pathname.replace(/^\/BetterBeaver/, "") +
+            location.search +
+            location.hash,
+        );
+      }
+    </script>
     <!-- Apply the saved theme before first paint (no flash of the OS theme).
          Mirrors apps/web/src/theme.ts: "light"/"dark" stored raw under
          bb.theme; absent = follow the OS. -->

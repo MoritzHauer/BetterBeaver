@@ -1,5 +1,6 @@
 import type { DomainDocument, BookDocument } from "@betterbeaver/schema";
 import type { AssetStems } from "@betterbeaver/engine";
+import seedVersions from "../../../../content/seed-versions.json";
 import { getPrivateAssetUrl, privateAssetStems } from "./private-assets";
 import {
   getRemoteAssetUrl,
@@ -213,6 +214,24 @@ export function bundledBookDocuments(): Map<string, BookDocument> {
         ),
       },
     ]),
+  );
+}
+
+/**
+ * The `published_version` each seeded document was exported at, written
+ * beside the tree by `scripts/export-content.ts`. Load-bearing: without it
+ * `seedCatalogRows` reported version 0, so `planUpdate` compared 0 against
+ * whatever the catalog said and offered a content update on the very first
+ * boot of every fresh install, forever. `{}` for a document not in the file
+ * still means 0, which is the old, always-stale behaviour — so a seed
+ * refreshed without re-running the export script degrades to the bug rather
+ * than to a *missed* update.
+ */
+export function seedDocumentVersions(): Map<string, number> {
+  return new Map(
+    Object.entries(seedVersions).filter(
+      (entry): entry is [string, number] => typeof entry[1] === "number",
+    ),
   );
 }
 
