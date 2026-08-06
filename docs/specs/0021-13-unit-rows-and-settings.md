@@ -51,6 +51,8 @@ The Exercises page's cards get the same treatment: the type dropdown and the ins
 
 Every `−` on these pages routes through slice 12's undo toast, and the label says which of the two things happened — `"Word unlinked · Undo"` for a lexicon entry, `"Concept deleted · Undo"` for a book item.
 
+**Exercises are excepted — amended 2026-08-06, owner decision.** Deleting an exercise keeps its existing `ConfirmSheet` ("Delete this exercise?" / "Keep it" / "Delete") and does **not** get a toast. This section as first written contradicted §6: `UnitScreen.exercises.test.tsx:514` asserts the confirm-then-delete flow as a behavioural contract predating this slice, and §6 says stop rather than edit such an assertion. A confirm is also the stronger of the two protections, on the one delete that strips `taskIds`. The cost is two delete models on one screen, accepted knowingly. Note for anyone revisiting: `removeWithUndo` is the wrong shape for a task anyway — `isBookItem(taskId)` is always false (it indexes `book.items`, never `book.tasks`), so reusing it would mislabel the toast and call `removeRow`, which cannot delete a task.
+
 That distinction is the one slice 6 §2d exists to protect: a lexicon row **unlinks** (the entry survives), a book-owned row **deletes**. Making both a bare `−` is precisely why the toast has to name the action. Do not merge the two.
 
 ## 5. The propose-mode gap, stated

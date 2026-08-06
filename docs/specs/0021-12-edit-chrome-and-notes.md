@@ -73,7 +73,7 @@ Style the ten class names. The reference is the learner's Theory page — same f
 - **`.note-editor-list-block`** keeps one input per item with `↑ ↓ −` per item and a `+` below.
 - **`.note-editor-callout-block`** renders in its variant's real tint (`.note-callout.note|tip|warning|example`), with the glyph. The variant dropdown and the optional title move behind the block's `⚙`; the body is a prose block per §2.
 - **`.note-editor-figure-block`** shows the image at `.note-figure` size with the caption input beneath it.
-- **`.note-editor-toolbar`** is `B`, the lexicon link and the icon inserter as icons, in the page header rather than floating above the first block.
+- **`.note-editor-toolbar`** is `B`, the lexicon link and the icon inserter, in the note's own header rather than floating above the first block. ~~in the page header~~ — **amended 2026-08-06, owner decision**: each note is its own page. A Theory page can hold several notes and `focusRef` / `hasFocused` are per-`NoteEditor` state, so a single page-level toolbar would have to lift that state across instances — an architecture change this section never described, for a toolbar that would then act on whichever note happened to hold focus. It stays inside `.note-editor`, one per note, next to the focus it acts on. The three stay **text, not icons**: §1's table defines `+ − ↑ ↓ ⚙ ⋮` and no mark for bold, lexicon-link or insert-icon, and inventing three is a worse trade than keeping `B` — already the universal mark for itself — beside two short words.
 - The block-add bar keeps words next to its `+` marks — `+ Text`, `+ Heading`, `+ List`, `+ Table`, `+ Box`, `+ Image`. Six unlabelled icons in a row is a puzzle; these are the one place a label earns its width.
 
 ## 4. The settings sheet

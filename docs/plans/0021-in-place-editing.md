@@ -352,8 +352,17 @@ Added with §14:
 - Edit mode is recognisably the same page as learner mode on Book, Lesson and Unit — same layout, same typography, same tables.
 - A note table edits as a table, its authored header row included; a Concepts heading stays fixed.
 - Prose renders as prose until tapped; markers show only in the block being edited.
-- No editing affordance is a red word; `+ − ↑ ↓ ⚙` do that work, and every deletion is undoable once.
+- No editing affordance is a red word; `+ − ↑ ↓ ⚙` do that work, and every deletion is undoable once — **except deleting an exercise**, which keeps the confirm sheet it already had (amended 2026-08-06; see [slice 13 §4](../specs/0021-13-unit-rows-and-settings.md)).
 - Configuration lives behind `⚙` in a sheet, and opening one never moves the page underneath.
+
+**Two of these are not met after slices 12–14, and no slice was written to cover them** (recorded 2026-08-06, on landing 14):
+
+- _"no labelled grey form stack remains anywhere in plan 0021's surfaces"_ — the **Book screen's Words section** still is one: read-aloud language, and every word family's name plus its `EntityPicker`, in a `<label className="field">` stack below `+ lesson`. Slice 14 §3 lists its settings sheet's contents exhaustively (icon, cover art, Sources) and never mentions Words, so moving it was not authorised there. Slice 11's own entry already gives the reason it would move: Words sits beside Sources "for the same reason Sources is there — they belong to the whole Book."
+- _"Edit mode is recognisably the same page as learner mode on Book, Lesson and Unit"_ — Book and Lesson comply; the **Unit screen's own overview title and goal** are still `<label className="field">Title<input></label>` / `Goal<textarea>`. The Unit trail's *rows* were slice 13's job; the Unit screen's *identity fields* were nobody's.
+
+Both need an owner call: a slice 15 that finishes them, or an amendment narrowing these two criteria to what shipped. Neither is a defect in slices 12–14 — it is surface §14 promised that no spec claimed.
+
+Also caused by slice 14 and outstanding: moving Sources into the Book settings sheet left `WhatChanged.entityTarget` returning `{}` for a resource, so a publish-error deep-link to a source now opens a Book screen with Sources closed inside the sheet. The link still reaches the right screen; what it names is no longer in view. See §11, whose whole premise is that every error line is a working link.
 
 ## Verification
 
