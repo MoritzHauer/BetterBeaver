@@ -1,6 +1,12 @@
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import type { Content } from "@betterbeaver/schema";
-import { isUnitComplete, isUnitUnlocked } from "@betterbeaver/engine";
+import type { ProgressStore } from "@betterbeaver/engine";
+import {
+  dueCountsByUnit,
+  dueUnits,
+  isUnitComplete,
+  isUnitUnlocked,
+} from "@betterbeaver/engine";
 import { ConfirmSheet } from "../components/Sheet";
 import { SettingsSheet } from "../components/SettingsSheet";
 import { UndoToast, useUndoSnapshot } from "../components/UndoToast";
@@ -27,6 +33,7 @@ export function LessonScreen({
   content,
   lessonId,
   attemptedTaskIds,
+  store,
   onSelectUnit,
   onPracticeTask,
   onEdit,
@@ -35,6 +42,10 @@ export function LessonScreen({
   content: Content;
   lessonId: string;
   attemptedTaskIds: ReadonlySet<string>;
+  /** Progress store, for the per-unit due badges (plan 0022 §7) — the same
+   * `dueUnits` sweep BookScreen runs for its Daily Review badge, one level
+   * down. Nothing else on this screen reads progress from storage. */
+  store: ProgressStore;
   onSelectUnit: (unitId: string) => void;
   onPracticeTask: (target: PracticeTarget) => void;
   /** Authors only (plan 0012): opens this lesson in the editor. */
@@ -44,6 +55,9 @@ export function LessonScreen({
   // Ahead of the unknown-lesson early return below: hooks cannot be
   // conditional.
   const [pendingUnitId, setPendingUnitId] = useState<string | null>(null);
+  const [dueByUnit, setDueByUnit] = useState<ReadonlyMap<string, number>>(
+    new Map(),
+  );
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   // Which unit's "Unlocks after" sheet is open, across every card — same
   // one-id-serves-every-row shape as `BookScreen`'s `openLessonSettingsId`
@@ -60,6 +74,20 @@ export function LessonScreen({
   // existing confirm's `onConfirm`, not instead of it, same as BookScreen's
   // lesson delete.
   const { message: undoMessage, capture, undo } = useUndoSnapshot();
+
+  useEffect(() => {
+    let cancelled = false;
+    // Cannot reject: `dueUnits` only ever awaits `readJson`-backed reads,
+    // which degrade to absent rather than throwing (spec 0019 §1).
+    void dueUnits(content, store, new Date()).then((due) => {
+      if (!cancelled) {
+        setDueByUnit(dueCountsByUnit(due, content.units));
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [content, store]);
 
   const lesson = content.lessons.find((l) => l.id === lessonId);
   if (lesson === undefined) {
@@ -328,6 +356,7 @@ export function LessonScreen({
                   unlocked={unlocked}
                   value={attemptedCount}
                   max={unit.taskIds.length}
+                  due={dueByUnit.get(unit.id)}
                 />
               </button>
             </li>

@@ -2,6 +2,7 @@ import type { Content, Lesson, Unit } from "@betterbeaver/schema";
 import type { Quality, SchedulingConfig, SrsState } from "@betterbeaver/srs";
 import { isDue, schedule } from "@betterbeaver/srs";
 import type { SchedulingUnit } from "./units.js";
+import { itemIdFromUnitId } from "./units.js";
 
 /** True when every task id of `unit` has been attempted at least once. */
 export function isUnitComplete(
@@ -133,6 +134,68 @@ export function reviewQueue(
       return pinned !== 0 ? pinned : a.dueMs - b.dueMs;
     })
     .map((entry) => entry.unit);
+}
+
+/**
+ * Buckets a due list by the content unit each due card belongs to (plan
+ * 0022 §7's `· 8 due` badges) — a grouping over the sweep the caller already
+ * ran, not a second query. Units with nothing due are absent from the map.
+ *
+ * A due scheduling unit resolves to a content unit through `itemIdFromUnitId`
+ * (so every blank of a cloze counts individually, which is what the review
+ * queue serves) or through `unit.noteIds` for a note card. An item or note
+ * referenced by several units counts once per unit — it really is due on each
+ * of them.
+ */
+export function dueCountsByUnit(
+  due: SchedulingUnit[],
+  units: Unit[],
+): Map<string, number> {
+  const dueItemIds = new Map<string, number>();
+  const dueNoteIds = new Set<string>();
+  for (const unit of due) {
+    if (unit.note !== undefined) {
+      dueNoteIds.add(unit.note.id);
+      continue;
+    }
+    const itemId = itemIdFromUnitId(unit.id);
+    dueItemIds.set(itemId, (dueItemIds.get(itemId) ?? 0) + 1);
+  }
+
+  const counts = new Map<string, number>();
+  for (const unit of units) {
+    const items = unit.itemIds.reduce(
+      (sum, itemId) => sum + (dueItemIds.get(itemId) ?? 0),
+      0,
+    );
+    const notes = unit.noteIds.filter((noteId) =>
+      dueNoteIds.has(noteId),
+    ).length;
+    if (items + notes > 0) {
+      counts.set(unit.id, items + notes);
+    }
+  }
+  return counts;
+}
+
+/** The same counts rolled up to lessons, over `lesson.unitIds` (plan 0022
+ * §7): the Book screen shows lesson cards, the Lesson screen unit cards, and
+ * both read one sweep. */
+export function dueCountsByLesson(
+  unitCounts: ReadonlyMap<string, number>,
+  lessons: Lesson[],
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const lesson of lessons) {
+    const total = lesson.unitIds.reduce(
+      (sum, unitId) => sum + (unitCounts.get(unitId) ?? 0),
+      0,
+    );
+    if (total > 0) {
+      counts.set(lesson.id, total);
+    }
+  }
+  return counts;
 }
 
 /**

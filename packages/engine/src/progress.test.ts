@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import type { Content, Item, Lesson, Unit } from "@betterbeaver/schema";
 import type { SchedulingConfig, SrsState } from "@betterbeaver/srs";
 import {
+  dueCountsByLesson,
+  dueCountsByUnit,
   isUnitComplete,
   isUnitUnlocked,
   isLessonComplete,
@@ -573,5 +575,66 @@ describe("applyGrade under the default (ladder) scheduler", () => {
     const day0 = new Date("2026-08-05T00:00:00Z");
     const state = applyGrade(null, 4, day0)!;
     expect(applyGrade(state, 4, new Date("2026-08-06T00:00:00Z"))).toBeNull();
+  });
+});
+
+describe("due counts per unit and lesson (plan 0022 §7)", () => {
+  const sentence: Item = {
+    id: "t-item-s",
+    kind: "sentence",
+    payload: { text: "{{c1::a}} {{c2::b}}", translation: "t" },
+    sourceRef: "t-resource-1",
+  };
+  const lexeme: Item = {
+    id: "t-item-l",
+    kind: "lexeme",
+    payload: { script: "суу", transliteration: "suu", gloss: "water" },
+    sourceRef: "t-resource-1",
+  };
+  const unitA = makeUnit({
+    id: "t-unit-a",
+    itemIds: [sentence.id, lexeme.id],
+    noteIds: ["t-note-1"],
+  });
+  const unitB = makeUnit({ id: "t-unit-b", itemIds: [lexeme.id] });
+  const lessonA = makeLesson({
+    id: "t-lesson-a",
+    unitIds: [unitA.id, unitB.id],
+  });
+  const lessonB = makeLesson({ id: "t-lesson-b", unitIds: [] });
+
+  const due: SchedulingUnit[] = [
+    { id: `${sentence.id}::c1`, item: sentence, blankNumber: 1 },
+    { id: `${sentence.id}::c2`, item: sentence, blankNumber: 2 },
+    { id: lexeme.id, item: lexeme },
+    { id: "note:t-note-1", note: { id: "t-note-1", stem: "n1" } },
+  ];
+
+  it("counts each cloze blank, each item and each note, per unit", () => {
+    const counts = dueCountsByUnit(due, [unitA, unitB]);
+    // Unit A: two blanks + the lexeme + the note. Unit B: the same lexeme,
+    // which is genuinely due on both cards it appears on.
+    expect(counts.get(unitA.id)).toBe(4);
+    expect(counts.get(unitB.id)).toBe(1);
+  });
+
+  it("omits units with nothing due, rather than storing zeros", () => {
+    const counts = dueCountsByUnit([], [unitA, unitB]);
+    expect(counts.size).toBe(0);
+    expect(counts.get(unitA.id)).toBeUndefined();
+  });
+
+  it("rolls up to lessons over unitIds, omitting empty ones", () => {
+    const byUnit = dueCountsByUnit(due, [unitA, unitB]);
+    const byLesson = dueCountsByLesson(byUnit, [lessonA, lessonB]);
+    expect(byLesson.get(lessonA.id)).toBe(5);
+    expect(byLesson.has(lessonB.id)).toBe(false);
+  });
+
+  it("ignores a due card that belongs to no unit of this Book", () => {
+    const stranger: SchedulingUnit[] = [
+      { id: "t-item-elsewhere", item: { ...lexeme, id: "t-item-elsewhere" } },
+    ];
+    expect(dueCountsByUnit(stranger, [unitA, unitB]).size).toBe(0);
   });
 });

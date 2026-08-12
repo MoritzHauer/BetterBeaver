@@ -2093,6 +2093,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           content={shown}
           lessonId={screen.lessonId}
           attemptedTaskIds={shownAttempted}
+          store={shownStore}
           onSelectUnit={(unitId) =>
             setScreen({
               screen: "unit",

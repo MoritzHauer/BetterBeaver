@@ -2,6 +2,8 @@ import { Fragment, useEffect, useState } from "react";
 import type { Content, Lesson } from "@betterbeaver/schema";
 import type { ProgressStore, Streak } from "@betterbeaver/engine";
 import {
+  dueCountsByLesson,
+  dueCountsByUnit,
   dueUnits,
   isLessonComplete,
   isLessonUnlocked,
@@ -105,6 +107,12 @@ export function BookScreen({
     content.lessons.map((lesson) => [lesson.id, lesson]),
   );
   const [dueCount, setDueCount] = useState<number | null>(null);
+  // Per-lesson due counts (plan 0022 §7), bucketed from the same sweep the
+  // Daily Review badge above already runs — no second query, no new state to
+  // keep in step.
+  const [dueByLesson, setDueByLesson] = useState<ReadonlyMap<string, number>>(
+    new Map(),
+  );
   const [streak, setStreak] = useState<Streak | null>(null);
   const [pendingLessonId, setPendingLessonId] = useState<string | null>(null);
   // Edit mode (plan 0021 §1), same shape as the Unit screen: `null` in
@@ -153,6 +161,9 @@ export function BookScreen({
         return;
       }
       setDueCount(due.length);
+      setDueByLesson(
+        dueCountsByLesson(dueCountsByUnit(due, content.units), content.lessons),
+      );
     });
     void store.getStreak(content.topic.domainId).then((current) => {
       if (!cancelled) {
@@ -532,6 +543,7 @@ export function BookScreen({
                   unlocked={unlocked}
                   value={completeCount}
                   max={lesson.unitIds.length}
+                  due={dueByLesson.get(lesson.id)}
                 />
               </button>
             </li>
