@@ -30,6 +30,7 @@ import {
   nextUnit,
   noteUnitId,
   recordGrade,
+  skipItem,
   symmetricLinks,
 } from "@betterbeaver/engine";
 import type { Question } from "@betterbeaver/engine";
@@ -626,6 +627,16 @@ function ReviewSession({
     ).then(() => undefined);
   }
 
+  /** Skip (plan 0022 §5): push each of the question's scheduling units out by
+   * `days`. Plural because a matching board covers several — review never
+   * builds one today, but the prop contract is the same as Pin's. */
+  async function handleSkip(unitIds: string[], days: number) {
+    const now = new Date();
+    for (const unitId of unitIds) {
+      await skipItem(store, unitId, days, now);
+    }
+  }
+
   if (questions === null) {
     return <p>Loading&hellip;</p>;
   }
@@ -688,6 +699,7 @@ function ReviewSession({
       lookup={lookup}
       onEdit={onEdit}
       onGrade={handleGrade}
+      onSkip={handleSkip}
       onFinished={onDone}
       onExit={onDone}
       // Daily Review is the one session that re-shows a failed card (plan

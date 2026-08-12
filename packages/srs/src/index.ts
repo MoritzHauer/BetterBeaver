@@ -11,6 +11,7 @@ export {
   recallQuality,
   schedule,
   isDue,
+  dueAfter,
   REVIEW_PACES,
   DEFAULT_SCHEDULING,
 } from "./sm2.js";

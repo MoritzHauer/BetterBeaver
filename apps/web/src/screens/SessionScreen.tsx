@@ -29,6 +29,8 @@ import { playCorrect, playFanfare, playWrong } from "../sounds";
 import { noteStorageUnwritable } from "../storage-health";
 import { FeedbackWidget } from "../components/FeedbackWidget";
 import { BookWatermark } from "../components/BookWatermark";
+import { Sheet } from "../components/Sheet";
+import { SKIP_DAYS, getLearning, type SkipLength } from "../learning";
 import { SWIPE_THRESHOLD } from "./UnitScreen";
 
 /** Tally of results across a session; only the fields for the task type(s)
@@ -673,6 +675,46 @@ function questionUnitIds(q: Question): string[] {
     : [q.unitId];
 }
 
+/** The three skip lengths (plan 0022 §5), opened by long-press/right-click on
+ * Skip. Every one of them expires by itself, which is why there is no
+ * indefinite option here and no un-skip screen anywhere: a card the learner
+ * genuinely never wants is an authoring problem (delete the item), not a
+ * scheduling one. */
+function SkipSheet({
+  onCancel,
+  onSkip,
+}: {
+  onCancel: () => void;
+  onSkip: (skip: SkipLength) => void;
+}) {
+  return (
+    <Sheet label="Skip this card" onDismiss={onCancel}>
+      <div className="sheet-prompt">
+        <img
+          className="summary-icon"
+          src={`${import.meta.env.BASE_URL}art/icons/pause.png`}
+          alt=""
+        />
+        <h2>Skip this card</h2>
+        <p>It comes back on its own — pick how long to rest it.</p>
+        <div className="sheet-actions">
+          {SKIP_SHEET_OPTIONS.map(({ skip, label }) => (
+            <button key={skip} onClick={() => onSkip(skip)}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+    </Sheet>
+  );
+}
+
+const SKIP_SHEET_OPTIONS: { skip: SkipLength; label: string }[] = [
+  { skip: "week", label: "1 week" },
+  { skip: "month", label: "1 month" },
+  { skip: "year", label: "1 year" },
+];
+
 /** Renders the interaction for one question, per the plan's per-kind table.
  * Views only render and forward answers; all checking/normalization is
  * engine code (`checkTypedAnswer`, `checkScrambleAnswer`,
@@ -982,6 +1024,7 @@ export function SessionScreen({
   taskIds,
   pinnedUnitIds,
   onTogglePin,
+  onSkip,
   onEdit,
   onGrade,
   onAllAnswered,
@@ -1010,6 +1053,12 @@ export function SessionScreen({
   taskIds?: (string | undefined)[];
   pinnedUnitIds?: ReadonlySet<string>;
   onTogglePin?: (unitIds: string[]) => void;
+  /** Push this card's next due date out (plan 0022 §5), the mirror of Pin:
+   * surface later rather than surface first. **Review sessions only** — only
+   * they are due-driven, so only there does a skip do anything visible, and
+   * a card with no SRS state is not in a queue to be annoyed by. Passing the
+   * prop is what renders the control. */
+  onSkip?: (unitIds: string[], days: number) => Promise<void>;
   /** Edit affordance for whoever may edit this content (a maintainer, a
    * proposer, or a private Book's owner): opens the scoped sheet on the
    * current question's item/entry/task, over this session rather than
@@ -1053,6 +1102,7 @@ export function SessionScreen({
   const [index, setIndex] = useState(0);
   const [summary, setSummary] = useState<SessionSummary>(emptySummary);
   const [done, setDone] = useState(false);
+  const [skipSheetOpen, setSkipSheetOpen] = useState(false);
   const answeredCount = useRef(0);
   const touchStartX = useRef<number | null>(null);
 
@@ -1271,13 +1321,28 @@ export function SessionScreen({
   }
 
   const currentTaskId = source === undefined ? undefined : taskIds?.[source];
+  // No longer gated on `currentTaskId`: Pin still is (it is a unit-practice
+  // control), but Skip lives in review sessions, which pass no `taskIds`.
   const currentUnitIds =
-    currentTaskId !== undefined && question !== undefined
-      ? questionUnitIds(question)
-      : [];
+    question === undefined ? [] : questionUnitIds(question);
   const isPinned =
     currentUnitIds.length > 0 &&
     currentUnitIds.every((id) => pinnedUnitIds?.has(id));
+
+  /** Pushes the current card out and moves on. Skipping is not an answer, so
+   * nothing is tallied and nothing is graded — `advance()` alone. */
+  async function skipCurrent(skip: SkipLength) {
+    setSkipSheetOpen(false);
+    if (onSkip === undefined || currentUnitIds.length === 0) {
+      return;
+    }
+    try {
+      await onSkip(currentUnitIds, SKIP_DAYS[skip]);
+    } catch {
+      noteStorageUnwritable();
+    }
+    advance();
+  }
 
   return (
     <main
@@ -1316,6 +1381,35 @@ export function SessionScreen({
             />{" "}
             {isPinned ? "Pinned" : "Pin"}
           </button>
+        ) : null}
+        {onSkip !== undefined && !done && currentUnitIds.length > 0 ? (
+          <button
+            className="plain skip"
+            onClick={() => void skipCurrent(getLearning().skip)}
+            // Long-press on Android Chrome and right-click on desktop are the
+            // same native event, so one handler covers both — and it cannot
+            // collide with the back-swipe detector bound to `main`, which
+            // listens for touchstart/touchend rather than this. The CSS
+            // `-webkit-touch-callout: none` on `.skip` stops iOS opening its
+            // own callout menu over the sheet.
+            onContextMenu={(event) => {
+              event.preventDefault();
+              setSkipSheetOpen(true);
+            }}
+          >
+            <img
+              className="icon-glyph"
+              src={`${import.meta.env.BASE_URL}art/icons/pause.png`}
+              alt=""
+            />{" "}
+            Skip
+          </button>
+        ) : null}
+        {skipSheetOpen ? (
+          <SkipSheet
+            onCancel={() => setSkipSheetOpen(false)}
+            onSkip={(skip) => void skipCurrent(skip)}
+          />
         ) : null}
         {onEdit !== undefined &&
         question !== undefined &&

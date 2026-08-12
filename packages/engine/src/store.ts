@@ -1,5 +1,6 @@
 import type { Content, Item } from "@betterbeaver/schema";
 import type { Quality, SchedulingConfig, SrsState } from "@betterbeaver/srs";
+import { dueAfter } from "@betterbeaver/srs";
 import type { ProgressStore } from "./interfaces.js";
 import { applyGrade, reviewQueue } from "./progress.js";
 import { advanceStreak } from "./streak.js";
@@ -108,5 +109,30 @@ export async function recordGrade(
   if (streak !== prevStreak) {
     await store.setStreak(domainId, streak);
   }
+  return next;
+}
+
+/**
+ * Pushes an item's `due` out by `days` (plan 0022 §5's Skip verb) and
+ * nothing else: rung, ease and interval are untouched, so the card resumes
+ * exactly where it was when it comes back. Skipping is not an answer — no
+ * rep, no streak, no grade.
+ *
+ * An item with no state is left alone and `null` returned. Nothing is
+ * skippable that isn't already scheduled: a card with no state is not in a
+ * queue to be annoyed by.
+ */
+export async function skipItem(
+  store: ProgressStore,
+  itemId: string,
+  days: number,
+  from: Date,
+): Promise<SrsState | null> {
+  const previous = await store.getItemState(itemId);
+  if (previous === null) {
+    return null;
+  }
+  const next = { ...previous, due: dueAfter(days, from) };
+  await store.setItemState(itemId, next);
   return next;
 }

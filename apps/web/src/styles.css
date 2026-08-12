@@ -681,6 +681,12 @@ main.session {
   line-height: 1;
 }
 
+/* Skip (plan 0022 §5) opens its length sheet on long-press, which iOS would
+   otherwise interrupt with its own text-selection callout. */
+.skip {
+  -webkit-touch-callout: none;
+}
+
 .progress-track {
   flex: 1;
   height: 0.6rem;

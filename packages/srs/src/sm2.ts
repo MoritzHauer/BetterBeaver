@@ -42,6 +42,18 @@ export function recallQuality(grade: SelfGrade): Quality {
 const MIN_EASE = 1.3;
 const DAY_MS = 86_400_000;
 
+/** A `due` timestamp `days` after `from`, day-granular: the start of `from`'s
+ * UTC day plus `days` days. The one place that arithmetic lives — both
+ * schedulers and the Skip verb (plan 0022 §5) go through it. */
+export function dueAfter(days: number, from: Date): string {
+  const dayStart = Date.UTC(
+    from.getUTCFullYear(),
+    from.getUTCMonth(),
+    from.getUTCDate(),
+  );
+  return new Date(dayStart + days * DAY_MS).toISOString();
+}
+
 /**
  * Interval ladders, one per review pace (plan 0022 §8). Presets, not typed
  * numbers: a named table is correct by construction, where a free-text list
@@ -157,15 +169,8 @@ export function schedule(
     nextEase = Math.max(MIN_EASE, ease + delta);
   }
 
-  const dayStart = Date.UTC(
-    gradedAt.getUTCFullYear(),
-    gradedAt.getUTCMonth(),
-    gradedAt.getUTCDate(),
-  );
-  const due = new Date(dayStart + nextIntervalDays * DAY_MS).toISOString();
-
   return {
-    due,
+    due: dueAfter(nextIntervalDays, gradedAt),
     intervalDays: nextIntervalDays,
     ease: nextEase,
     reps: nextReps,
