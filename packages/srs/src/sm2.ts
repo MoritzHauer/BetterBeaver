@@ -3,7 +3,7 @@
  *
  * Pure, deterministic, no I/O: callers pass in `gradedAt` explicitly.
  * The grade-mapping constants and scheduling semantics below are pinned by
- * docs/plans/0001-content-schema-and-kyrgyz-slice.md and must not be altered.
+ * docs/plans/archive/0001-content-schema-and-kyrgyz-slice.md and must not be altered.
  */
 
 /** Per-item SM-2 state. `due` is an ISO 8601 UTC datetime string. */

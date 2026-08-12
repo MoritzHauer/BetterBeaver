@@ -22,11 +22,11 @@ After this plan: the Vocabulary page renders all rows in one scrollable list, no
 
 ### 1. Vocabulary page: scrollable, not sub-paginated
 
-In [`apps/web/src/screens/UnitScreen.tsx`](../../apps/web/src/screens/UnitScreen.tsx), the `"vocabulary"` branch (lines 358–415): drop `vocabChunks`/`vocabPage` and the `SubPager` it renders — render the full `<table className="vocab-table">` over all of `lexemes` directly (`vocabRows` becomes just `lexemes`). Remove `VOCAB_CHUNK_SIZE`, `vocabPage` state, and the `vocabChunks` computation (lines 19, 188, 287–289); `chunk()` stays (still used by Concepts/Examples). No new CSS needed — the page's existing scroll container already handles overflow; the sticky Practice bar's `padding-bottom` already reserves clearance below the last row.
+In [`apps/web/src/screens/UnitScreen.tsx`](../../../apps/web/src/screens/UnitScreen.tsx), the `"vocabulary"` branch (lines 358–415): drop `vocabChunks`/`vocabPage` and the `SubPager` it renders — render the full `<table className="vocab-table">` over all of `lexemes` directly (`vocabRows` becomes just `lexemes`). Remove `VOCAB_CHUNK_SIZE`, `vocabPage` state, and the `vocabChunks` computation (lines 19, 188, 287–289); `chunk()` stays (still used by Concepts/Examples). No new CSS needed — the page's existing scroll container already handles overflow; the sticky Practice bar's `padding-bottom` already reserves clearance below the last row.
 
 ### 2. Practice bar: compact, real count, no caption
 
-- New CSS class (or modifier) on the existing `.unit-practice-bar`/`.action-bar-inner` in [`apps/web/src/styles.css`](../../apps/web/src/styles.css): shrink the bar's vertical padding/min-height (currently sized for a button + a caption line; drop to fit one row).
+- New CSS class (or modifier) on the existing `.unit-practice-bar`/`.action-bar-inner` in [`apps/web/src/styles.css`](../../../apps/web/src/styles.css): shrink the bar's vertical padding/min-height (currently sized for a button + a caption line; drop to fit one row).
 - In `UnitScreen.tsx` (lines 476–481): replace the two-element bar (button + `<p className="status">`) with a single button containing both the label and the count, e.g.:
   ```tsx
   <div className="action-bar unit-practice-bar">
@@ -43,7 +43,7 @@ In [`apps/web/src/screens/UnitScreen.tsx`](../../apps/web/src/screens/UnitScreen
 
 ### 3. Real question count (`countUnitQuestions`)
 
-- New pure function in [`packages/engine/src/session.ts`](../../packages/engine/src/session.ts), next to `buildTaskSession`/`buildUnitSession`:
+- New pure function in [`packages/engine/src/session.ts`](../../../packages/engine/src/session.ts), next to `buildTaskSession`/`buildUnitSession`:
   ```ts
   export function countUnitQuestions(unit: Unit, content: Content): number {
     const taskById = new Map(content.tasks.map((task) => [task.id, task]));

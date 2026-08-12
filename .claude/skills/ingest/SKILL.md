@@ -7,7 +7,7 @@ argument-hint: "The lesson/topic to ingest and its source line range, e.g. 'Fami
 
 Curate the named lesson into shipped content. This is hand curation guided by a checklist, not an extractor — never write code that parses the manual. Content decisions (translations, dedup, task shape) are made here, not delegated to `implementer`.
 
-The manual is `~/vault/sources/kyrgyz/Kyrgyz Language Manual/` (~12.5k lines of messy OCR: `ё`↔`е` confusions, garbled words, stray page numbers — trust the lesson body over its headers). Line ranges for the scoped backlog lessons (Transportation, Bazaar, Post Office, Appearance, Weather) are in `docs/plans/0007-ingest-kyrgyz-manual.md` Context; the 8 unscoped lessons each need their own line-range pass first (same plan, step 4). The backlog itself is tracked in `docs/STATUS.md`.
+The manual is `~/vault/sources/kyrgyz/Kyrgyz Language Manual/` (~12.5k lines of messy OCR: `ё`↔`е` confusions, garbled words, stray page numbers — trust the lesson body over its headers). Line ranges for the scoped backlog lessons (Transportation, Bazaar, Post Office, Appearance, Weather) are in `docs/plans/archive/0007-ingest-kyrgyz-manual.md` Context; the 8 unscoped lessons each need their own line-range pass first (same plan, step 4). The backlog itself is tracked in `docs/STATUS.md`.
 
 The contract is `packages/schema/src/entities.ts` (item kinds, task validator floors — `RECOGNIZE_DISTRACTOR_COUNT`, the matching 2–8/no-duplicate-prompt cap, `TASK_REQUIRED_ASSET`, cloze markup via `parseClozeMarkup`) enforced at startup by `validateContent`. Read it before authoring if unsure of a rule.
 
