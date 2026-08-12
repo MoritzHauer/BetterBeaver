@@ -233,14 +233,21 @@ function SelfGradeReveal({
           </button>
         ) : (
           <div className="grade-buttons">
+            {/* Sublabels, not next-interval previews (plan 0022 §9): Again
+                and Hard both re-ask tomorrow, so a "1d" on each would make
+                the two buttons look identical again — which is the confusion
+                the ladder exists to remove. */}
             <button disabled={graded} onClick={() => grade("again")}>
               Again
+              <small>start over</small>
             </button>
             <button disabled={graded} onClick={() => grade("hard")}>
               Hard
+              <small>keep my place</small>
             </button>
             <button disabled={graded} onClick={() => grade("good")}>
               Good
+              <small>advance</small>
             </button>
           </div>
         )}
@@ -983,6 +990,7 @@ export function SessionScreen({
   nextAction,
   onExit,
   onSwipeBack,
+  requeueOnAgain,
   loadStreak,
 }: {
   title: string;
@@ -1030,6 +1038,15 @@ export function SessionScreen({
    * there must go through Done/`nextAction`, which is what advances the
    * lesson. */
   onSwipeBack?: () => void;
+  /** Re-show a failed card later in this same session (plan 0022 §4).
+   * **Daily Review only.** Unit practice drives `onTaskAnswered` and plan
+   * 0020's lesson chaining off its answer counts, and its own completion is
+   * what unlocks the next unit — a queue that grows under it would be
+   * reasoning about a moving target. Pedagogically the restriction costs
+   * little: a unit session already drills each item across several task
+   * types, whereas Daily Review shows each scheduling unit exactly once,
+   * which is where a failure genuinely disappears for a day. */
+  requeueOnAgain?: boolean;
   /** Fetches the current streak for the summary panel (plan 0003). */
   loadStreak?: () => Promise<Streak | null>;
 }) {
@@ -1038,6 +1055,52 @@ export function SessionScreen({
   const [done, setDone] = useState(false);
   const answeredCount = useRef(0);
   const touchStartX = useRef<number | null>(null);
+
+  /**
+   * The live queue (plan 0022 §4), as positions into `questions` rather than
+   * copies of them: a failed card in Daily Review is re-inserted three cards
+   * later, so the same question can occupy two positions, and the session is
+   * not over until the second one is answered.
+   *
+   * Positions, not copies, because `questions` is a live prop — the scoped
+   * `✎` sheet re-derives it from the draft mid-session, and a snapshot would
+   * freeze the session on the pre-edit text. `repeat` marks the re-inserted
+   * visit, which never requeues again: "answered again" ends it, however it
+   * went, so a card the learner keeps failing cannot extend the session
+   * forever.
+   */
+  const [queue, setQueue] = useState<{ source: number; repeat?: true }[]>(() =>
+    questions.map((_, source) => ({ source })),
+  );
+
+  /**
+   * The queue's length as of *now*, including an insertion made earlier in
+   * this same tick. `advance()` runs immediately after the grade handler
+   * that requeues, in the same closure, where `queue` is still the
+   * pre-insertion array — without this, failing the last card of a review
+   * would end the session on the spot and the requeued card would never be
+   * shown. Re-synced on every render, so it can never drift.
+   */
+  const queueLength = useRef(queue.length);
+  queueLength.current = queue.length;
+
+  // Keep the queue in step with a `questions` prop that changed under us:
+  // drop entries whose question is gone, append ones that appeared. Requeued
+  // visits of surviving questions are preserved. Returning `current`
+  // unchanged when nothing moved is what keeps this from looping.
+  useEffect(() => {
+    setQueue((current) => {
+      const kept = current.filter((entry) => entry.source < questions.length);
+      const seen = new Set(kept.map((entry) => entry.source));
+      const added = questions
+        .map((_, source) => source)
+        .filter((source) => !seen.has(source))
+        .map((source) => ({ source }));
+      return kept.length === current.length && added.length === 0
+        ? current
+        : [...kept, ...added];
+    });
+  }, [questions.length]);
 
   // Per-task question totals (plan 0010), recomputed only when `taskIds`
   // changes: how many questions belong to each distinct task id, so
@@ -1053,16 +1116,18 @@ export function SessionScreen({
   }, [taskIds]);
   const taskAnsweredCount = useRef(new Map<string, number>());
 
-  // Clamped, not a bare `questions[index]`: the questions now re-derive from
+  // Clamped, not a bare `queue[index]`: the questions now re-derive from
   // the draft while the scoped `✎` sheet is open, and the sheet's exercise
   // card can drop an item — shrinking the list under a session already past
   // that point. `index` would then read past the end and the body rendered
   // blank with no way forward. Empty list still lands on `undefined`, which
   // the render below already handles.
-  const question = questions[Math.min(index, questions.length - 1)];
+  const entry = queue[Math.min(index, queue.length - 1)];
+  const source = entry?.source;
+  const question = source === undefined ? undefined : questions[source];
 
   function advance() {
-    if (index + 1 >= questions.length) {
+    if (index + 1 >= queueLength.current) {
       setDone(true);
     } else {
       // Snapshot form (not a functional updater) so a stray double-call
@@ -1073,14 +1138,18 @@ export function SessionScreen({
 
   /** Called once per question, when its outcome(s) are applied (each
    * interaction component guards against re-entry, so exactly once). Reads
-   * the current question's task id via `index` — called before `advance()`
-   * shifts it, so it still points at the just-answered question. */
+   * the current question's task id via `source` — called before `advance()`
+   * shifts `index`, so it still points at the just-answered question.
+   *
+   * Both counters are strict equalities against the *original* question
+   * count, so a requeued answer (Daily Review only, where neither callback
+   * is passed) pushes past them rather than firing them twice. */
   function noteAnswered() {
     answeredCount.current += 1;
     if (answeredCount.current === questions.length) {
       onAllAnswered?.();
     }
-    const taskId = taskIds?.[index];
+    const taskId = source === undefined ? undefined : taskIds?.[source];
     if (taskId !== undefined) {
       const counts = taskAnsweredCount.current;
       const nextCount = (counts.get(taskId) ?? 0) + 1;
@@ -1112,6 +1181,31 @@ export function SessionScreen({
   // functions that call `advance()` after, means every caller — including
   // the five `pick`/`handleSubmit`/`submit`/`resolvePair` sites that never
   // call `advance()` themselves — still runs its own follow-up.
+  /**
+   * Re-inserts the current card three cards later (plan 0022 §4):
+   * `min(index + 4, queue.length)` is one expression with no branch — with
+   * at least three cards left it lands exactly three later, with fewer it
+   * lands at the end. Nothing is persisted and nothing needs to be: Again
+   * already put the card at rung 0 due tomorrow, so a closed app loses only
+   * a same-day drill, and the requeued answer has no grading effect anyway
+   * (`applyGrade` returns null for a card that is no longer due).
+   */
+  function requeueCurrent() {
+    if (!requeueOnAgain || entry === undefined || entry.repeat === true) {
+      return;
+    }
+    const position = Math.min(index, queue.length - 1);
+    queueLength.current += 1;
+    setQueue((current) => {
+      const next = [...current];
+      next.splice(Math.min(position + 4, current.length), 0, {
+        source: entry.source,
+        repeat: true,
+      });
+      return next;
+    });
+  }
+
   async function applyAuto(unitId: string, correct: boolean) {
     try {
       noteAnswered();
@@ -1120,6 +1214,7 @@ export function SessionScreen({
         playCorrect();
       } else {
         playWrong();
+        requeueCurrent();
       }
       await onGrade(unitId, recognizeQuality(correct));
     } catch {
@@ -1130,6 +1225,9 @@ export function SessionScreen({
   async function applySelf(unitId: string, grade: SelfGrade) {
     try {
       noteAnswered();
+      if (grade === "again") {
+        requeueCurrent();
+      }
       setSummary((s) => ({
         ...s,
         recallCounts: {
@@ -1172,7 +1270,7 @@ export function SessionScreen({
     }
   }
 
-  const currentTaskId = taskIds?.[index];
+  const currentTaskId = source === undefined ? undefined : taskIds?.[source];
   const currentUnitIds =
     currentTaskId !== undefined && question !== undefined
       ? questionUnitIds(question)
@@ -1196,13 +1294,13 @@ export function SessionScreen({
           className="progress-track"
           role="progressbar"
           aria-valuemin={0}
-          aria-valuemax={questions.length}
-          aria-valuenow={done ? questions.length : index}
+          aria-valuemax={queue.length}
+          aria-valuenow={done ? queue.length : index}
         >
           <div
             className="progress-fill"
             style={{
-              width: `${((done ? questions.length : index) / Math.max(questions.length, 1)) * 100}%`,
+              width: `${((done ? queue.length : index) / Math.max(queue.length, 1)) * 100}%`,
             }}
           />
         </div>

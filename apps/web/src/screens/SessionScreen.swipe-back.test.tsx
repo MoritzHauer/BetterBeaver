@@ -82,7 +82,8 @@ describe("SessionScreen back-swipe", () => {
     expect(onSwipeBack).toHaveBeenCalledTimes(1);
 
     fireEvent.click(screen.getByRole("button", { name: "Show answer" }));
-    fireEvent.click(screen.getByRole("button", { name: "Good" }));
+    // "Good advance" since plan 0022 §9 put a sublabel inside the button.
+    fireEvent.click(screen.getByRole("button", { name: /^Good/ }));
     await screen.findByRole("button", { name: "Done" });
 
     swipeRight();

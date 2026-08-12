@@ -589,15 +589,26 @@ function ReviewSession({
       if (cancelled) {
         return;
       }
-      // buildReviewSession's `content` parameter is unused by the engine
-      // (every field it needs lives on the units themselves); any book
-      // of the domain satisfies the type.
+      // `content` used to be unused by the engine — every field the builder
+      // needed lived on the units themselves, so any book of the domain
+      // satisfied the type. Plan 0022 §6 changed that: a due sentence looks
+      // up its own build/scramble/dictation task, and Daily Review pools
+      // items across every book of the domain. Handing it one book would
+      // silently drop back to the flip-card for every *other* book's
+      // sentences. Item ids are unique across Books, so the union is
+      // unambiguous.
       const anyBookContent = booksContent[0];
       if (anyBookContent === undefined) {
         setQuestions([]);
         return;
       }
-      setQuestions(buildReviewSession(due, anyBookContent, Math.random));
+      const pooled = {
+        ...anyBookContent,
+        units: booksContent.flatMap((book) => book.units),
+        items: booksContent.flatMap((book) => book.items),
+        tasks: booksContent.flatMap((book) => book.tasks),
+      };
+      setQuestions(buildReviewSession(due, pooled, Math.random));
     });
     return () => {
       cancelled = true;
@@ -679,6 +690,10 @@ function ReviewSession({
       onGrade={handleGrade}
       onFinished={onDone}
       onExit={onDone}
+      // Daily Review is the one session that re-shows a failed card (plan
+      // 0022 §4): it shows each scheduling unit exactly once, so a failure
+      // here is the one that would otherwise vanish for a whole day.
+      requeueOnAgain
       loadStreak={() => store.getStreak(domainId)}
     />
   );
