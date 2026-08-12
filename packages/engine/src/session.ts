@@ -630,12 +630,73 @@ export function countUnitQuestions(unit: Unit, content: Content): number {
 }
 
 /**
+ * Task types a due sentence reviews as, in preference order (plan 0022 §6).
+ *
+ * All three are *production*: the learner builds, orders or types the whole
+ * sentence, which is stronger retrieval than the flip-card review used
+ * before. The list is deliberately not "every non-cloze type" — a sentence's
+ * `recognize`/`listen`/`matching` tasks are multiple choice, i.e. *weaker*
+ * than the recall card, and a one-item `matching` board is not a question at
+ * all. `shadowing` is left out for the same reason it is not in plan 0022
+ * §6's list: nothing checks the answer, so it grades no better than recall
+ * while costing the audio.
+ */
+const SENTENCE_REVIEW_TASK_TYPES = ["build", "scramble", "dictation"] as const;
+
+/**
+ * The question a due sentence reviews as: its own authored `build` /
+ * `scramble` / `dictation` exercise, built through `buildTaskSession` on a
+ * synthetic single-item copy of that task — the existing builder unchanged,
+ * distractor sampling and token banks included (the synthetic task keeps the
+ * real task's id, so `owningUnitOf` still finds the real pool).
+ *
+ * `null` when the sentence has no such task, which is the fall-back to the
+ * recall card. `dictation` candidates are skipped for an item with no
+ * `audioRef`: `requiredAudioStem` throws on those, and a throw here would
+ * take down the whole review session rather than one card.
+ *
+ * Selection is the first match in authored `content.tasks` order — the
+ * variety comes from the exercise being an exercise, not from picking a
+ * different one each day.
+ */
+function sentenceExerciseQuestion(
+  item: Extract<Item, { kind: "sentence" }>,
+  content: Content,
+  rng: Rng,
+): Question | null {
+  for (const type of SENTENCE_REVIEW_TASK_TYPES) {
+    const task = content.tasks.find(
+      (candidate) =>
+        candidate.type === type &&
+        candidate.itemIds.includes(item.id) &&
+        (type !== "dictation" || item.payload.audioRef !== undefined),
+    );
+    if (task === undefined) {
+      continue;
+    }
+    const built = buildTaskSession(
+      { ...task, itemIds: [item.id] },
+      content,
+      rng,
+    );
+    if (built[0] !== undefined) {
+      return built[0];
+    }
+  }
+  return null;
+}
+
+/**
  * Builds a review session, one question per due unit (amendment 3, plan
- * 0002): `lexeme`/`concept`/plain-`sentence` units use the recall
- * presentation (self-graded); a due cloze blank uses that blank's cloze
- * question (auto); a due `pair` uses a minimal-pair question (auto); a due
- * note (plan 0008 step 7) uses a `NoteQuestion` (self-graded). `rng` drives
- * only the minimal-pair coin flip, the sole nondeterminism in review.
+ * 0002): `lexeme`/`concept` units use the recall presentation (self-graded);
+ * a due cloze blank uses that blank's cloze question (auto); a due `pair`
+ * uses a minimal-pair question (auto); a due note (plan 0008 step 7) uses a
+ * `NoteQuestion` (self-graded); and a due whole `sentence` reviews as its
+ * authored production exercise where it has one (plan 0022 §6), falling back
+ * to the recall card where it does not.
+ *
+ * `rng` drives the minimal-pair coin flip and — since plan 0022 — the token
+ * shuffles of a sentence's build/scramble exercise.
  */
 export function buildReviewSession(
   dueUnits: SchedulingUnit[],
@@ -664,6 +725,12 @@ export function buildReviewSession(
     }
     if (unit.item.kind === "pair") {
       return buildMinimalPairQuestion(unit.item, rng);
+    }
+    if (unit.item.kind === "sentence") {
+      const exercise = sentenceExerciseQuestion(unit.item, content, rng);
+      if (exercise !== null) {
+        return exercise;
+      }
     }
     return recallQuestion(unit.item);
   });
