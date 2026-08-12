@@ -1,6 +1,6 @@
 # Plan 0022: Scheduling ladder and review flow
 
-Status: **designed** · Owner: Moe · Date: 2026-08-05 · Direction pinned by a 13-question grilling session (2026-08-05), following a research pass over Anki/FSRS, Duolingo's half-life regression, and the retrieval-practice literature
+Status: **designed + implemented** (designed 2026-08-05, all five slices landed 2026-08-12) · Owner: Moe · Date: 2026-08-05 · Direction pinned by a 13-question grilling session (2026-08-05), following a research pass over Anki/FSRS, Duolingo's half-life regression, and the retrieval-practice literature
 
 ## Purpose
 
@@ -178,3 +178,66 @@ Compact record of what the design leaned on, so a later reader can check the rea
 - **Interleaving over blocking** — the basis for §7's refusal of a unit-repeat prompt.
 - **Session size** — the consistent practitioner figure is 15–25 minute sessions, 10–20 new items/day settling to 60–150 reviews/day, with fatigue above ~200. No hard experimental optimum, so it informs the pace presets' shape and nothing normative.
 - **Same-day repeats specifically** are *not* claimed as a research result anywhere in this plan. §4 is a product-feel requirement — a card you just failed should not vanish for a day — and is framed as one deliberately.
+
+## Implementation notes (2026-08-12)
+
+All five slices landed in order, `corepack pnpm check` green after each (582
+tests, 4 skipped at the end). Four things the design did not pin, decided
+while building:
+
+1. **`schedule` gained an optional trailing `SchedulingConfig`**, rather than
+   keeping its literal three-argument signature (§1). The config has to reach
+   a pure function somehow, and the alternative — a module-level setting in
+   `packages/srs` — is a hidden global in the one part of the codebase whose
+   contract is "pure, deterministic, no I/O". Existing three-argument callers
+   are unaffected; the default is the ladder on Balanced. `applyGrade` and
+   `recordGrade` pass it through the same way, and `App.tsx` supplies
+   `schedulingConfig()` at all six grade sites, read at grade time so a
+   Settings change needs no invalidation path.
+2. **A requeued visit never requeues again** (§4 did not say). "The session is
+   not over until every Again card has been answered again" is the bar the
+   plan sets, and it says *answered*, not *answered correctly* — so failing
+   the repeat ends it. Otherwise a card the learner keeps failing extends the
+   session without limit.
+3. **Daily Review now pools every Book's units, items and tasks** into the
+   `content` it hands `buildReviewSession`. `App.tsx` used to pass
+   `booksContent[0]` under a comment saying the argument was unused; §6 made
+   it load-bearing, and one Book's task list would have silently dropped every
+   *other* Book's sentences back to the flip-card. Item ids are unique across
+   Books, so the union is unambiguous.
+4. **Completion compares against a live queue length carried in a ref.**
+   `advance()` runs in the same tick as the requeue insertion, where the
+   `queue` state is still pre-insertion — without the ref, failing the *last*
+   card of a review ended the session on the spot and the requeued card was
+   never shown (verification item 3, which is exactly the case that caught
+   it). The queue itself holds positions into the `questions` prop rather
+   than copies, so the in-session `✎` sheet's mid-session re-derivation still
+   flows through.
+
+Two of §6's task types were left out of the sentence-exercise rule
+deliberately: `shadowing` (nothing checks the answer, so it grades no better
+than the recall card it would replace) and every MCQ type (weaker retrieval
+than the card, which is §6's own argument). A `dictation` candidate is
+skipped when the sentence has no `audioRef` — `requiredAudioStem` throws on
+those, and a throw would take down the whole review session rather than one
+card.
+
+**Browser pass** (headless Chromium against `pnpm dev`), 19 assertions across
+two runs, no page or console errors:
+
+- Settings shows Learning with the three pace presets and their intervals,
+  and the choice persists to `bb.learning`.
+- A first Good writes `intervalDays: 5, reps: 1` — the ladder, not SM-2's 1.
+- Lesson cards read `0/3 · 4 due`.
+- Daily Review shows Skip; right-click opens the three-length sheet; picking
+  "1 year" pushes exactly one card ~365 days out with its rung, ease and
+  interval untouched.
+- A failed review card reappears later in the same session
+  (`Incisors → Kit → Scent mound → Incisors`).
+- A due sentence taught by `dx-task-build-gnaw` renders as a word bank while
+  a due concept in the same session still renders as a recall card.
+
+Not browser-driven, covered by unit tests instead: the rung-4 Hard → Good
+promotion-shortcut regression (verification item 2), the mid-stream scheduler
+switch (item 4), and the pace change applying to the next graded card only
+(item 8).
