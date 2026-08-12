@@ -1,5 +1,5 @@
 import type { Content, Lesson, Unit } from "@betterbeaver/schema";
-import type { Quality, SrsState } from "@betterbeaver/srs";
+import type { Quality, SchedulingConfig, SrsState } from "@betterbeaver/srs";
 import { isDue, schedule } from "@betterbeaver/srs";
 import type { SchedulingUnit } from "./units.js";
 
@@ -136,18 +136,22 @@ export function reviewQueue(
 }
 
 /**
- * Advances SM-2 state for a grading result. An item enters scheduling on
+ * Advances SRS state for a grading result. An item enters scheduling on
  * its first result (`previous === null`). A result advances state only if
  * the item has no state yet or is due; otherwise it is practice-only and
  * `null` is returned so the caller persists nothing.
+ *
+ * `config` picks the scheduler (plan 0022); omitting it takes the shipped
+ * default, which is the ladder on Balanced.
  */
 export function applyGrade(
   previous: SrsState | null,
   quality: Quality,
   gradedAt: Date,
+  config?: SchedulingConfig,
 ): SrsState | null {
   if (previous === null || isDue(previous, gradedAt)) {
-    return schedule(previous, quality, gradedAt);
+    return schedule(previous, quality, gradedAt, config);
   }
   return null;
 }

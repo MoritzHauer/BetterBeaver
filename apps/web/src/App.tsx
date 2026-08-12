@@ -50,6 +50,7 @@ import { createLocalStorageVocabListStore } from "./progress/vocab-lists";
 import { createLocalStorageUserEntryStore } from "./progress/user-entries";
 import { getPinnedUnitIds, togglePinnedUnits } from "./progress/pinned-tasks";
 import { AUTO_UPDATE_KEY } from "./autoUpdate";
+import { schedulingConfig } from "./learning";
 import { isOffline } from "./offline";
 import { useStorageUnwritable } from "./storage-health";
 import { MyBooksScreen } from "./screens/MyBooksScreen";
@@ -306,7 +307,14 @@ function TaskSession({
     [task.id, content],
   );
   async function handleGrade(unitId: string, quality: Quality) {
-    await recordGrade(store, unitId, quality, new Date(), domainId);
+    await recordGrade(
+      store,
+      unitId,
+      quality,
+      new Date(),
+      domainId,
+      schedulingConfig(),
+    );
   }
 
   const onEdit = canEdit
@@ -404,7 +412,14 @@ function UnitSession({
   const taskIds = useMemo(() => pairs.map((pair) => pair.taskId), [pairs]);
 
   async function handleGrade(unitId: string, quality: Quality) {
-    await recordGrade(store, unitId, quality, new Date(), domainId);
+    await recordGrade(
+      store,
+      unitId,
+      quality,
+      new Date(),
+      domainId,
+      schedulingConfig(),
+    );
   }
 
   const onEdit = canEdit
@@ -485,7 +500,14 @@ function RecallSession({
   const questions = useMemo(() => pairs.map((pair) => pair.question), [pairs]);
 
   async function handleGrade(unitId: string, quality: Quality) {
-    await recordGrade(store, unitId, quality, new Date(), domainId);
+    await recordGrade(
+      store,
+      unitId,
+      quality,
+      new Date(),
+      domainId,
+      schedulingConfig(),
+    );
   }
 
   return (
@@ -583,9 +605,14 @@ function ReviewSession({
   }, [domainContent, booksContent, store]);
 
   function handleGrade(unitId: string, quality: Quality) {
-    return recordGrade(store, unitId, quality, new Date(), domainId).then(
-      () => undefined,
-    );
+    return recordGrade(
+      store,
+      unitId,
+      quality,
+      new Date(),
+      domainId,
+      schedulingConfig(),
+    ).then(() => undefined);
   }
 
   if (questions === null) {
@@ -701,7 +728,14 @@ function AdhocSession({
     [mode, itemIds, domainContent],
   );
   async function handleGrade(unitId: string, quality: Quality) {
-    await recordGrade(progressStore, unitId, quality, new Date(), domainId);
+    await recordGrade(
+      progressStore,
+      unitId,
+      quality,
+      new Date(),
+      domainId,
+      schedulingConfig(),
+    );
   }
 
   return (
@@ -2112,6 +2146,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
               recallQuality("again"),
               new Date(),
               shown.topic.domainId,
+              schedulingConfig(),
             );
           }}
           isNotePinned={(noteId) =>

@@ -1,5 +1,5 @@
 import type { Content, Item } from "@betterbeaver/schema";
-import type { Quality, SrsState } from "@betterbeaver/srs";
+import type { Quality, SchedulingConfig, SrsState } from "@betterbeaver/srs";
 import type { ProgressStore } from "./interfaces.js";
 import { applyGrade, reviewQueue } from "./progress.js";
 import { advanceStreak } from "./streak.js";
@@ -85,6 +85,9 @@ export async function dueDomainUnits(
  * the streak is persisted only when it actually changed (same-day repeats
  * are no-ops). Every grade counts as one rep (Stats counter) — bumped
  * unconditionally, since a same-day repeat is still a rep.
+ *
+ * `config` is the learner's Learning settings (plan 0022); the app passes
+ * it at every call site, and omitting it takes the shipped default.
  */
 export async function recordGrade(
   store: ProgressStore,
@@ -92,10 +95,11 @@ export async function recordGrade(
   quality: Quality,
   gradedAt: Date,
   domainId: string,
+  config?: SchedulingConfig,
 ): Promise<SrsState | null> {
   await store.incrementReps();
   const previous = await store.getItemState(itemId);
-  const next = applyGrade(previous, quality, gradedAt);
+  const next = applyGrade(previous, quality, gradedAt, config);
   if (next !== null) {
     await store.setItemState(itemId, next);
   }

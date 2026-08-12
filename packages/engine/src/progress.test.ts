@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { Content, Item, Lesson, Unit } from "@betterbeaver/schema";
-import type { SrsState } from "@betterbeaver/srs";
+import type { SchedulingConfig, SrsState } from "@betterbeaver/srs";
 import {
   isUnitComplete,
   isUnitUnlocked,
@@ -11,6 +11,12 @@ import {
   applyGrade,
 } from "./progress.js";
 import type { SchedulingUnit } from "./units.js";
+
+/** The interval oracles below pin plan 0001's SM-2 arithmetic, which plan
+ * 0022 made the non-default scheduler — so they ask for it by name. The
+ * ladder's own transitions are covered in `packages/srs`, and the
+ * default-scheduler path is exercised at the bottom of this file. */
+const SM2: SchedulingConfig = { scheduler: "sm2", pace: "balanced" };
 
 function makeUnit(overrides: Partial<Unit> & Pick<Unit, "id">): Unit {
   return {
@@ -432,7 +438,12 @@ describe("reviewQueue / applyGrade repair: unparseable due", () => {
       ease: 2.5,
       reps: 1,
     };
-    const result = applyGrade(corrupted, 4, new Date("2026-07-06T00:00:00Z"));
+    const result = applyGrade(
+      corrupted,
+      4,
+      new Date("2026-07-06T00:00:00Z"),
+      SM2,
+    );
     expect(result).not.toBeNull();
     expect(result!.due).toBe("2026-07-12T00:00:00.000Z");
   });
@@ -441,7 +452,7 @@ describe("reviewQueue / applyGrade repair: unparseable due", () => {
 describe("clock-injected review cycle", () => {
   it("first grading schedules the item, review queue reflects due, re-grading while not due is practice-only, grading when due advances", () => {
     const firstGrade = new Date("2026-07-04T10:00:00Z");
-    const state1 = applyGrade(null, 4, firstGrade);
+    const state1 = applyGrade(null, 4, firstGrade, SM2);
     expect(state1).not.toBeNull();
     expect(state1!.due).toBe("2026-07-05T00:00:00.000Z");
 
@@ -454,11 +465,13 @@ describe("clock-injected review cycle", () => {
     ).toEqual([unit1]);
 
     // Not due yet at 2026-07-04T12:00:00Z: practice-only, nothing to persist.
-    expect(applyGrade(state1, 4, new Date("2026-07-04T12:00:00Z"))).toBeNull();
+    expect(
+      applyGrade(state1, 4, new Date("2026-07-04T12:00:00Z"), SM2),
+    ).toBeNull();
 
     // Due by 2026-07-05T01:00:00Z: grading advances state.
     const secondGrade = new Date("2026-07-05T01:00:00Z");
-    const state2 = applyGrade(state1, 4, secondGrade);
+    const state2 = applyGrade(state1, 4, secondGrade, SM2);
     expect(state2).not.toBeNull();
     expect(state2!.reps).toBe(2);
     expect(state2!.intervalDays).toBe(6);
@@ -487,8 +500,8 @@ describe("cloze blanks schedule independently (plan 0002 done-criterion)", () =>
 
     const day0 = new Date("2026-07-04T00:00:00Z");
     const states = new Map<string, SrsState>();
-    states.set(blank1.id, applyGrade(null, 4, day0)!);
-    states.set(blank2.id, applyGrade(null, 4, day0)!);
+    states.set(blank1.id, applyGrade(null, 4, day0, SM2)!);
+    states.set(blank2.id, applyGrade(null, 4, day0, SM2)!);
     // First SM-2 grade always yields a 1-day interval, so both blanks are
     // due at day 1 regardless of quality.
     expect(states.get(blank1.id)!.due).toBe("2026-07-05T00:00:00.000Z");
@@ -499,8 +512,8 @@ describe("cloze blanks schedule independently (plan 0002 done-criterion)", () =>
       blank1,
       blank2,
     ]);
-    states.set(blank1.id, applyGrade(states.get(blank1.id)!, 4, day1)!);
-    states.set(blank2.id, applyGrade(states.get(blank2.id)!, 2, day1)!);
+    states.set(blank1.id, applyGrade(states.get(blank1.id)!, 4, day1, SM2)!);
+    states.set(blank2.id, applyGrade(states.get(blank2.id)!, 2, day1, SM2)!);
 
     const day2 = new Date("2026-07-06T00:00:00Z");
     expect(reviewQueue([blank1, blank2], states, day2)).toEqual([blank2]);
@@ -513,5 +526,52 @@ describe("cloze blanks schedule independently (plan 0002 done-criterion)", () =>
     expect(blank1Due - day2Time).toBeGreaterThanOrEqual(
       4 * 24 * 60 * 60 * 1000,
     );
+  });
+});
+
+describe("applyGrade under the default (ladder) scheduler", () => {
+  const sentence: Item = {
+    id: "t-item-ladder-sentence",
+    kind: "sentence",
+    payload: { text: "{{c1::one}} {{c2::two}} three", translation: "t" },
+    sourceRef: "t-resource-1",
+  };
+  const blank1: SchedulingUnit = {
+    id: `${sentence.id}::c1`,
+    item: sentence,
+    blankNumber: 1,
+  };
+  const blank2: SchedulingUnit = {
+    id: `${sentence.id}::c2`,
+    item: sentence,
+    blankNumber: 2,
+  };
+
+  it("cloze blanks still schedule independently, on ladder intervals", () => {
+    const day0 = new Date("2026-08-05T00:00:00Z");
+    const states = new Map<string, SrsState>();
+    states.set(blank1.id, applyGrade(null, 4, day0)!);
+    states.set(blank2.id, applyGrade(null, 4, day0)!);
+    // A first Good under the ladder is rung 1 — 5 days, not SM-2's 1.
+    expect(states.get(blank1.id)!.due).toBe("2026-08-10T00:00:00.000Z");
+
+    const day5 = new Date("2026-08-10T00:00:00Z");
+    expect(reviewQueue([blank1, blank2], states, day5)).toEqual([
+      blank1,
+      blank2,
+    ]);
+    states.set(blank1.id, applyGrade(states.get(blank1.id)!, 4, day5)!);
+    states.set(blank2.id, applyGrade(states.get(blank2.id)!, 2, day5)!);
+
+    const day6 = new Date("2026-08-11T00:00:00Z");
+    expect(reviewQueue([blank1, blank2], states, day6)).toEqual([blank2]);
+    expect(states.get(blank1.id)!.intervalDays).toBe(15);
+    expect(states.get(blank2.id)!.intervalDays).toBe(1);
+  });
+
+  it("still refuses to advance a not-due card", () => {
+    const day0 = new Date("2026-08-05T00:00:00Z");
+    const state = applyGrade(null, 4, day0)!;
+    expect(applyGrade(state, 4, new Date("2026-08-06T00:00:00Z"))).toBeNull();
   });
 });
