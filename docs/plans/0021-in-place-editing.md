@@ -1,6 +1,6 @@
 # Plan 0021: In-place editing (edit the page you are looking at)
 
-Status: **slices 1–11 landed; 12–14 designed** · Owner: Moe · Date: 2026-07-31, extended 2026-08-05 · Direction pinned by a 15-question grilling session (2026-07-31) over the shipped editor, `validate.ts`, the asset pipeline and the content backend migration; §14 added after a 9-question grilling (2026-08-05) over the shipped result, driven in a browser against the live Kyrgyz Book
+Status: **all 14 slices landed (12–14 on 2026-08-06); two §14 done-criteria unmet — see "Done-criteria"** · Owner: Moe · Date: 2026-07-31, extended 2026-08-05 · Direction pinned by a 15-question grilling session (2026-07-31) over the shipped editor, `validate.ts`, the asset pipeline and the content backend migration; §14 added after a 9-question grilling (2026-08-05) over the shipped result, driven in a browser against the live Kyrgyz Book
 
 ## Purpose
 
@@ -362,7 +362,7 @@ Added with §14:
 
 Both need an owner call: a slice 15 that finishes them, or an amendment narrowing these two criteria to what shipped. Neither is a defect in slices 12–14 — it is surface §14 promised that no spec claimed.
 
-Also caused by slice 14 and outstanding: moving Sources into the Book settings sheet left `WhatChanged.entityTarget` returning `{}` for a resource, so a publish-error deep-link to a source now opens a Book screen with Sources closed inside the sheet. The link still reaches the right screen; what it names is no longer in view. See §11, whose whole premise is that every error line is a working link.
+Also caused by slice 14, **since fixed** (2026-08-06, `e2a17b9`): moving Sources into the Book settings sheet left `WhatChanged.entityTarget` returning `{}` for a resource, so a publish-error deep-link to a source opened a Book screen with Sources closed inside the sheet — the link reached the right screen, but what it named was not in view, against §11's premise that every error line is a working link. The fix runs `ChangedTarget.bookSettings` → `atSettings` on the `book` screen → a `BookScreen` prop that both seeds the sheet state and drives an effect keyed on it, since the publish panel is reachable from the Book screen itself and the commonest case re-renders rather than remounts.
 
 ## Verification
 
