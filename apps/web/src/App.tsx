@@ -30,6 +30,7 @@ import {
   nextUnit,
   noteUnitId,
   recordGrade,
+  skipItem,
   symmetricLinks,
 } from "@betterbeaver/engine";
 import type { Question } from "@betterbeaver/engine";
@@ -50,6 +51,7 @@ import { createLocalStorageVocabListStore } from "./progress/vocab-lists";
 import { createLocalStorageUserEntryStore } from "./progress/user-entries";
 import { getPinnedUnitIds, togglePinnedUnits } from "./progress/pinned-tasks";
 import { AUTO_UPDATE_KEY } from "./autoUpdate";
+import { schedulingConfig } from "./learning";
 import { isOffline } from "./offline";
 import { useStorageUnwritable } from "./storage-health";
 import { MyBooksScreen } from "./screens/MyBooksScreen";
@@ -306,7 +308,14 @@ function TaskSession({
     [task.id, content],
   );
   async function handleGrade(unitId: string, quality: Quality) {
-    await recordGrade(store, unitId, quality, new Date(), domainId);
+    await recordGrade(
+      store,
+      unitId,
+      quality,
+      new Date(),
+      domainId,
+      schedulingConfig(),
+    );
   }
 
   const onEdit = canEdit
@@ -404,7 +413,14 @@ function UnitSession({
   const taskIds = useMemo(() => pairs.map((pair) => pair.taskId), [pairs]);
 
   async function handleGrade(unitId: string, quality: Quality) {
-    await recordGrade(store, unitId, quality, new Date(), domainId);
+    await recordGrade(
+      store,
+      unitId,
+      quality,
+      new Date(),
+      domainId,
+      schedulingConfig(),
+    );
   }
 
   const onEdit = canEdit
@@ -485,7 +501,14 @@ function RecallSession({
   const questions = useMemo(() => pairs.map((pair) => pair.question), [pairs]);
 
   async function handleGrade(unitId: string, quality: Quality) {
-    await recordGrade(store, unitId, quality, new Date(), domainId);
+    await recordGrade(
+      store,
+      unitId,
+      quality,
+      new Date(),
+      domainId,
+      schedulingConfig(),
+    );
   }
 
   return (
@@ -567,15 +590,26 @@ function ReviewSession({
       if (cancelled) {
         return;
       }
-      // buildReviewSession's `content` parameter is unused by the engine
-      // (every field it needs lives on the units themselves); any book
-      // of the domain satisfies the type.
+      // `content` used to be unused by the engine — every field the builder
+      // needed lived on the units themselves, so any book of the domain
+      // satisfied the type. Plan 0022 §6 changed that: a due sentence looks
+      // up its own build/scramble/dictation task, and Daily Review pools
+      // items across every book of the domain. Handing it one book would
+      // silently drop back to the flip-card for every *other* book's
+      // sentences. Item ids are unique across Books, so the union is
+      // unambiguous.
       const anyBookContent = booksContent[0];
       if (anyBookContent === undefined) {
         setQuestions([]);
         return;
       }
-      setQuestions(buildReviewSession(due, anyBookContent, Math.random));
+      const pooled = {
+        ...anyBookContent,
+        units: booksContent.flatMap((book) => book.units),
+        items: booksContent.flatMap((book) => book.items),
+        tasks: booksContent.flatMap((book) => book.tasks),
+      };
+      setQuestions(buildReviewSession(due, pooled, Math.random));
     });
     return () => {
       cancelled = true;
@@ -583,9 +617,24 @@ function ReviewSession({
   }, [domainContent, booksContent, store]);
 
   function handleGrade(unitId: string, quality: Quality) {
-    return recordGrade(store, unitId, quality, new Date(), domainId).then(
-      () => undefined,
-    );
+    return recordGrade(
+      store,
+      unitId,
+      quality,
+      new Date(),
+      domainId,
+      schedulingConfig(),
+    ).then(() => undefined);
+  }
+
+  /** Skip (plan 0022 §5): push each of the question's scheduling units out by
+   * `days`. Plural because a matching board covers several — review never
+   * builds one today, but the prop contract is the same as Pin's. */
+  async function handleSkip(unitIds: string[], days: number) {
+    const now = new Date();
+    for (const unitId of unitIds) {
+      await skipItem(store, unitId, days, now);
+    }
   }
 
   if (questions === null) {
@@ -650,8 +699,13 @@ function ReviewSession({
       lookup={lookup}
       onEdit={onEdit}
       onGrade={handleGrade}
+      onSkip={handleSkip}
       onFinished={onDone}
       onExit={onDone}
+      // Daily Review is the one session that re-shows a failed card (plan
+      // 0022 §4): it shows each scheduling unit exactly once, so a failure
+      // here is the one that would otherwise vanish for a whole day.
+      requeueOnAgain
       loadStreak={() => store.getStreak(domainId)}
     />
   );
@@ -701,7 +755,14 @@ function AdhocSession({
     [mode, itemIds, domainContent],
   );
   async function handleGrade(unitId: string, quality: Quality) {
-    await recordGrade(progressStore, unitId, quality, new Date(), domainId);
+    await recordGrade(
+      progressStore,
+      unitId,
+      quality,
+      new Date(),
+      domainId,
+      schedulingConfig(),
+    );
   }
 
   return (
@@ -2032,6 +2093,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           content={shown}
           lessonId={screen.lessonId}
           attemptedTaskIds={shownAttempted}
+          store={shownStore}
           onSelectUnit={(unitId) =>
             setScreen({
               screen: "unit",
@@ -2112,6 +2174,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
               recallQuality("again"),
               new Date(),
               shown.topic.domainId,
+              schedulingConfig(),
             );
           }}
           isNotePinned={(noteId) =>

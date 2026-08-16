@@ -24,10 +24,17 @@ export function LockableProgress({
   unlocked,
   value,
   max,
+  due,
 }: {
   unlocked: boolean;
   value: number;
   max: number;
+  /** Cards of this row's own scheduling units that are due right now (plan
+   * 0022 §7), appended to the caption as `· 8 due`. Passive: it answers
+   * "which unit am I forgetting" at a glance, where a start-of-session
+   * prompt would push the learner from interleaved review into blocked
+   * repetition. Omitted or 0 renders nothing. */
+  due?: number;
 }) {
   if (!unlocked) {
     return <p className="status">locked</p>;
@@ -37,6 +44,7 @@ export function LockableProgress({
       <ProgressBar value={value} max={max} />
       <p className="status">
         {value}/{max}
+        {due !== undefined && due > 0 ? ` · ${due} due` : ""}
       </p>
     </>
   );

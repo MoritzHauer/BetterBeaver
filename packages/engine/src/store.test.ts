@@ -8,6 +8,7 @@ import {
   dueDomainUnits,
   dueUnits,
   recordGrade,
+  skipItem,
 } from "./store.js";
 
 /** Minimal in-memory ProgressStore, satisfying the interface types. */
@@ -303,5 +304,43 @@ describe("dueUnits / dueDomainUnits pinning (plan 0008)", () => {
       itemB.id,
       `${sentence.id}::c1`,
     ]);
+  });
+});
+
+describe("skipItem (plan 0022 §5)", () => {
+  const mature: SrsState = {
+    due: "2026-08-05T00:00:00.000Z",
+    intervalDays: 90,
+    ease: 2.36,
+    reps: 4,
+  };
+
+  it("pushes due out and touches nothing else", async () => {
+    const store = new InMemoryProgressStore();
+    await store.setItemState("t-item-a", mature);
+    const next = await skipItem(
+      store,
+      "t-item-a",
+      7,
+      new Date("2026-08-05T18:00:00Z"),
+    );
+    expect(next).toEqual({ ...mature, due: "2026-08-12T00:00:00.000Z" });
+    expect(await store.getItemState("t-item-a")).toEqual(next);
+  });
+
+  it("leaves an unscheduled item alone", async () => {
+    const store = new InMemoryProgressStore();
+    expect(
+      await skipItem(store, "t-item-a", 7, new Date("2026-08-05T18:00:00Z")),
+    ).toBeNull();
+    expect(await store.getItemState("t-item-a")).toBeNull();
+  });
+
+  it("is not an answer: no rep, no streak", async () => {
+    const store = new InMemoryProgressStore();
+    await store.setItemState("t-item-a", mature);
+    await skipItem(store, "t-item-a", 30, new Date("2026-08-05T18:00:00Z"));
+    expect(store.reps).toBe(0);
+    expect(store.streak).toBeNull();
   });
 });

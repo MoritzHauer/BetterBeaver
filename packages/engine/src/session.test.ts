@@ -1054,6 +1054,145 @@ describe("buildReviewSession", () => {
     ]);
   });
 
+  describe("a due sentence reviews as its authored exercise (plan 0022 §6)", () => {
+    const s1: Item = {
+      id: "t-item-s1",
+      kind: "sentence",
+      payload: {
+        text: "Мен китеп окуйм",
+        translation: "I read a book",
+        audioRef: "s1-audio",
+      },
+      sourceRef: "t-resource-1",
+    };
+    const s2: Item = {
+      id: "t-item-s2",
+      kind: "sentence",
+      payload: { text: "Сен барасың", translation: "you go" },
+      sourceRef: "t-resource-1",
+    };
+    const sentenceUnit: Unit = {
+      id: "t-unit-sentences",
+      lessonId: "t-lesson",
+      title: "Sentences",
+      goal: "Goal",
+      itemIds: [s1.id, s2.id],
+      taskIds: ["t-task-build", "t-task-scramble", "t-task-dictation"],
+      noteIds: [],
+    };
+    function contentWith(tasks: Task[]): Content {
+      return {
+        ...conceptContent,
+        units: [sentenceUnit],
+        items: [s1, s2],
+        tasks,
+      };
+    }
+
+    it("prefers the build task, with the same bank buildTaskSession would produce", () => {
+      const buildTask: Task = {
+        id: "t-task-build",
+        type: "build",
+        itemIds: [s1.id, s2.id],
+      };
+      const content = contentWith([buildTask]);
+      const units = [{ id: s1.id, item: s1 }];
+
+      // Same rng script both ways: the review question must be exactly the
+      // question the task itself builds for that item.
+      const reviewed = buildReviewSession(
+        units,
+        content,
+        queueRng([0.5, 0.5, 0.1, 0.9, 0.3, 0.7]),
+      );
+      const taught = buildTaskSession(
+        { ...buildTask, itemIds: [s1.id] },
+        content,
+        queueRng([0.5, 0.5, 0.1, 0.9, 0.3, 0.7]),
+      );
+
+      expect(reviewed).toEqual(taught);
+      expect(reviewed[0]).toMatchObject({ kind: "build", unitId: s1.id });
+    });
+
+    it("falls to scramble, then dictation, when no build task teaches the sentence", () => {
+      const scramble = buildReviewSession(
+        [{ id: s1.id, item: s1 }],
+        contentWith([
+          { id: "t-task-scramble", type: "scramble", itemIds: [s1.id] },
+          { id: "t-task-dictation", type: "dictation", itemIds: [s1.id] },
+        ]),
+        queueRng([0.5, 0.5, 0.5]),
+      );
+      expect(scramble[0]!.kind).toBe("scramble");
+
+      const dictation = buildReviewSession(
+        [{ id: s1.id, item: s1 }],
+        contentWith([
+          { id: "t-task-dictation", type: "dictation", itemIds: [s1.id] },
+        ]),
+        queueRng([]),
+      );
+      expect(dictation[0]).toEqual({
+        kind: "dictation",
+        unitId: s1.id,
+        audioStem: "s1-audio",
+        target: "Мен китеп окуйм",
+      });
+    });
+
+    it("skips a dictation task for a sentence with no audio instead of throwing", () => {
+      const questions = buildReviewSession(
+        [{ id: s2.id, item: s2 }],
+        contentWith([
+          { id: "t-task-dictation", type: "dictation", itemIds: [s2.id] },
+        ]),
+        queueRng([]),
+      );
+      expect(questions[0]!.kind).toBe("recall");
+    });
+
+    it("ignores multiple-choice and cloze tasks — they are weaker than the card", () => {
+      const questions = buildReviewSession(
+        [{ id: s1.id, item: s1 }],
+        contentWith([
+          { id: "t-task-cloze", type: "cloze", itemIds: [s1.id] },
+          { id: "t-task-listen", type: "listen", itemIds: [s1.id] },
+          { id: "t-task-matching", type: "matching", itemIds: [s1.id, s2.id] },
+        ]),
+        queueRng([]),
+      );
+      expect(questions[0]!.kind).toBe("recall");
+    });
+
+    it("leaves lexemes and concepts on the recall card even when tasks exist", () => {
+      const questions = buildReviewSession(
+        [{ id: c1.id, item: c1 }],
+        conceptContent,
+        queueRng([]),
+      );
+      expect(questions[0]!.kind).toBe("recall");
+    });
+
+    it("still grades against the sentence's own scheduling unit id", () => {
+      const content = contentWith([
+        { id: "t-task-build", type: "build", itemIds: [s1.id, s2.id] },
+      ]);
+      const questions = buildReviewSession(
+        [
+          { id: s1.id, item: s1 },
+          { id: s2.id, item: s2 },
+        ],
+        content,
+        queueRng([0.5, 0.5, 0.1, 0.9, 0.3, 0.7, 0.5, 0.5, 0.1, 0.9, 0.3, 0.7]),
+      );
+      expect(questions.map((q) => ("unitId" in q ? q.unitId : null))).toEqual([
+        s1.id,
+        s2.id,
+      ]);
+    });
+  });
+
   it("maps a note unit to a NoteQuestion (plan 0008 step 7)", () => {
     const note = { id: "t-note-1", stem: "note-stem-1" };
     const units = [{ id: noteUnitId(note.id), note }];

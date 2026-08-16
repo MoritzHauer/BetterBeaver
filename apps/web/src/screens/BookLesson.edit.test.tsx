@@ -137,6 +137,7 @@ function renderLesson(session: EditSessionValue | null, book = BOOK) {
       content={build(book)}
       lessonId="bk-l1"
       attemptedTaskIds={new Set()}
+      store={store}
       onSelectUnit={() => {}}
       onPracticeTask={() => {}}
       onBack={() => {}}

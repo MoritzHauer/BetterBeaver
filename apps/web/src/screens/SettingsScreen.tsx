@@ -17,11 +17,42 @@ import { AUTO_UPDATE_KEY } from "../autoUpdate";
 import { OFFLINE_KEY, isOffline } from "../offline";
 import { getThemePref, setThemePref, type ThemePref } from "../theme";
 import { getDisplayName, setDisplayName } from "../identity";
+import {
+  getLearning,
+  setLearning,
+  type LearningSettings,
+  type SkipLength,
+} from "../learning";
+import {
+  REVIEW_PACES,
+  type ReviewPace,
+  type SchedulerKind,
+} from "@betterbeaver/srs";
 
 const THEME_OPTIONS: { pref: ThemePref; label: string }[] = [
   { pref: "system", label: "System" },
   { pref: "light", label: "Light" },
   { pref: "dark", label: "Dark" },
+];
+
+/** Named presets, never typed intervals (plan 0022 §8): a learner looking at
+ * `5, 15, 30, 90` has no basis on which to change one number — what they know
+ * is "too much" or "too little", which is what these three express. */
+const PACE_OPTIONS: { pace: ReviewPace; label: string }[] = [
+  { pace: "thorough", label: "Thorough" },
+  { pace: "balanced", label: "Balanced" },
+  { pace: "light", label: "Light" },
+];
+
+const SCHEDULER_OPTIONS: { scheduler: SchedulerKind; label: string }[] = [
+  { scheduler: "ladder", label: "Ladder" },
+  { scheduler: "sm2", label: "Classic SM-2" },
+];
+
+const SKIP_OPTIONS: { skip: SkipLength; label: string }[] = [
+  { skip: "week", label: "1 week" },
+  { skip: "month", label: "1 month" },
+  { skip: "year", label: "1 year" },
 ];
 
 export function SettingsScreen({
@@ -56,6 +87,7 @@ export function SettingsScreen({
     () => localStorage.getItem(AUTO_UPDATE_KEY) === "on",
   );
   const [offlineOn, setOfflineOn] = useState(isOffline);
+  const [learning, setLearningState] = useState<LearningSettings>(getLearning);
   const [user, setUser] = useState<User | null | "loading">(
     getSupabase() === null ? null : "loading",
   );
@@ -109,6 +141,13 @@ export function SettingsScreen({
       localStorage.removeItem(OFFLINE_KEY);
     }
     setOfflineOn(on);
+  }
+
+  function updateLearning(patch: Partial<LearningSettings>): void {
+    setLearning(patch);
+    // Re-read rather than merging locally, so the screen shows what actually
+    // stuck if the write was swallowed.
+    setLearningState(getLearning());
   }
 
   async function handleImportProgress(file: File): Promise<void> {
@@ -274,6 +313,70 @@ export function SettingsScreen({
             </button>
           ))}
         </div>
+      </section>
+
+      <section className="card">
+        <h2>Learning</h2>
+        <label className="field">
+          Review pace
+          <select
+            value={learning.pace}
+            onChange={(event) =>
+              updateLearning({ pace: event.target.value as ReviewPace })
+            }
+          >
+            {PACE_OPTIONS.map(({ pace, label }) => (
+              <option key={pace} value={pace}>
+                {label} — {REVIEW_PACES[pace].join(", ")} days
+              </option>
+            ))}
+          </select>
+        </label>
+        <p className="status">
+          How fast a word you keep getting right moves out of your way. Cards
+          you already have keep their current due dates.
+        </p>
+        <label className="field">
+          Scheduler
+          <select
+            value={learning.scheduler}
+            onChange={(event) =>
+              updateLearning({
+                scheduler: event.target.value as SchedulerKind,
+              })
+            }
+          >
+            {SCHEDULER_OPTIONS.map(({ scheduler, label }) => (
+              <option key={scheduler} value={scheduler}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p className="status">
+          Ladder: Good moves one step up the pace above, Hard steps back one and
+          asks again tomorrow, Again starts the word over. Classic SM-2 is the
+          older interval maths. You can switch back and forth freely.
+        </p>
+        <label className="field">
+          Skip for
+          <select
+            value={learning.skip}
+            onChange={(event) =>
+              updateLearning({ skip: event.target.value as SkipLength })
+            }
+          >
+            {SKIP_OPTIONS.map(({ skip, label }) => (
+              <option key={skip} value={skip}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p className="status">
+          How long Skip hides a card in Daily Review. Long-press Skip to pick a
+          different length for one card.
+        </p>
       </section>
 
       <section className="card">

@@ -531,6 +531,16 @@ tr.diff-new > td {
   padding: 0.75rem;
 }
 
+/* Self-grade sublabels (plan 0022 §9): what the button does to the card,
+   under its name. Only the session's Again/Hard/Good carry a <small>; the
+   other .grade-buttons rows (Settings, Data) are unaffected. */
+.grade-buttons button small {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 400;
+  opacity: 0.75;
+}
+
 /* Per-card Vocabulary/Review shortcuts on My Books: icon chips pinned
  * top-right of the card, level with the book title.
  * ponytail: below 44px tap height by explicit owner request.
@@ -669,6 +679,12 @@ main.session {
   padding: 0.6rem;
   font-size: 1.1rem;
   line-height: 1;
+}
+
+/* Skip (plan 0022 §5) opens its length sheet on long-press, which iOS would
+   otherwise interrupt with its own text-selection callout. */
+.skip {
+  -webkit-touch-callout: none;
 }
 
 .progress-track {
