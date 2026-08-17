@@ -28,6 +28,7 @@ One line per plan, plus what deliberately doesn't exist yet. Update when a plan 
 | [0021 In-place editing](plans/0021-in-place-editing.md) | designed 2026-07-31 — all 14 slices implemented 2026-08-06; two §14 done-criteria unmet, awaiting an owner call (backlog 7) — [notes](CHANGELOG.md#0021-in-place-editing) |
 | [0022 Scheduling ladder & review flow](plans/0022-scheduling-and-review-flow.md) | designed 2026-08-05 + implemented 2026-08-12 — all five slices, browser-verified; see the plan's "Implementation notes" for the four decisions the design left open — [notes](CHANGELOG.md#0022-scheduling-ladder-review-flow) |
 | [0023 Morpheme decomposition](plans/0023-morpheme-decomposition.md) | drafted 2026-08-05 — [notes](CHANGELOG.md#0023-morpheme-decomposition) |
+| [0024 Exercise difficulty ladder](plans/0024-exercise-difficulty-ladder.md) | drafted 2026-08-17 — [notes](CHANGELOG.md#0024-exercise-difficulty-ladder) |
 
 ## Works today
 
