@@ -3,6 +3,7 @@ import { validateContent, type ValidateContentResult } from "./validate.js";
 import { bookSchema, BOOK_ICONS } from "./entities.js";
 
 type LinkLike = { type: string; entryId: string };
+type ComponentLike = { text: string; gloss: string; entryId?: string };
 type ConceptItemLike = {
   id: string;
   kind: "concept";
@@ -12,6 +13,7 @@ type ConceptItemLike = {
     audioRef?: string;
     imageRef?: string;
     links?: LinkLike[];
+    components?: ComponentLike[];
   };
   sourceRef: string;
 };
@@ -27,7 +29,9 @@ type LexemeItemLike = {
     audioRef?: string;
     imageRef?: string;
     links?: LinkLike[];
-    components?: { script: string; gloss: string }[];
+    components?: ComponentLike[];
+    bound?: string;
+    variants?: string[];
   };
   sourceRef: string;
 };
@@ -965,11 +969,126 @@ describe("validateContent", () => {
   });
 
   it("accepts a lexeme entry with a components breakdown", () => {
+    const { input, entry1, resource } = makeFixture();
+    const entry2: LexemeItemLike = {
+      id: "ky-entry-ene",
+      kind: "lexeme",
+      payload: { script: "эне", transliteration: "ene", gloss: "mother" },
+      sourceRef: resource.id,
+    };
+    input.entries.push(entry2);
+    entry1.payload.components = [
+      { text: "кайн", gloss: "in-law" },
+      { text: "эне", gloss: "mother", entryId: entry2.id },
+    ];
+
+    const result = validateContent(input);
+
+    if ("errors" in result) {
+      throw new Error(
+        `expected valid content, got errors: ${result.errors.join("; ")}`,
+      );
+    }
+  });
+
+  it("(aa) reports a dangling component entry reference on a lexeme", () => {
     const { input, entry1 } = makeFixture();
     entry1.payload.components = [
-      { script: "кайн", gloss: "in-law" },
-      { script: "эне", gloss: "mother" },
+      { text: "кайн", gloss: "in-law", entryId: "ky-entry-missing" },
     ];
+
+    const errors = expectErrors(validateContent(input));
+
+    expect(
+      errors.some(
+        (e) => e.includes(entry1.id) && e.includes("dangling component entry"),
+      ),
+    ).toBe(true);
+  });
+
+  it("(aa) reports a dangling component entry reference on a concept", () => {
+    const { input, family1, resource } = makeFixture();
+    input.domain.kind = "general";
+    const entry: ConceptItemLike = {
+      id: "ky-entry-cardiomyopathy",
+      kind: "concept",
+      payload: {
+        term: "cardiomyopathy",
+        definition: "disease of the heart muscle",
+        components: [
+          { text: "cardio", gloss: "heart", entryId: "ky-entry-missing" },
+        ],
+      },
+      sourceRef: resource.id,
+    };
+    input.entries.splice(0, input.entries.length, entry);
+    family1.entryIds = [entry.id];
+
+    const errors = expectErrors(validateContent(input));
+
+    expect(
+      errors.some(
+        (e) => e.includes(entry.id) && e.includes("dangling component entry"),
+      ),
+    ).toBe(true);
+  });
+
+  it("(aa) accepts a component that names its own entry as its root", () => {
+    const { input, entry1 } = makeFixture();
+    entry1.payload.components = [
+      { text: "Салам", gloss: "hi", entryId: entry1.id },
+    ];
+
+    const result = validateContent(input);
+
+    if ("errors" in result) {
+      throw new Error(
+        `expected valid content, got errors: ${result.errors.join("; ")}`,
+      );
+    }
+  });
+
+  it('(ab) reports "variants" on an entry with no "bound"', () => {
+    const { input, entry1 } = makeFixture();
+    entry1.payload.variants = ["-луу", "-лүү"];
+
+    const errors = expectErrors(validateContent(input));
+
+    expect(
+      errors.some(
+        (e) => e.includes(entry1.id) && e.includes('"variants" requires'),
+      ),
+    ).toBe(true);
+  });
+
+  it("(ab) accepts variants alongside bound", () => {
+    const { input, entry1 } = makeFixture();
+    entry1.payload.bound = "suffix";
+    entry1.payload.variants = ["-луу", "-лүү"];
+
+    const result = validateContent(input);
+
+    if ("errors" in result) {
+      throw new Error(
+        `expected valid content, got errors: ${result.errors.join("; ")}`,
+      );
+    }
+  });
+
+  it("accepts a bound suffix entry with variants and no components (the slice D shape)", () => {
+    const { input, resource } = makeFixture();
+    input.entries.push({
+      id: "ky-entry-sfx-luu",
+      kind: "lexeme",
+      payload: {
+        script: "-луу",
+        transliteration: "-luu",
+        gloss: "having, provided with (N→Adj)",
+        bound: "suffix",
+        variants: ["-луу", "-лүү", "-дуу", "-дүү"],
+      },
+      sourceRef: resource.id,
+    });
 
     const result = validateContent(input);
 

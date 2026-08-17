@@ -30,7 +30,13 @@ The plan says "the entry editor gets the fields … reusing the existing repeate
 `UnitScreen.tsx` is over the 1500-line budget, so **do not grow it**: write a new module `apps/web/src/screens/edit/entryMorphology.tsx` exporting
 
 ```tsx
-export function MorphologyFields({ item, edit }: { item: Item; edit: UnitEditOps })
+export function MorphologyFields({
+  item,
+  edit,
+}: {
+  item: Item;
+  edit: UnitEditOps;
+});
 ```
 
 and render it from `RowExtras` in a ~4-line insertion, directly after the per-kind example fields and before the asset-ref pickers. It returns `null` for `sentence`/`pair` items. Both `RowExtras` call sites already sit behind `edit.canEditRow(...)`, so add no further gate.
@@ -47,10 +53,14 @@ Add `ProblemMarker`s for `payload.bound`, `payload.variants` and `payload.compon
 
 ```ts
 /** Reads a payload array key off the raw entity — `[]` when absent or not an array. */
-export function payloadList(entity: Entity, key: string): unknown[]
+export function payloadList(entity: Entity, key: string): unknown[];
 /** Writes a payload array key, **deleting** it when the array is empty — the same
  * absent-not-empty rule `withPayload` follows, for the same `optional()` reason. */
-export function withPayloadList(entity: Entity, key: string, values: unknown[]): Entity
+export function withPayloadList(
+  entity: Entity,
+  key: string,
+  values: unknown[],
+): Entity;
 ```
 
 ## 3. Not in this slice
@@ -61,7 +71,7 @@ export function withPayloadList(entity: Entity, key: string, values: unknown[]):
 
 ## 4. The private-Book migration (a gap plan 0023 does not cover)
 
-design.md pins: *"Schema changes must stay additive for anything a private Book can contain, or ship a local migration"* (plan 0017 decision 5) — there is no admin republish for content that exists on one device. A1's `script` → `text` rename is **not** additive, and a private Book's lexicon entries can carry `components`. Today nothing in the app writes that field, so the realistic carrier is an **imported** export file authored elsewhere, but the rule is pinned and the fix is ten lines.
+design.md pins: _"Schema changes must stay additive for anything a private Book can contain, or ship a local migration"_ (plan 0017 decision 5) — there is no admin republish for content that exists on one device. A1's `script` → `text` rename is **not** additive, and a private Book's lexicon entries can carry `components`. Today nothing in the app writes that field, so the realistic carrier is an **imported** export file authored elsewhere, but the rule is pinned and the fix is ten lines.
 
 Ship a pure, exported normalizer — `apps/web/src/content/private-migrations.ts`, or beside the existing helpers if a better home is obvious — that rewrites, for every `lexeme`/`concept` entry in a private Book's documents, any component object carrying a string `script` and **no** `text` into `{ text: <script>, gloss, entryId? }`, dropping the `script` key. Everything else is left byte-identical, and a document with no such component must come back unchanged (identity, so it never dirties a record).
 

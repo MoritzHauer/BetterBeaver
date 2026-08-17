@@ -160,17 +160,17 @@ export function EntryPopup({
             {components.length > 0 ? (
               <p className="chips">
                 {components.map((component, index) => {
-                  const target = resolveToken(component.script, entries);
+                  const target = resolveToken(component.text, entries);
                   return (
                     <button
-                      key={`${component.script}-${index}`}
+                      key={`${component.text}-${index}`}
                       type="button"
                       className="plain chip"
                       onClick={() =>
                         target !== undefined && openEntry(target.id)
                       }
                     >
-                      {component.script} — {component.gloss}
+                      {component.text} — {component.gloss}
                     </button>
                   );
                 })}

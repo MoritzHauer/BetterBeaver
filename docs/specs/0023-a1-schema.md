@@ -64,7 +64,7 @@ Do **not** attempt to republish anything or touch `content/` — the seed uses `
 
 ## 4. Engine: the one lookup filter (plan §1's leak table)
 
-`packages/engine/src/lookup.ts` — `resolveToken` must skip entries with `bound: "prefix"`. The table's reasoning is the comment to write: matching is *entry ⊂ token*, so a **suffix** can never false-match (`"тартуу".startsWith("туу")` is false), but a prefix affix (`гидро-`) would win longest-prefix over the real stem. Filter in `entryText` (return `undefined` for a prefix-bound lexeme) or in the `candidates` build — either is one line; pick the one that reads.
+`packages/engine/src/lookup.ts` — `resolveToken` must skip entries with `bound: "prefix"`. The table's reasoning is the comment to write: matching is _entry ⊂ token_, so a **suffix** can never false-match (`"тартуу".startsWith("туу")` is false), but a prefix affix (`гидро-`) would win longest-prefix over the real stem. Filter in `entryText` (return `undefined` for a prefix-bound lexeme) or in the `candidates` build — either is one line; pick the one that reads.
 
 **Do not filter `bound` entries out of ad-hoc distractor sampling** (`adhoc.ts`). Plan §1's table rules that leak self-gating — distractors come from the passed item list, not the pool — and excluding affixes there would break MCQ floors for a session studying the Suffixes family deliberately.
 

@@ -16,7 +16,10 @@ Implements slice **B** of [plan 0023](../plans/0023-morpheme-decomposition.md) (
 New file `packages/engine/src/proposeSplit.ts`, exported from the package index:
 
 ```ts
-export function proposeSplit(script: string, entries: Item[]): Component[] | undefined
+export function proposeSplit(
+  script: string,
+  entries: Item[],
+): Component[] | undefined;
 ```
 
 Pinned algorithm — implement exactly this, and put the reasoning in the doc comment the way `lookup.ts` does:

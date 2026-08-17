@@ -7,7 +7,11 @@ import { normalizeToken } from "./normalize.js";
 function entryText(item: Item): string | undefined {
   switch (item.kind) {
     case "lexeme":
-      return item.payload.script;
+      // The one lookup leak plan 0023 §1's table found: matching is
+      // *entry ⊂ token*, so a suffix affix can never false-match
+      // ("тартуу".startsWith("туу") is false), but a prefix affix (гидро-)
+      // would win longest-prefix over the real stem it is attached to.
+      return item.payload.bound === "prefix" ? undefined : item.payload.script;
     case "concept":
       return item.payload.term;
     default:

@@ -855,6 +855,37 @@ export function checkReferences(parsed: ParsedSet): string[] {
     }
   }
 
+  // --- class (aa), per entry component: a `components[].entryId` must
+  // resolve, the same dangling check class (z) gives `links[].entryId` (plan
+  // 0023 §5). Self-reference is fine — a word may list itself as its own
+  // root, and unlike a link it makes no symmetric claim. Deliberately absent:
+  // any check that the parts concatenate back to the entry's script (plan
+  // 0023 §5 — harmony and elision make that false too often to be a signal).
+  // --- class (ab): `variants` without `bound` (lexeme-only fields) means
+  // nothing on a free word, so silently ignoring it would hide a typo. ---
+  for (const entry of entries) {
+    if (entry.kind !== "lexeme" && entry.kind !== "concept") {
+      continue;
+    }
+    for (const component of entry.payload.components ?? []) {
+      if (
+        component.entryId !== undefined &&
+        !entryById.has(component.entryId)
+      ) {
+        errors.push(
+          `${entry.id}: dangling component entry reference "${component.entryId}"`,
+        );
+      }
+    }
+    if (
+      entry.kind === "lexeme" &&
+      entry.payload.variants !== undefined &&
+      entry.payload.bound === undefined
+    ) {
+      errors.push(`${entry.id}: "variants" requires "bound"`);
+    }
+  }
+
   return errors;
 }
 
