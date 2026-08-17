@@ -18,10 +18,13 @@ Two of the five rungs the owner named do not exist today. Both turn out to be **
 - A unit's practice session runs easy → hard instead of fully shuffled.
 - A due card is reviewed with a harder exercise as it matures, capped by what its unit actually authored, and never below the retrieval strength review already gives it today.
 - The owner's two missing steps — **pick the foreign word for an English prompt**, and **type the foreign word** — become playable on every Book that is already published, Kyrgyz included, with no content edit.
+- A learner with only a Russian keyboard can type ң, ө and ү — which today they cannot, in exercises that already ship (§9).
+- An author gets the ladder built for them where it is mechanical, and recommended where it is not (§10): a vocabulary unit reaches five of the ten ranks from one press.
 
 ## Non-goals
 
-- **No new task type and no new authored field.** This is the constraint that shapes the whole design: everything below is derived from content that already exists. Plan 0017 decision 5 (schema stays additive for anything a private Book can contain) and 0015 §6a (only non-additive change bumps the schema version) both bite here, and derivation sidesteps both.
+- **No new task type, and exactly one new authored field.** This is the constraint that shapes the whole design: every exercise below is derived from content that already exists. The single exception is §9's optional `domain.extraChars`, which is an input-method fact about a writing system, not content.
+- **No generated content.** §10's wizard builds exercises over items the author already wrote; it never writes a sentence, a gloss or an example, and it never accepts a pedagogical choice on the author's behalf (plan 0007 decision 2). Plan 0017 decision 5 (schema stays additive for anything a private Book can contain) and 0015 §6a (only non-additive change bumps the schema version) both bite here, and derivation sidesteps both.
 - **No per-task or per-Book difficulty override.** Rank is a property of the exercise, read from the table, never authored. An author who wants an easier unit authors easier tasks.
 - **No adaptive engine.** The rung → band mapping is a constant, identical for every learner. Same boundary 0016, 0020 and 0022 §7 each drew: no recommendation, no "which unit needs work" prompt, no per-learner model.
 - **No change to grading, to either scheduler, or to the outcome-list contract.** The ladder chooses *which exercise a card is shown as*; `applyGrade`, `recognizeQuality`, `recallQuality` and the day-granular due dates are untouched.
@@ -84,7 +87,7 @@ Consequences worth stating plainly:
 - **It works on the live Kyrgyz Book as it stands**, and on private Books, which have no republish path at all (0017 decision 5).
 - The price is that an author cannot *choose* to include or exclude the derived steps for one unit. Given the non-goal above (rank is not authored) that price is the design, not a defect — but it is the thing to revisit first if the ladder ever feels wrong on real content.
 
-**Typing a script the learner has no keyboard for.** Plan 0002 left Cyrillic input open and it is still open. Rank 9 is unreachable on a phone with no Kyrgyz keyboard, which would silently cap every Kyrgyz learner's ladder at rank 8. Proposal: `write` accepts **either** `script` **or** `transliteration` for a lexeme, both normalized, and the reveal shows the script. That keeps the rung reachable and still teaches the form; strict-script-only can be a Learning setting later if the owner wants the harder version. Concepts and sentences have no transliteration, so for them the target is exact.
+**Typing a script the learner's keyboard doesn't cover** — see §9. Owner call, 2026-08-17: strict script, no transliteration fallback, plus an app-provided extra-key row. That row is a prerequisite for rank 9 and a fix for exercises that already ship.
 
 ### 4. Bands, not a sorted list — how a unit session uses the ladder
 
@@ -128,7 +131,7 @@ Nothing else changes: `TASK_ALLOWED_ITEM_KINDS`, `TASK_REQUIRED_ASSET` and `TASK
 - Rank lives in a constant table in `packages/schema`.
 - The rung is `SrsState.reps`, already written by 0022's ladder.
 - The rung → band map is a constant.
-- Nothing is persisted, exported, imported or migrated. No `ProgressStore` method, no `bb.*` key, no `CONTENT_SCHEMA_VERSION` bump.
+- Nothing is persisted, exported, imported or migrated. No `ProgressStore` method, no `bb.*` key, no `CONTENT_SCHEMA_VERSION` bump — §9's `extraChars` is optional and additive, so a client that doesn't know it parses the domain unchanged (0015 §6a), and §10 writes only ordinary tasks into an ordinary draft.
 
 This matches the constraint every recent plan has held to (0022's "no new persisted state of any kind"), and it is why the plan can ship in small slices without a migration story.
 
@@ -136,31 +139,78 @@ This matches the constraint every recent plan has held to (0022's "no new persis
 
 0021 §9's Exercises page already offers only the task types a unit can support. It gains one read-only line: which bands this unit currently reaches — `Meet it ✓ · Assemble it ✓ · Produce it —` — so an author can see that a unit tops out at band A before a learner discovers it. Derived steps count, so a unit with a `recall` task already reaches band C. Presentation only; it gates nothing, and a unit that reaches one band stays valid.
 
+### 9. The three letters a Russian keyboard doesn't have
+
+Plan 0002 left this open — "whether Kyrgyz cloze/dictation needs an input-method note or on-screen keyboard is decided when the first Kyrgyz sentence unit is authored". Kyrgyz sentence units have since been authored, so this closes it.
+
+**The answer is strict script — no transliteration fallback — plus an app-provided extra-key row.** The Russian layout is what learners have and is treated as mandatory; the Kyrgyz alphabet is that layout's 33 letters plus exactly three it cannot produce: **ң, ө, ү**.
+
+**This is a live defect, not a cost the new step introduces.** `cloze` and `dictation` already ship and are already auto-graded against the exact script, so any Kyrgyz blank or dictation target containing one of the three is **unanswerable today** — the learner cannot type a correct answer at all, and the grader marks them wrong for it. Rank 9 only makes it more visible. Worth checking the live Kyrgyz Book for such blanks before treating this as theoretical; plan 0008 point 11 already has its cloze blanks flagged for re-authoring, so the two passes can go together.
+
+**The row is data, not a language branch.** `domainSchema` gains one **optional** `extraChars: string[]` — additive, and dropped by non-strict zod parsing on older clients, so it does not bump `CONTENT_SCHEMA_VERSION` (0015 §6a). Where set, the typed-input component (shared by cloze, dictation and `write`) renders those characters as ≥44px keys above the field, inserting at the caret without dismissing the on-screen keyboard. Absent field, no row — the English demo Book is untouched. Turkish would declare `ğ ı ş ç ö ü`, German `ä ö ü ß`, a maths domain `≤ ∈ ∀`.
+
+Deriving the list instead of authoring it was rejected: it needs a per-language model of what a given keyboard already produces, and frequency cannot isolate the three (ө and ү are common in Kyrgyz — vowel harmony puts them everywhere). That is precisely the domain-specific code plan 0023 §9 pins as tier 3, built for one language. The list is tier 1 (content anyone authors) and the key row is tier 2 (generic capability that data activates). The editor can still **suggest** the set by scanning the Book's script inventory and offering the characters outside the gloss language's alphabet; the author confirms it, which is 0023 §7's shape.
+
+**No folding, ever.** `normalizeTypedInput` must never map ң → н or ө → о: they are distinct letters and the distinction is the thing being taught. All three are precomposed codepoints (U+04A3, U+04E9, U+04AF), so NFC does not decompose them and today's normalization is already correct — the rule is written down here so that a future "typing this is too hard" bug report is not fixed by adding a fold. The right answer to a near-miss is presentational: a wrong typed answer highlights the differing characters in the reveal, which teaches the letter instead of hiding it.
+
+### 10. Auto-generated exercises, and the wizard
+
+Authoring a unit today means adding tasks one at a time, from a list of types, with no guidance about which set is enough. The ladder gives the editor something to say — coverage — and most of the generation is mechanical. 0021 §9 already built the hard half: the Exercises page lists only the task types a unit can support, pre-filled with eligible items, because `TASK_ALLOWED_ITEM_KINDS` / `TASK_REQUIRED_ASSET` / `TASK_NEEDS_DISTRACTORS` and validator classes (e)/(f)/(o) make invalid tasks unreachable rather than explained after the fact.
+
+The line this feature must not cross is plan 0007 decision 2: **content selection is pedagogy and is never automated.** So the split is:
+
+**Mechanical — generate it.** Which types a given item set supports, and with which items. For a vocabulary unit (lexemes only) the whole set is mechanical and one tap covers the ladder:
+
+<!-- prettier-ignore -->
+| Generated task | Floor it respects | Ranks it unlocks |
+| --- | --- | --- |
+| `matching` | 2–5 items, no two sharing a prompt text — class (p) | 1 |
+| `recognize` | owning unit has ≥ 4 same-kind items — class (g)/(r) | 2, and **4** derived (§3) |
+| `recall` | none | 8, and **9** derived (§3) |
+
+That is ranks 1, 2, 4, 8 and 9 — the entire non-sentence ladder — from three generated tasks over items the author already wrote. This is why "with vocab it should be pretty easy" is right: the floors are exhaustive tables, so the generator can be total and still never emit an invalid task.
+
+**Pedagogical — suggest it, and wait for a tap.** `scramble` and `build` gate on ≥ 3 tokens (class (q)) and are mechanical, but `cloze` is not: choosing which word to blank is teaching. The wizard proposes blanks — the sentence's tokens that resolve to items in *this unit's own* item list, i.e. the vocabulary the unit exists to teach — and writes `{{c1::…}}` only when the author accepts. Nothing is auto-accepted, which is 0023 §7's rule ("the author's confirm tap is the validation") applied to a second suggestion engine.
+
+**The recommendation speaks in bands, not types.** "This unit stops at *Meet it*; add a recall task to reach *Produce it*" is actionable in a way that a list of eleven type names is not. Coverage is computed per item, not per unit — an item that no task above band A ever touches is the real gap, and a unit can look well-stocked while half its words are only ever recognised.
+
+Rules that keep it safe to press twice:
+
+- **Additive and idempotent.** Existing tasks are never rewritten or deleted; a type already covering an item is skipped. Generated ids follow spec 0018's `${book.code}-<uuid>`.
+- **Assets gate themselves.** `listen` / `picture` / `dictation` / `minimal-pair` are offered only for items that carry the required ref, so a generated task can never dangle (`TASK_REQUIRED_ASSET`, class (n)).
+- **Everything lands in the draft**, subject to the same Publish and the same validation as hand-authored tasks — including private Books, which is where a solo author will actually use this.
+- **Non-goal: no generated _content_.** New sentences, glosses or examples are authoring, not rearranging. This feature only builds exercises over items that already exist. (`ToDo.md`'s "editor flow via AI" is a separate idea and stays separate.)
+
 ## Slices
 
 Each is independently shippable, `pnpm check` green after every one.
 
-1. **The table** — `EXERCISE_RANK` (exhaustive over `TaskType`), the band split, the tie-break and modality tags in `packages/schema/src/entities.ts`, plus tests asserting exhaustiveness and that `shadowing` is unranked. No behaviour change anywhere. Small.
-2. **Unit sessions run easy → hard** — `buildUnitSession` bands (`session.ts:564`); rng-injected tests pinning band order and within-band shuffle. No web change (`countUnitQuestions` is unaffected — ordering does not change counts).
-3. **Produce-direction MCQ** — `sampleMcq`/`buildTaskSession` gain a direction, validator class (h) widened to the prompt side, fixture per the new error. `SessionScreen` unchanged by construction; a browser pass confirms the reversed question renders and grades.
-4. **Typed production (`write`)** — derived from `recall` tasks, reusing the typed-input component and `checkTypedAnswer`; transliteration accepted for lexemes (§3), reveal shows the script.
-5. **Review climbs the ladder** — replace `SENTENCE_REVIEW_TASK_TYPES` with the §5 rule; tests for floor, ceiling-by-rung, availability fallback, and that every existing review case (lexeme, cloze blank, pair, note, sentence) is unchanged at rung 0.
-6. _(optional)_ **Band coverage in the editor** — the one line in 0021 §9's Exercises page.
+1. **Extra-key row** (§9) — optional `domain.extraChars`, key row on the shared typed-input component, no folding in `normalizeTypedInput` (with a test pinning that ң ≠ н). Ships alone and ahead of everything else here: it fixes `cloze`/`dictation` on already-published Kyrgyz content. Needs a Kyrgyz content pass to set the field.
+2. **The table** — `EXERCISE_RANK` (exhaustive over `TaskType`), the band split, the tie-break and modality tags in `packages/schema/src/entities.ts`, plus tests asserting exhaustiveness and that `shadowing` is unranked. No behaviour change anywhere. Small.
+3. **Unit sessions run easy → hard** — `buildUnitSession` bands (`session.ts:564`); rng-injected tests pinning band order and within-band shuffle. No web change (`countUnitQuestions` is unaffected — ordering does not change counts).
+4. **Produce-direction MCQ** — `sampleMcq`/`buildTaskSession` gain a direction, validator class (h) widened to the prompt side, fixture per the new error. `SessionScreen` unchanged by construction; a browser pass confirms the reversed question renders and grades.
+5. **Typed production (`write`)** — derived from `recall` tasks, reusing the typed-input component and `checkTypedAnswer`; strict script, so it depends on slice 1.
+6. **Review climbs the ladder** — replace `SENTENCE_REVIEW_TASK_TYPES` with the §5 rule; tests for floor, ceiling-by-rung, availability fallback, and that every existing review case (lexeme, cloze blank, pair, note, sentence) is unchanged at rung 0.
+7. **Auto-generated exercises** (§10) — the mechanical generator over a unit's items, additive and idempotent, on 0021 §9's Exercises page; band coverage per item as the recommendation's language. Vocabulary units first (the table in §10); the cloze-blank suggester is its own step and ships behind an author confirm.
+8. _(optional)_ **Band coverage line** — the read-only `Meet it ✓ · Assemble it ✓ · Produce it —` summary of §8, if slice 7 hasn't already put it on screen.
 
-Slices 3 and 4 each deliver one of the owner's missing steps and are usable before slice 5 exists (they show up in unit sessions via slice 2's bands); slice 5 is what turns the ladder into a progression over time.
+Slice 1 is independent of the ladder entirely and is worth landing first on its own merits. Slices 4 and 5 each deliver one of the owner's missing steps and are usable before slice 6 exists (they appear in unit sessions via slice 3's bands); slice 6 is what turns the ladder into a progression over time; slice 7 is the authoring half and needs only slice 2.
 
 ## Done-criteria
 
 - Adding a task type to `TASK_TYPES` fails to compile until it is given a rank.
 - A unit session presents band A before band B before band C, with order inside a band still rng-driven.
 - On the live Kyrgyz Book, with no content edit: an English prompt with Kyrgyz options is playable, and typing a word from its English prompt is playable and auto-graded.
+- A Kyrgyz cloze blank or dictation target containing ң/ө/ү can be answered correctly on a device with only a Russian keyboard, and ң typed as н is still graded wrong.
 - A lexeme at rung 0 reviews exactly as it does today; the same lexeme at rung 4 reviews as `write`; failing it returns it to the recall card.
+- A vocabulary unit with 4+ lexemes and zero tasks reaches ranks 1, 2, 4, 8 and 9 from one press, and pressing it twice changes nothing.
 - `pnpm check` green; no `CONTENT_SCHEMA_VERSION` change; no new `bb.*` key; export/import untouched.
 
 ## Open questions
 
 1. **Should a unit session mix directions?** §4 keeps the first pass comprehension-only, so the owner's step 2 first appears in review. The alternative — assign the direction per item within a `recognize` task, so both appear in one session without lengthening it — is closer to what the owner described but picks the harder direction for some items arbitrarily, with no learner state to pick it from. Owner call.
 2. **Does `picture` flip to produce-direction?** Today it is image → English gloss, which tests no foreign form (§2). Flipping it is one line but changes a shipped exercise.
-3. **Strict script, or transliteration accepted, for `write`?** §3 proposes accepting either so the top rung is reachable without a Cyrillic keyboard. The stricter rule is better practice and unreachable for most Kyrgyz learners today; it may want a Learning setting rather than a constant.
-4. **Rung → band constants.** 0–1 / 2–3 / 4+ is a first guess against 0022's `1, 5, 15, 30, 90, 180, 365` ladder — production first asked at the 90-day rung. Under classic SM-2 (still selectable) `reps` is a repetition count, not a rung, and the same mapping reads as "after 4 correct answers", which is coincidentally reasonable but is a different quantity. Worth one deliberate decision rather than an accident.
-5. **Does the ladder belong in Learning settings?** 0022 §8 pinned three global presets under `bb.learning`. A "how fast to push into production" preset would fit there, and would also be the third setting in a row added after a non-goal said no settings.
+3. **Who sets `extraChars` on the live Kyrgyz domain, and when?** Slice 1 is inert until the field is set, and setting it is a content edit on a published Book (§9). Cheapest path is riding along with plan 0008 point 11's cloze re-authoring pass.
+4. **Does the wizard also propose _which items_ a unit should drill hardest?** §10 deliberately stops at "this item never leaves band A". Ranking items by need starts to be a recommendation engine, which every plan since 0016 has refused. Probably no — but it is the natural next ask.
+5. **Rung → band constants.** 0–1 / 2–3 / 4+ is a first guess against 0022's `1, 5, 15, 30, 90, 180, 365` ladder — production first asked at the 90-day rung. Under classic SM-2 (still selectable) `reps` is a repetition count, not a rung, and the same mapping reads as "after 4 correct answers", which is coincidentally reasonable but is a different quantity. Worth one deliberate decision rather than an accident.
+6. **Does the ladder belong in Learning settings?** 0022 §8 pinned three global presets under `bb.learning`. A "how fast to push into production" preset would fit there, and would also be the third setting in a row added after a non-goal said no settings.
