@@ -11,6 +11,7 @@ export * from "./lookup.js";
 export * from "./normalize.js";
 export * from "./noteBlocks.js";
 export * from "./progress.js";
+export * from "./proposeSplit.js";
 export * from "./session.js";
 export * from "./store.js";
 export * from "./streak.js";

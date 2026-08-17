@@ -1,4 +1,7 @@
-import type { Item } from "@betterbeaver/schema";
+import { useState } from "react";
+import type { Component, Item } from "@betterbeaver/schema";
+import { itemSchema } from "@betterbeaver/schema";
+import { proposeSplit } from "@betterbeaver/engine";
 import { type PickerOption, optionsFrom } from "../entityPicker";
 import { EntityPicker, RowActions } from "./fields";
 import {
@@ -230,17 +233,98 @@ export function MorphologyFields({
             />
           </div>
         ))}
-        <button
-          type="button"
-          className="editor-add"
-          onClick={() => setComponents([...components, {}])}
-        >
-          + part
-        </button>
+        <div className="editor-add">
+          <button
+            type="button"
+            onClick={() => setComponents([...components, {}])}
+          >
+            + part
+          </button>
+          {/* No lexicon, no pool to match against, so no button at all
+              (spec 0023-B §3) rather than one that can only ever fail. */}
+          {edit.lexicon !== undefined && (
+            <SuggestBreakdown
+              script={edit.payloadValue(
+                item.id,
+                item.kind === "lexeme" ? "script" : "term",
+              )}
+              entries={edit.lexicon.entries}
+              // The plan's asymmetry — cheap wrong suggestion, expensive
+              // wrong auto-commit — only holds while a proposal cannot
+              // overwrite parts the author already authored.
+              blocked={components.length > 0}
+              onPropose={setComponents}
+            />
+          )}
+        </div>
       </div>
       <ProblemMarker
         problems={edit.fieldProblems(item.id, "payload.components")}
       />
+    </>
+  );
+}
+
+/**
+ * `proposeSplit` (plan 0023 §8) offered to the author, and only to the
+ * author: it lives in the edit surface, so a learner can never reach it and
+ * it needs no flag of its own. The matcher has no morphotactic model, so a
+ * proposal is a draft — it lands in the ordinary components rows, where the
+ * author corrects or deletes it part by part, and it is never applied
+ * without the tap.
+ *
+ * Its own component for its own state: `MorphologyFields` returns early on
+ * the payload kinds that carry no breakdown, so a hook up there would run
+ * conditionally.
+ */
+function SuggestBreakdown({
+  script,
+  entries,
+  blocked,
+  onPropose,
+}: {
+  script: string;
+  /** Raw draft JSON (`LexiconAccess.entries` is `unknown[]`). */
+  entries: unknown[];
+  blocked: boolean;
+  onPropose: (components: Component[]) => void;
+}) {
+  const [missed, setMissed] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        disabled={blocked}
+        title={
+          blocked
+            ? "Clear the parts above first — a suggestion never overwrites a breakdown you authored."
+            : undefined
+        }
+        onClick={() => {
+          // The pool is a working document, where an entry may be half-typed
+          // or not an entry at all; the matcher takes `Item`s, so anything
+          // that does not parse is simply not offerable yet.
+          const pool = entries.flatMap((entry) => {
+            const parsed = itemSchema.safeParse(entry);
+            return parsed.success ? [parsed.data] : [];
+          });
+          const proposal = proposeSplit(script, pool);
+          setMissed(proposal === undefined);
+          if (proposal !== undefined) {
+            onPropose(proposal);
+          }
+        }}
+      >
+        Suggest breakdown
+      </button>
+      {/* Never a dialog and never silence: the same quiet register the
+          problem markers use, since a miss is a fact about the word, not an
+          error the author made. */}
+      {missed && (
+        <span className="problem-marker" role="status">
+          No breakdown found
+        </span>
+      )}
     </>
   );
 }

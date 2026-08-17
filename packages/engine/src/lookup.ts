@@ -1,4 +1,5 @@
 import type { Item } from "@betterbeaver/schema";
+import { pickBest } from "./entryOrder.js";
 import { normalizeToken } from "./normalize.js";
 
 /** The dictionary-form text of an entry, per kind (plan 0006's tap-to-lookup
@@ -21,23 +22,6 @@ function entryText(item: Item): string | undefined {
 
 /** Shortest normalized entry script/term the prefix rule will ever match on (plan 0006, pinned: >= 3 chars). */
 const MIN_PREFIX_LENGTH = 3;
-
-/**
- * Tie-break for multiple equally-good matches (plan 0006, pinned):
- * shipped entries win over learner-created (`user-`-prefixed) ones, then the
- * lowest id lexicographically — deterministic, and the popup's link chips
- * make the runner-up reachable.
- */
-function pickBest(items: Item[]): Item {
-  return [...items].sort((a, b) => {
-    const aUser = a.id.startsWith("user-");
-    const bUser = b.id.startsWith("user-");
-    if (aUser !== bUser) {
-      return aUser ? 1 : -1;
-    }
-    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
-  })[0]!;
-}
 
 /**
  * Resolves a tapped word token against a domain's merged entry pool (plan

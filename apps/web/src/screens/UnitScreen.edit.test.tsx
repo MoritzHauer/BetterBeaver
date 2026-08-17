@@ -623,3 +623,71 @@ describe("the morphology fields behind a word's ⚙", () => {
     expect(screen.queryByRole("button", { name: "+ variant" })).toBeNull();
   });
 });
+
+/**
+ * Spec 0023-B §3: the matcher offered as a button. The edited row is the
+ * first entry, so this lexicon gives it a word the suffix below actually
+ * splits — `MORPHOLOGY_DOMAIN`'s `-луу` carries no `bound`, so it is not a
+ * candidate there at all.
+ */
+const SPLIT_DOMAIN: DomainDocument = {
+  ...DOMAIN,
+  entries: [
+    {
+      id: "dm-e1",
+      kind: "lexeme",
+      sourceRef: "bk-r1",
+      payload: { script: "суулуу", transliteration: "suuluu", gloss: "watery" },
+    },
+    {
+      id: "dm-e2",
+      kind: "lexeme",
+      sourceRef: "bk-r1",
+      payload: {
+        script: "-луу",
+        transliteration: "-luu",
+        gloss: "having",
+        bound: "suffix",
+        variants: ["-луу", "-лүү"],
+      },
+    },
+    {
+      id: "dm-e3",
+      kind: "lexeme",
+      sourceRef: "bk-r1",
+      payload: { script: "суу", transliteration: "suu", gloss: "water" },
+    },
+  ],
+};
+
+describe("the Suggest breakdown button", () => {
+  afterEach(cleanup);
+
+  it("fills the parts from the proposal, then refuses to overwrite them", () => {
+    const writes = renderWithFeedback(SPLIT_DOMAIN);
+    openWordSettings();
+
+    fireEvent.click(screen.getByRole("button", { name: "Suggest breakdown" }));
+    expect(lastPayload(writes).components).toEqual([
+      { text: "суу", gloss: "water", entryId: "dm-e3" },
+      { text: "луу", gloss: "having", entryId: "dm-e2" },
+    ]);
+
+    // An ordinary edit once it lands, so the rows are the author's to fix.
+    expect(screen.getByLabelText("Part 2")).toHaveProperty("value", "луу");
+    const again = screen.getByRole("button", { name: "Suggest breakdown" });
+    expect(again).toHaveProperty("disabled", true);
+    expect(again.getAttribute("title")).toMatch(/Clear the parts/);
+  });
+
+  it("says so quietly when nothing splits, and writes nothing", () => {
+    // No `bound: "suffix"` entry in this lexicon, so there is no candidate to
+    // peel off "суу".
+    const writes = renderWithFeedback(MORPHOLOGY_DOMAIN);
+    openWordSettings();
+
+    fireEvent.click(screen.getByRole("button", { name: "Suggest breakdown" }));
+    expect(screen.getByText("No breakdown found")).toBeTruthy();
+    expect(writes).toHaveLength(0);
+  });
+});
