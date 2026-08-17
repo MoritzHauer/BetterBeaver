@@ -1015,10 +1015,21 @@ input[type="text"] {
  * run together as "оку study"), and the middot between parts joins them
  * rather than being one — it carries no chip border and sits on the text
  * line, not centred against the taller two-line part. */
-.entry-breakdown .chip {
+.entry-breakdown .breakdown-part {
   display: inline-flex;
   flex-direction: column;
   align-items: center;
+  padding: 0.1rem 0.6rem;
+  font-size: 0.8rem;
+}
+
+/* `button.plain` (border/background: none) outranks `.chip` on specificity,
+ * so without this the *tappable* part rendered flat while the inert ones
+ * beside it wore the pill — the affordance exactly backwards, and visible
+ * here in a way it never was for link chips, which are all buttons. */
+.entry-breakdown button.chip {
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
 }
 
 .breakdown-join {

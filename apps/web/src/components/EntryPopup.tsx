@@ -181,18 +181,22 @@ export function EntryPopup({
                         </span>
                       ) : null}
                       {target !== undefined ? (
+                        // `.chip` is the affordance and marks only this
+                        // branch: a part you can follow is the one that gets
+                        // the pill.
                         <button
                           type="button"
-                          className="plain chip"
+                          className="plain chip breakdown-part"
                           onClick={() => openEntry(target.id)}
                         >
                           {component.text}
                           <span className="status">{component.gloss}</span>
                         </button>
                       ) : (
-                        // Inert text, not a disabled button: an unlinked part
-                        // is complete as authored, not a control that failed.
-                        <span className="chip">
+                        // Inert *text*, not a disabled button and not a chip:
+                        // an unlinked part is complete as authored, not a
+                        // control that failed.
+                        <span className="breakdown-part">
                           {component.text}
                           <span className="status">{component.gloss}</span>
                         </span>

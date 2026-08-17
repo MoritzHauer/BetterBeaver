@@ -60,7 +60,7 @@ describe("EntryPopup's morpheme breakdown", () => {
 
   it("renders every part's text and gloss, in reading order", () => {
     renderPopup([WORD, ROOT], WORD.id);
-    const parts = document.querySelectorAll(".entry-breakdown .chip");
+    const parts = document.querySelectorAll(".entry-breakdown .breakdown-part");
     expect([...parts].map((part) => part.textContent)).toEqual([
       "окуstudy",
       "мушagent noun",
@@ -83,7 +83,11 @@ describe("EntryPopup's morpheme breakdown", () => {
     // fall back to a text match.
     expect(screen.queryByRole("button", { name: "мушagent noun" })).toBeNull();
     expect(screen.queryByRole("button", { name: "тууhaving" })).toBeNull();
-    expect(screen.getByText("agent noun").closest("span")).toBeTruthy();
+    expect(
+      screen.getByText("agent noun").closest(".breakdown-part"),
+    ).toBeTruthy();
+    // The pill marks the affordance, so an inert part must not wear one.
+    expect(document.querySelectorAll(".entry-breakdown .chip")).toHaveLength(1);
   });
 
   it("renders the same breakdown for a concept, with no language-specific code", () => {
@@ -109,7 +113,9 @@ describe("EntryPopup's morpheme breakdown", () => {
     };
     renderPopup([disease, cardio], disease.id);
 
-    expect(document.querySelectorAll(".entry-breakdown .chip")).toHaveLength(3);
+    expect(
+      document.querySelectorAll(".entry-breakdown .breakdown-part"),
+    ).toHaveLength(3);
     fireEvent.click(screen.getByRole("button", { name: "cardioheart" }));
     expect(screen.getByRole("heading", { name: /cardio-/ })).toBeTruthy();
   });
