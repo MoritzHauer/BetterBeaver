@@ -1,6 +1,7 @@
 import { CONTENT_SCHEMA_VERSION } from "@betterbeaver/schema";
 import type { BookDocument, DomainDocument } from "@betterbeaver/schema";
 import type { PrivateBookRecord } from "./private-store";
+import { migratePrivateDocuments } from "./private-migrations";
 
 /**
  * Export/import of a single private Book as a standalone `.bbbook` file
@@ -174,7 +175,12 @@ export async function readPrivateBookFile(parsed: unknown): Promise<
   if (!shape.ok) {
     return shape;
   }
-  const bookId = rawBookId(shape.file.book);
+  // The shape check accepts any `schemaVersion <= CONTENT_SCHEMA_VERSION`, so
+  // a file exported from a device still on version 1 arrives here with plan
+  // 0023's pre-rename `components[].script` intact and would validate into a
+  // broken Book. Same normalizer the at-rest read path runs.
+  const file = migratePrivateDocuments(shape.file);
+  const bookId = rawBookId(file.book);
   if (bookId === "") {
     return {
       ok: false,
@@ -182,15 +188,15 @@ export async function readPrivateBookFile(parsed: unknown): Promise<
     };
   }
   const assetEntries = await Promise.all(
-    Object.entries(shape.file.assets ?? {}).map(
+    Object.entries(file.assets ?? {}).map(
       async ([stem, dataUri]) => [stem, await dataUriToBlob(dataUri)] as const,
     ),
   );
   return {
     ok: true,
     bookId,
-    book: shape.file.book,
-    domain: shape.file.domain,
+    book: file.book,
+    domain: file.domain,
     assets: Object.fromEntries(assetEntries),
   };
 }

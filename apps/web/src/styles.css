@@ -1009,6 +1009,24 @@ input[type="text"] {
   background: var(--card-bg);
 }
 
+/* The morpheme breakdown (plan 0023 §6) is a `.chips` row of ordinary chips,
+ * with two things a chip row does not give on its own: each part stacks its
+ * gloss under its text (a `.status` span is inline, so without this the two
+ * run together as "оку study"), and the middot between parts joins them
+ * rather than being one — it carries no chip border and sits on the text
+ * line, not centred against the taller two-line part. */
+.entry-breakdown .chip {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.breakdown-join {
+  align-self: flex-start;
+  padding-top: 0.1rem;
+  opacity: 0.6;
+}
+
 button.speaker {
   font-size: 1.25rem;
   min-height: 2.75rem;
@@ -1587,6 +1605,16 @@ input[type="email"],
   display: flex;
   gap: 0.25rem;
   flex-shrink: 0;
+}
+
+/* One breakdown part (plan 0023 §6) is three stacked fields plus its
+ * move/remove rail, so it can't be an `.editor-list li` flex row like the
+ * allomorph list beside it. The rule is only the separator: without it the
+ * sheet reads as nine unrelated fields rather than three parts. */
+.morphology-part {
+  border-bottom: 1px solid var(--card-border);
+  padding-bottom: 0.4rem;
+  margin-bottom: 0.4rem;
 }
 
 .editor-row-actions .plain {

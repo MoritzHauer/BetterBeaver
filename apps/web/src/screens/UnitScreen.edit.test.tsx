@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type {
@@ -475,5 +476,150 @@ describe("UnitScreen in edit mode", () => {
       screen.getByText(/you can use them, but not change them/),
     ).toBeTruthy();
     expect(document.querySelector("table")).toBeNull();
+  });
+});
+
+/**
+ * Spec 0023-A2 §2: `MorphologyFields`, rendered from `RowExtras`, so the same
+ * three controls reach the Vocabulary row's `⚙` and `SessionEditSheet` at
+ * once. Unlike every test above, these edit *lists*, so a write has to come
+ * back as the next render's document before the following interaction can
+ * see the row it just added — hence the feedback harness rather than
+ * `makeSession`'s record-only `changeDomain`.
+ */
+const MORPHOLOGY_DOMAIN: DomainDocument = {
+  ...DOMAIN,
+  entries: [
+    ...DOMAIN.entries,
+    // Not in the unit's `itemIds`: the part picker's pool is the Book's whole
+    // lexicon, not this unit's rows.
+    {
+      id: "dm-e2",
+      kind: "lexeme",
+      sourceRef: "bk-r1",
+      payload: { script: "-луу", transliteration: "-luu", gloss: "having" },
+    },
+  ],
+};
+
+function renderWithFeedback(domain: DomainDocument): DomainDocument[] {
+  const writes: DomainDocument[] = [];
+  function Harness() {
+    const [current, setCurrent] = useState(domain);
+    const content = build(BOOK, current);
+    const { session } = makeSession();
+    return (
+      <EditSessionProvider
+        value={{
+          ...session,
+          domain: current,
+          content,
+          changeDomain: (next) => {
+            writes.push(next);
+            setCurrent(next);
+          },
+        }}
+      >
+        <UnitScreen
+          content={content}
+          unitId="bk-u1"
+          lookup={lookup}
+          onPractice={() => {}}
+          onRecall={() => {}}
+          onPinNote={() => {}}
+          isNotePinned={async () => false}
+          onBack={() => {}}
+          noteMarkdown={() => undefined}
+        />
+      </EditSessionProvider>
+    );
+  }
+  render(<Harness />);
+  return writes;
+}
+
+/** The edited word's stored payload, off the newest write. */
+function lastPayload(writes: DomainDocument[]): Record<string, unknown> {
+  const entry = writes.at(-1)!.entries[0] as {
+    payload: Record<string, unknown>;
+  };
+  return entry.payload;
+}
+
+function openWordSettings() {
+  goToPage(VOCABULARY);
+  fireEvent.click(screen.getByRole("button", { name: "Word settings" }));
+}
+
+describe("the morphology fields behind a word's ⚙", () => {
+  afterEach(cleanup);
+
+  it("writes bound to the lexicon, and deletes the key when it is cleared", () => {
+    const writes = renderWithFeedback(MORPHOLOGY_DOMAIN);
+    openWordSettings();
+
+    fireEvent.change(screen.getByLabelText("Bound morpheme"), {
+      target: { value: "suffix" },
+    });
+    expect(lastPayload(writes).bound).toBe("suffix");
+
+    // `""` is not one of the enum's members, so "(free-standing word)" has to
+    // remove the key, not store an empty string.
+    fireEvent.change(screen.getByLabelText("Bound morpheme"), {
+      target: { value: "" },
+    });
+    expect("bound" in lastPayload(writes)).toBe(false);
+  });
+
+  it("adds an allomorph, and drops the whole key when the last one goes", () => {
+    const writes = renderWithFeedback(MORPHOLOGY_DOMAIN);
+    openWordSettings();
+
+    fireEvent.click(screen.getByRole("button", { name: "+ variant" }));
+    fireEvent.change(screen.getByLabelText("Allomorph 1"), {
+      target: { value: "-лүү" },
+    });
+    expect(lastPayload(writes).variants).toEqual(["-лүү"]);
+
+    // An empty `variants` would be validator class (ab) — "variants" requires
+    // "bound" — on a free word, with no control left to clear it.
+    fireEvent.click(screen.getByRole("button", { name: "Remove allomorph 1" }));
+    expect("variants" in lastPayload(writes)).toBe(false);
+  });
+
+  it("offers allomorphs on a free word too, so class (ab) stays fixable", () => {
+    renderWithFeedback(MORPHOLOGY_DOMAIN);
+    openWordSettings();
+    expect(screen.getByRole("button", { name: "+ variant" })).toBeTruthy();
+  });
+
+  it("adds a breakdown part with its text, gloss and linked entry", () => {
+    const writes = renderWithFeedback(MORPHOLOGY_DOMAIN);
+    openWordSettings();
+
+    fireEvent.click(screen.getByRole("button", { name: "+ part" }));
+    fireEvent.change(screen.getByLabelText("Part 1"), {
+      target: { value: "луу" },
+    });
+    fireEvent.change(screen.getByLabelText("Part 1 gloss"), {
+      target: { value: "having" },
+    });
+    fireEvent.click(screen.getByRole("radio", { name: "-луу" }));
+
+    expect(lastPayload(writes).components).toEqual([
+      { text: "луу", gloss: "having", entryId: "dm-e2" },
+    ]);
+  });
+
+  it("gives a concept the breakdown but not the lexeme-only fields", () => {
+    renderWithFeedback(MORPHOLOGY_DOMAIN);
+    goToPage(CONCEPTS);
+    fireEvent.click(screen.getByRole("button", { name: "Concept settings" }));
+
+    expect(screen.getByRole("button", { name: "+ part" })).toBeTruthy();
+    // `bound`/`variants` are lexeme-payload fields; offering them would
+    // author keys `conceptPayloadSchema` rejects.
+    expect(screen.queryByLabelText("Bound morpheme")).toBeNull();
+    expect(screen.queryByRole("button", { name: "+ variant" })).toBeNull();
   });
 });
