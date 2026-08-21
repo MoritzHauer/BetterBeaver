@@ -11,6 +11,7 @@ import type { BookDocument, DomainDocument } from "@betterbeaver/schema";
 import type { AuthorDocSummary } from "./backend/supabase";
 import { App } from "./App";
 import { initContentSource } from "./content/source";
+import { installBackTrap } from "./back-trap";
 
 /**
  * Edit mode is a flag on the `book`/`lesson`/`unit` routes, not a screen
@@ -111,6 +112,11 @@ async function openMenu(): Promise<void> {
 describe("edit mode as a route flag", () => {
   beforeEach(() => {
     localStorage.clear();
+    // The `popstate` listener lives in `back-trap.ts` and is installed by
+    // `main.tsx` before `App` mounts, so a test that presses hardware back
+    // has to compose it the same way (idempotent, so once per file is
+    // enough).
+    installBackTrap();
     lexiconLoadFails = false;
     maintained.clear();
     maintained.add("topic:demo");
