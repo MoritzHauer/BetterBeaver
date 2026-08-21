@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { Item } from "@betterbeaver/schema";
-import { proposeSplit } from "./proposeSplit.js";
+import { proposeSplits } from "./proposeSplit.js";
 
 /** A free-standing word: no `bound`, so it can be a root. */
 function stem(id: string, script: string, gloss: string): Item {
@@ -57,12 +57,26 @@ const AFFIXES = [
 
 const ENTRIES = [...STEMS, ...AFFIXES];
 
+/** The best candidate, or `undefined` when nothing decomposed — every test
+ * below that predates slice B2 is about the split an author is offered
+ * first, which is now `[0]` of a ranked list rather than a lone answer. */
+function proposeSplit(word: string, entries: Item[]) {
+  return proposeSplits(word, entries)[0];
+}
+
 /** A split as `part·part·part`, or `undefined` — the shape the entry popup
  * renders, which is what the table below is about. */
 function splitOf(word: string, entries: Item[] = ENTRIES): string | undefined {
   return proposeSplit(word, entries)
     ?.map((part) => part.text)
     .join("·");
+}
+
+/** Every candidate as `part·part`, in rank order. */
+function splitsOf(word: string, entries: Item[] = ENTRIES): string[] {
+  return proposeSplits(word, entries).map((split) =>
+    split.map((part) => part.text).join("·"),
+  );
 }
 
 describe("proposeSplit", () => {
@@ -152,5 +166,62 @@ describe("proposeSplit", () => {
 
   it("returns undefined with no entries at all", () => {
     expect(splitOf("балалар", [])).toBeUndefined();
+  });
+
+  // --- slice B2 (plan 0023 §8a): the search, and the ranked list ---
+
+  it("keeps a split whose stem itself ends in a suffix form", () => {
+    // The regression B2 exists for. Greedy peeling took `-луу`, then took
+    // `-уу` off the *stem* `суу`, leaving `с` — not a free entry, so the
+    // all-or-nothing rule threw away a word that decomposes fine.
+    const withUu = [...ENTRIES, affix("ky-sfx-uu", "-уу", "verbal noun", [])];
+    expect(splitOf("суулуу", withUu)).toBe("суу·луу");
+  });
+
+  it("offers the deeper analysis too, ranked under the shallower one", () => {
+    const withUu = [...ENTRIES, affix("ky-sfx-uu", "-уу", "verbal noun", [])];
+    // `с` is a stem here, so `с·уу·луу` is a real candidate — and still the
+    // runner-up, because fewest parts wins.
+    const pool = [...withUu, stem("ky-e-s", "с", "the letter es")];
+    expect(splitsOf("суулуу", pool)).toEqual(["суу·луу", "с·уу·луу"]);
+  });
+
+  it("ranks a longer root first when two candidates have the same part count", () => {
+    const pool = [
+      ...ENTRIES,
+      stem("ky-e-bal", "бал", "honey"),
+      affix("ky-sfx-alar", "-алар", "made up", []),
+    ];
+    // `бала·лар` and `бал·алар` both split in two; the longer root wins.
+    expect(splitsOf("балалар", pool)).toEqual(["бала·лар", "бал·алар"]);
+  });
+
+  it("ranks the same way whatever order the pool arrives in", () => {
+    const pool = [
+      ...ENTRIES,
+      stem("ky-e-bal", "бал", "honey"),
+      affix("ky-sfx-alar", "-алар", "made up", []),
+    ];
+    expect(splitsOf("балалар", [...pool].reverse())).toEqual(
+      splitsOf("балалар", pool),
+    );
+  });
+
+  it("returns one candidate when the word decomposes one way, none when it doesn't", () => {
+    expect(proposeSplits("ишчи", ENTRIES)).toHaveLength(1);
+    expect(proposeSplits("китепчи", ENTRIES)).toEqual([]);
+  });
+
+  it("terminates on a word built of nothing but stacked suffixes", () => {
+    // The depth cap is a guard: this must return, not hang.
+    const word = "бала" + "лар".repeat(9);
+    expect(() => proposeSplits(word, ENTRIES)).not.toThrow();
+    expect(proposeSplits(word, ENTRIES).length).toBeLessThanOrEqual(5);
+  });
+
+  it("does not repeat a candidate when an affix lists its own script as an allomorph", () => {
+    // `-лар` is both the citation form and the first `variants` entry, which
+    // is how slice D's table writes every row.
+    expect(splitsOf("балалар")).toEqual(["бала·лар"]);
   });
 });

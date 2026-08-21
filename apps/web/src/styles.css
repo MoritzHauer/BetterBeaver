@@ -1618,6 +1618,27 @@ input[type="email"],
   flex-shrink: 0;
 }
 
+/* The chooser plan 0023 §8a puts under "Suggest breakdown" when the search
+ * finds more than one decomposition: a plain list of candidate splits, each
+ * one tap. No bullets and no indent — the rows are controls, not prose. */
+.split-choices {
+  list-style: none;
+  /* Its container is `.editor-add`, a wrapping flex row of controls; without
+   * a full-width basis the candidates get squeezed into a narrow column
+   * beside "Suggest breakdown" instead of sitting under it. */
+  flex: 1 0 100%;
+  margin: 0.1rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.split-choices button.chip {
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+}
+
 /* One breakdown part (plan 0023 §6) is three stacked fields plus its
  * move/remove rail, so it can't be an `.editor-list li` flex row like the
  * allomorph list beside it. The rule is only the separator: without it the

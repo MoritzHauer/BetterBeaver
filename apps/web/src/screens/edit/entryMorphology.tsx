@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { Component, Item } from "@betterbeaver/schema";
 import { itemSchema } from "@betterbeaver/schema";
-import { proposeSplit } from "@betterbeaver/engine";
+import { proposeSplits } from "@betterbeaver/engine";
 import { type PickerOption, optionsFrom } from "../entityPicker";
 import { EntityPicker, RowActions } from "./fields";
 import {
@@ -266,12 +266,18 @@ export function MorphologyFields({
 }
 
 /**
- * `proposeSplit` (plan 0023 §8) offered to the author, and only to the
+ * `proposeSplits` (plan 0023 §8, §8a) offered to the author, and only to the
  * author: it lives in the edit surface, so a learner can never reach it and
  * it needs no flag of its own. The matcher has no morphotactic model, so a
  * proposal is a draft — it lands in the ordinary components rows, where the
- * author corrects or deletes it part by part, and it is never applied
- * without the tap.
+ * author corrects or deletes it part by part.
+ *
+ * One candidate applies on the tap that asked for it. **Several apply
+ * nothing**: they render as a chooser, and the author picks. That is what
+ * keeps §8's asymmetry — cheap wrong suggestion, expensive wrong
+ * auto-commit — intact now that the search returns a ranked list rather than
+ * one answer: ranking is allowed to be imperfect precisely because the
+ * runner-up is one tap away instead of lost.
  *
  * Its own component for its own state: `MorphologyFields` returns early on
  * the payload kinds that carry no breakdown, so a hook up there would run
@@ -290,6 +296,13 @@ function SuggestBreakdown({
   onPropose: (components: Component[]) => void;
 }) {
   const [missed, setMissed] = useState(false);
+  const [choices, setChoices] = useState<Component[][]>([]);
+
+  const apply = (split: Component[]) => {
+    setChoices([]);
+    onPropose(split);
+  };
+
   return (
     <>
       <button
@@ -308,10 +321,11 @@ function SuggestBreakdown({
             const parsed = itemSchema.safeParse(entry);
             return parsed.success ? [parsed.data] : [];
           });
-          const proposal = proposeSplit(script, pool);
-          setMissed(proposal === undefined);
-          if (proposal !== undefined) {
-            onPropose(proposal);
+          const splits = proposeSplits(script, pool);
+          setMissed(splits.length === 0);
+          setChoices(splits.length > 1 ? splits : []);
+          if (splits.length === 1) {
+            onPropose(splits[0]!);
           }
         }}
       >
@@ -324,6 +338,21 @@ function SuggestBreakdown({
         <span className="problem-marker" role="status">
           No breakdown found
         </span>
+      )}
+      {choices.length > 0 && (
+        <ul className="split-choices" aria-label="Suggested breakdowns">
+          {choices.map((split) => (
+            <li key={split.map((part) => part.entryId ?? part.text).join("|")}>
+              <button
+                type="button"
+                className="plain chip"
+                onClick={() => apply(split)}
+              >
+                {split.map((part) => part.text).join(" · ")}
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
     </>
   );

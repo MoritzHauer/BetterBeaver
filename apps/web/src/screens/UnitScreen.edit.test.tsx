@@ -660,6 +660,33 @@ const SPLIT_DOMAIN: DomainDocument = {
   ],
 };
 
+/** The same pool plus a `-уу` suffix and a one-letter stem, so "суулуу"
+ * decomposes two ways — the case plan 0023 §8a's chooser exists for. */
+const AMBIGUOUS_DOMAIN: DomainDocument = {
+  ...SPLIT_DOMAIN,
+  entries: [
+    ...SPLIT_DOMAIN.entries,
+    {
+      id: "dm-e4",
+      kind: "lexeme",
+      sourceRef: "bk-r1",
+      payload: {
+        script: "-уу",
+        transliteration: "-uu",
+        gloss: "verbal noun",
+        bound: "suffix",
+        variants: ["-уу"],
+      },
+    },
+    {
+      id: "dm-e5",
+      kind: "lexeme",
+      sourceRef: "bk-r1",
+      payload: { script: "с", transliteration: "s", gloss: "the letter es" },
+    },
+  ],
+};
+
 describe("the Suggest breakdown button", () => {
   afterEach(cleanup);
 
@@ -689,5 +716,36 @@ describe("the Suggest breakdown button", () => {
     fireEvent.click(screen.getByRole("button", { name: "Suggest breakdown" }));
     expect(screen.getByText("No breakdown found")).toBeTruthy();
     expect(writes).toHaveLength(0);
+  });
+
+  it("offers a chooser and writes nothing when the word splits several ways", () => {
+    const writes = renderWithFeedback(AMBIGUOUS_DOMAIN);
+    openWordSettings();
+
+    fireEvent.click(screen.getByRole("button", { name: "Suggest breakdown" }));
+
+    // Nothing is applied: with more than one candidate the tap that asked for
+    // a suggestion is not a tap that chose one (plan 0023 §8a).
+    expect(writes).toHaveLength(0);
+    const chooser = screen.getByLabelText("Suggested breakdowns");
+    expect(
+      [...chooser.querySelectorAll("button")].map((b) => b.textContent),
+    ).toEqual(["суу · луу", "с · уу · луу"]);
+  });
+
+  it("writes the candidate that was tapped, not the first one", () => {
+    const writes = renderWithFeedback(AMBIGUOUS_DOMAIN);
+    openWordSettings();
+
+    fireEvent.click(screen.getByRole("button", { name: "Suggest breakdown" }));
+    fireEvent.click(screen.getByRole("button", { name: "с · уу · луу" }));
+
+    expect(lastPayload(writes).components).toEqual([
+      { text: "с", gloss: "the letter es", entryId: "dm-e5" },
+      { text: "уу", gloss: "verbal noun", entryId: "dm-e4" },
+      { text: "луу", gloss: "having", entryId: "dm-e2" },
+    ]);
+    // The chooser is spent once it has been used.
+    expect(screen.queryByLabelText("Suggested breakdowns")).toBeNull();
   });
 });

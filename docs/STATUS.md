@@ -27,7 +27,7 @@ One line per plan, plus what deliberately doesn't exist yet. Update when a plan 
 | [0020 Daily-flow automation](plans/0020-daily-flow-automation.md) | designed + implemented 2026-07-28 — [notes](CHANGELOG.md#0020-daily-flow-automation) |
 | [0021 In-place editing](plans/0021-in-place-editing.md) | designed 2026-07-31 — all 14 slices implemented 2026-08-06; two §14 done-criteria unmet, awaiting an owner call (backlog 8) — [notes](CHANGELOG.md#0021-in-place-editing) |
 | [0022 Scheduling ladder & review flow](plans/0022-scheduling-and-review-flow.md) | designed 2026-08-05 + implemented 2026-08-12 — all five slices, browser-verified; see the plan's "Implementation notes" for the four decisions the design left open — [notes](CHANGELOG.md#0022-scheduling-ladder-review-flow) |
-| [0023 Morpheme decomposition](plans/0023-morpheme-decomposition.md) | drafted 2026-08-05 — slices **A1, A2 and B implemented 2026-08-17**, browser-verified; **D (the ~150-entry Kyrgyz suffix table) not started and blocked on backend credentials**, C is its own plan. The §7 republish + seed re-export have not run — see the handoff item below — [notes](CHANGELOG.md#0023-morpheme-decomposition) |
+| [0023 Morpheme decomposition](plans/0023-morpheme-decomposition.md) | drafted 2026-08-05 — slices **A1, A2, B and B2 implemented 2026-08-17**, browser-verified; **D (the ~150-entry Kyrgyz suffix table) not started and blocked on backend credentials**, C is its own plan. The §7 republish + seed re-export have not run — see the handoff item below — [notes](CHANGELOG.md#0023-morpheme-decomposition) |
 
 ## Works today
 
