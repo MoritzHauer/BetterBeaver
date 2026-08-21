@@ -1355,6 +1355,13 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   // root does nothing. Leaving an installed app is Home or the app switcher,
   // and in a browser tab it costs the back button on this one site — a real
   // price, paid deliberately, and cheap next to a black screen.
+  // The last link in the boot chain the diary records (boot → content-ready →
+  // app-mounted): between them they say how far a launch got before it went
+  // dark, which a screenshot of a black screen cannot.
+  useEffect(() => {
+    recordNav("app-mounted");
+  }, []);
+
   useEffect(() => {
     function onPopState() {
       const goBack = backActionRef.current;

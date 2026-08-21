@@ -34,6 +34,27 @@ export function armBackTrap(): void {
   }
 }
 
+/**
+ * Arms the trap **at module load and keeps it armed**, independent of React.
+ *
+ * This is the half that was missing, and it is why the owner's nav diary
+ * showed thirteen boots and not one back press: the arming used to live in an
+ * `App` effect, which does not run until `initContentSource()` has resolved
+ * and React has rendered. A boot that stalls therefore leaves the app with no
+ * trap at all, so the next back press exits it outright — and the relaunch
+ * stalls the same way. The trap has to exist before the app does.
+ *
+ * `App` still listens for itself: this handler only keeps the history topped
+ * up, while `App`'s runs the current screen's back action. Both call
+ * `armBackTrap`, which is idempotent, so the order between them is free.
+ */
+export function installBackTrap(): void {
+  armBackTrap();
+  window.addEventListener("popstate", () => {
+    armBackTrap();
+  });
+}
+
 /** True when the app runs as an installed PWA rather than in browser chrome.
  * No longer gates the trap — it turned out not to be reliable enough on the
  * one device that matters (see `docs/STATUS.md`, 2026-08-21) — but it is
