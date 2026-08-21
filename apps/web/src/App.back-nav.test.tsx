@@ -2,46 +2,43 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { App } from "./App";
 import { initContentSource } from "./content/source";
-import { trapDepth } from "./back-trap";
-import { readNavDiary } from "./nav-diary";
+import { backActionRef, installBackTrap, isTrapArmed } from "./back-trap";
 
 /**
- * Guards the hardware-back trap (`App.tsx`, "Mobile back button / edge-swipe
- * fix", and `back-trap.ts`). The rule is now one line: **the history is
- * always guarded, on every screen, in every display mode.**
- *
- * It got there by elimination. Version one released the pop at any root
- * screen and the next back walked off the app's own entry. Version two
- * released it only when the app was not detected as installed, and the phone
- * still went black from every screen — including the cover, where the handler
- * runs no React code at all, so nothing but the document going away can
- * explain it. Both versions were "verified" in a desktop browser that agreed
- * with them, which is why these tests assert the invariant (depth) rather
- * than the mechanism, and why the diary entry is part of the contract: the
- * next disagreement has to leave evidence on the device.
- *
- * `replaceState` models a consumed trap directly, and a dispatched `popstate`
- * models the press — jsdom emulates neither cross-entry navigation nor the
- * hardware button.
+ * `App`'s half of hardware back: publishing the current screen's back action
+ * into `backActionRef`, and clearing it when it goes away. The history entry
+ * and the listener belong to `back-trap.ts` and are tested there — this
+ * models what `main.tsx` does by installing the trap first, because that
+ * order is the fix: the guard exists before the app that uses it.
  */
-describe("App hardware-back trap", () => {
+describe("App hardware-back wiring", () => {
   beforeEach(() => {
     localStorage.clear();
     window.history.replaceState(null, "");
+    backActionRef.current = null;
+    installBackTrap();
   });
   afterEach(cleanup);
 
-  it("guards the history on the very first screen", async () => {
+  it("guards the history before the app has rendered anything", () => {
+    // `installBackTrap` already ran, as it does at module load in main.tsx.
+    // Nothing below this line needs the app to have started.
+    expect(isTrapArmed()).toBe(true);
+  });
+
+  it("publishes no back action on the cover, and one once inside", async () => {
     const contentInit = await initContentSource();
     render(<App contentInit={contentInit} />);
 
-    // The cover has no back action of its own, and is still guarded: this is
-    // exactly the case both earlier versions left open.
     await screen.findByText("Get Started");
-    await waitFor(() => expect(trapDepth()).toBe(2));
+    expect(backActionRef.current).toBeNull();
+
+    screen.getByText("Get Started").click();
+    await screen.findByText("BetterBeaver");
+    await waitFor(() => expect(backActionRef.current).not.toBeNull());
   });
 
-  it("keeps the guard through a navigation and a back press", async () => {
+  it("walks up a screen on a back press, leaving the trap armed", async () => {
     const contentInit = await initContentSource();
     render(<App contentInit={contentInit} />);
 
@@ -50,44 +47,27 @@ describe("App hardware-back trap", () => {
     await screen.findByText("BetterBeaver");
     screen.getByRole("button", { name: "Settings" }).click();
     await screen.findByRole("heading", { name: "Settings" });
-    await waitFor(() => expect(trapDepth()).toBe(2));
 
-    // A press consumes one entry; the handler must top it straight back up
-    // without waiting for a commit, since a root pop produces no commit.
-    window.history.replaceState({ backTrap: true, depth: 1 }, "");
-    window.dispatchEvent(new PopStateEvent("popstate"));
-    expect(trapDepth()).toBe(2);
-
-    // And the same when the trap was consumed entirely.
     window.history.replaceState(null, "");
     window.dispatchEvent(new PopStateEvent("popstate"));
-    expect(trapDepth()).toBe(2);
+
+    await screen.findByText("BetterBeaver");
+    expect(isTrapArmed()).toBe(true);
   });
 
-  it("re-arms after a commit that finds the guard gone", async () => {
+  it("keeps publishing across a re-render, as StrictMode's remount does", async () => {
     const contentInit = await initContentSource();
-    render(<App contentInit={contentInit} />);
+    const { rerender } = render(<App contentInit={contentInit} />);
+
     await screen.findByText("Get Started");
-
-    window.history.replaceState(null, "");
-    expect(trapDepth()).toBe(0);
-
     screen.getByText("Get Started").click();
     await screen.findByText("BetterBeaver");
-    await waitFor(() => expect(trapDepth()).toBe(2));
-  });
+    await waitFor(() => expect(backActionRef.current).not.toBeNull());
 
-  it("records every back press in the nav diary", async () => {
-    const contentInit = await initContentSource();
-    render(<App contentInit={contentInit} />);
-    await screen.findByText("Get Started");
-
-    window.dispatchEvent(new PopStateEvent("popstate"));
-
-    const entries = readNavDiary().filter((entry) => entry.event === "back");
-    expect(entries).toHaveLength(1);
-    // Whether a back action ran is the fact that tells a black screen at the
-    // cover (no handler, so the pop escaped) apart from one deeper in.
-    expect(entries[0]?.detail).toContain("handled=false");
+    // An unmount cleanup clearing the ref would be run by StrictMode's dev
+    // remount with no render after it, leaving hardware back dead. The ref
+    // is published during render, so it must survive effects re-running.
+    rerender(<App contentInit={contentInit} />);
+    expect(backActionRef.current).not.toBeNull();
   });
 });

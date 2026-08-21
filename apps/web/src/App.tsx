@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ReactElement } from "react";
 import type {
   BookDocument,
@@ -72,7 +72,7 @@ import { SessionEditSheet } from "./screens/edit/SessionEditSheet";
 import { PrivacyScreen } from "./screens/PrivacyScreen";
 import { ImpressumScreen } from "./screens/ImpressumScreen";
 import { AboutScreen } from "./screens/AboutScreen";
-import { armBackTrap, trapDepth } from "./back-trap";
+import { backActionRef } from "./back-trap";
 import { recordNav } from "./nav-diary";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { StatsScreen } from "./screens/StatsScreen";
@@ -862,7 +862,6 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   useEffect(() => setSessionEdit(null), [screen]);
   // Holds whatever handler the currently rendered screen would run on its
   // own back button (null at the root, where back should exit normally).
-  const backActionRef = useRef<(() => void) | null>(null);
   // Signed-in users get ✎ Edit buttons on the book/lesson/unit screens
   // (plan 0012). Which documents they actually maintain decides where those
   // buttons land: their own open in maintain mode, everything else in
@@ -1336,56 +1335,25 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     }
   }
 
-  // Mobile back button / edge-swipe fix: without any history.pushState calls
-  // the browser has nothing to pop, so a hardware/gesture back exits the app
-  // entirely instead of moving up a level. `backActionRef` always holds the
-  // same handler as the currently rendered screen's visible back (or
-  // done/cancel) button, and `back-trap.ts` keeps a small stack of history
-  // entries of our own that a back press lands on instead of leaving.
+  // Hardware back / edge-swipe: every screen below publishes its visible
+  // Back (or done/cancel) action into `backActionRef` during render, and
+  // `back-trap.ts` — installed by `main.tsx` before this component exists —
+  // owns the history entry and the `popstate` listener that runs it. The
+  // arming deliberately does not live here: an effect cannot run until the
+  // boot resolves, and a stalled boot is exactly when the guard is needed.
   //
-  // **The trap is unconditional** (third attempt at this bug, 2026-08-21).
-  // The two previous versions each let some pop through — the first at every
-  // root screen, the second at a root screen when the app was not detected as
-  // an installed PWA — and on the owner's phone back still went black from
-  // every screen, cover included. At the cover this handler runs no React
-  // code at all, so a black screen there can only mean the document itself
-  // went away: the pop escaped. Rather than keep betting on which pop is safe
-  // to release and on `display-mode` being reported the way the spec says,
-  // nothing is released. Back inside the app moves up a screen; back at the
-  // root does nothing. Leaving an installed app is Home or the app switcher,
-  // and in a browser tab it costs the back button on this one site — a real
-  // price, paid deliberately, and cheap next to a black screen.
+  // Nothing clears the ref on unmount, deliberately. An unmount cleanup would
+  // be run by StrictMode's dev remount (effect → cleanup → effect, with no
+  // render in between to republish) and leave hardware back dead until the
+  // next commit. `App` is mounted once for the life of the document, so the
+  // only unmount is a test's, and those reset the ref themselves.
+
   // The last link in the boot chain the diary records (boot → content-ready →
   // app-mounted): between them they say how far a launch got before it went
   // dark, which a screenshot of a black screen cannot.
   useEffect(() => {
     recordNav("app-mounted");
   }, []);
-
-  useEffect(() => {
-    function onPopState() {
-      const goBack = backActionRef.current;
-      recordNav(
-        "back",
-        `handled=${goBack !== null} depth=${trapDepth()} len=${history.length}`,
-      );
-      if (goBack !== null) {
-        goBack();
-      }
-      // Re-armed synchronously rather than left to the commit effect below:
-      // a pop that ran no back action produces no commit at all.
-      armBackTrap();
-    }
-    window.addEventListener("popstate", onPopState);
-    return () => window.removeEventListener("popstate", onPopState);
-  }, []);
-
-  // Arms after every commit — including the first, which is why mounting no
-  // longer pushes one of its own. Idempotent (it tops up to a fixed depth),
-  // so a commit that changes no screen pushes nothing.
-  useEffect(() => {
-    armBackTrap();
-  });
 
   useEffect(() => {
     if (!("source" in contentSourceResult)) {
