@@ -1,14 +1,16 @@
-import { LegalLinks } from "../components/LegalLinks";
+import { FooterLinks } from "../components/FooterLinks";
 
 /** Welcome cover (plan 0009): mascot, title, tagline, one button. Carries the
- * legal links too — it is the first screen of every session, so it is where
+ * footer links too — it is the first screen of every session, so it is where
  * "ständig verfügbar" starts. */
 export function StartScreen({
   onStart,
+  onAbout,
   onImpressum,
   onPrivacy,
 }: {
   onStart: () => void;
+  onAbout: () => void;
   onImpressum: () => void;
   onPrivacy: () => void;
 }) {
@@ -24,7 +26,11 @@ export function StartScreen({
       <button type="button" className="primary start-button" onClick={onStart}>
         Get Started
       </button>
-      <LegalLinks onImpressum={onImpressum} onPrivacy={onPrivacy} />
+      <FooterLinks
+        onAbout={onAbout}
+        onImpressum={onImpressum}
+        onPrivacy={onPrivacy}
+      />
     </div>
   );
 }

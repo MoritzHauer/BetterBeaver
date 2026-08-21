@@ -71,6 +71,7 @@ import type { EditTarget } from "./screens/edit/types";
 import { SessionEditSheet } from "./screens/edit/SessionEditSheet";
 import { PrivacyScreen } from "./screens/PrivacyScreen";
 import { ImpressumScreen } from "./screens/ImpressumScreen";
+import { AboutScreen } from "./screens/AboutScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { StatsScreen } from "./screens/StatsScreen";
 import { LessonSummaryScreen } from "./screens/LessonSummaryScreen";
@@ -176,12 +177,46 @@ type Screen =
   // the one link that isn't the footer (AuthorScreen's "privacy note").
   | { screen: "privacy"; back?: Screen }
   | { screen: "impressum" }
+  // About / app info (version, source, contact), reached from the same footer
+  // row as the legal pages and from Settings — hence `back`, which is the
+  // only thing that tells those two entry points apart.
+  | { screen: "about"; back?: Screen }
   // Learner settings and stats (reached from the home top bar); both are
   // back-button screens over on-device state.
   | { screen: "settings" }
   | { screen: "stats" };
 
 type ContentSourceResult = { source: ContentSource } | { errors: string[] };
+
+/** The history entry the hardware-back trap parks on (see the effects in
+ * `App`). One marker for the whole app: there is never more than one trap
+ * entry, so the state only has to say "this entry is ours". */
+const BACK_TRAP = { backTrap: true };
+
+/** Pushes the trap entry unless it is already the current one. Guarded
+ * because the arming effect runs after *every* commit and an unguarded push
+ * would grow the history by one entry per render. */
+function armBackTrap(): void {
+  const state = window.history.state as { backTrap?: boolean } | null;
+  if (state?.backTrap !== true) {
+    window.history.pushState(BACK_TRAP, "");
+  }
+}
+
+/** True when the app is running as an installed PWA rather than in browser
+ * chrome — the case where popping past our own entry lands on the launcher's
+ * blank document instead of a real previous page. `display-mode: standalone`
+ * covers the Android/desktop install (the manifest asks for no other mode);
+ * `navigator.standalone` is iOS's pre-standard equivalent, which Safari still
+ * reports for a home-screen install. */
+function isStandalone(): boolean {
+  const iosStandalone = (window.navigator as { standalone?: boolean })
+    .standalone;
+  return (
+    iosStandalone === true ||
+    window.matchMedia("(display-mode: standalone)").matches
+  );
+}
 
 const progressStore = createLocalStorageProgressStore();
 
@@ -1334,34 +1369,44 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   // entirely instead of moving up a level. `backActionRef` always holds the
   // same handler as the currently rendered screen's visible back (or
   // done/cancel) button; a single trap entry, refilled after every pop,
-  // routes hardware back through it. At the root screen the ref is null, so
-  // the pop is left alone and back behaves like a normal exit.
+  // routes hardware back through it.
+  //
+  // What happens at a *root* screen (`backActionRef` null — the cover) is the
+  // whole subtlety, and the 2026-07-26 fix got it half right. Letting that
+  // pop through is correct in a browser tab: the entry underneath is whatever
+  // page the visitor came from, and leaving the site is what back means
+  // there. In an **installed PWA it is not** — the entry underneath the
+  // launch entry is the launcher's own blank document, so back walked out of
+  // the app into a white page with no content and no way forward but a
+  // restart (the reported Android bug; also why the earlier fix's symptom was
+  // `about:blank`). So in standalone display mode the trap is kept armed at
+  // all times, root included: back at the cover does nothing, and you leave
+  // an installed app the way Android expects — Home, or the app switcher.
+  const trapAtRoot = isStandalone();
+
   useEffect(() => {
-    window.history.pushState({ backTrap: true }, "");
     function onPopState() {
       const goBack = backActionRef.current;
       if (goBack !== null) {
         goBack();
-        window.history.pushState({ backTrap: true }, "");
+      }
+      // Re-armed synchronously rather than left to the commit effect below:
+      // a pop that ran no back action produces no commit at all, and a fast
+      // second press must never find the history unguarded.
+      if (goBack !== null || trapAtRoot) {
+        armBackTrap();
       }
     }
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, []);
+  }, [trapAtRoot]);
 
-  // Re-arms the trap after every commit, because the handler above doesn't
-  // refill the one pop it lets through: at the root the ref is null, so that
-  // pop consumes the trap entry and nothing replaces it. Navigating back into
-  // the app afterwards then left the app with nothing to pop, and the next
-  // hardware back walked off the app's own history entry — the reported
-  // "back lands on a blank page and you have to restart". Guarded on the ref
-  // so the root screen keeps its exit-the-app pop: no back action, no trap.
+  // Arms the trap after every commit — including the first, which is why
+  // mounting no longer pushes one of its own. Idempotent (it checks the
+  // current entry first), so only a screen change or a consumed trap pushes.
   useEffect(() => {
-    if (
-      backActionRef.current !== null &&
-      (window.history.state as { backTrap?: boolean } | null)?.backTrap !== true
-    ) {
-      window.history.pushState({ backTrap: true }, "");
+    if (backActionRef.current !== null || trapAtRoot) {
+      armBackTrap();
     }
   });
 
@@ -1688,6 +1733,12 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     backActionRef.current = onBack;
     return <ImpressumScreen onBack={onBack} />;
   }
+  if (screen.screen === "about") {
+    const back = screen.back ?? { screen: "books" as const };
+    const onBack = () => setScreen(back);
+    backActionRef.current = onBack;
+    return <AboutScreen onBack={onBack} />;
+  }
   if (screen.screen === "privacy") {
     const back = screen.back ?? { screen: "books" as const };
     const onBack = () => setScreen(back);
@@ -1700,6 +1751,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     return (
       <StartScreen
         onStart={() => setStarted(true)}
+        onAbout={() => setScreen({ screen: "about" })}
         onImpressum={() => setScreen({ screen: "impressum" })}
         onPrivacy={() => setScreen({ screen: "privacy" })}
       />
@@ -1794,6 +1846,12 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     return (
       <SettingsScreen
         onBack={onBack}
+        onAbout={() =>
+          // Pinned back: About is a detour from Settings, so Back has to
+          // return here rather than to home (the footer-row entry points
+          // keep the default).
+          setScreen({ screen: "about", back: { screen: "settings" } })
+        }
         onSignIn={() => setScreen({ screen: "author" })}
         onImportBook={importDocuments}
         importPrivateBook={contentInit.importPrivateBook}
@@ -1887,6 +1945,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           onAuthor={() => setScreen({ screen: "author" })}
           onOpenStats={() => setScreen({ screen: "stats" })}
           onOpenSettings={() => setScreen({ screen: "settings" })}
+          onAbout={() => setScreen({ screen: "about" })}
           onImpressum={() => setScreen({ screen: "impressum" })}
           onPrivacy={() => setScreen({ screen: "privacy" })}
         />

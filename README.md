@@ -11,7 +11,11 @@ Kyrgyz, or point it at any subject you like.
 
 No cramming, no guilt trips. Just small, well-timed reviews that stick.
 
-**Try it:** [moritzhauer.github.io/BetterBeaver](https://moritzhauer.github.io/BetterBeaver/)
+**Try it:** [betterbeaver.de](https://betterbeaver.de) — it installs as a PWA and
+works offline once a Book is downloaded.
+
+Still in beta (0.x): the version is shown in the app under About, next to the
+build it was deployed from.
 
 ## Documentation
 
@@ -26,6 +30,14 @@ corepack pnpm install
 corepack pnpm check
 corepack pnpm dev
 ```
+
+## Releases
+
+Versions are `0.MINOR.PATCH` while the app is in beta: MINOR is a major
+feature change, PATCH is a landed plan or small iteration, and 1.0.0 is
+reserved for leaving beta. `apps/web/package.json` is the single source of
+truth; About in the app shows it alongside the deployed commit. See
+[docs/design.md](docs/design.md) for the full rule.
 
 ## Install on your phone
 

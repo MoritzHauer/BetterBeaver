@@ -17,6 +17,7 @@ import { AUTO_UPDATE_KEY } from "../autoUpdate";
 import { OFFLINE_KEY, isOffline } from "../offline";
 import { getThemePref, setThemePref, type ThemePref } from "../theme";
 import { getDisplayName, setDisplayName } from "../identity";
+import { APP_COMMIT, APP_VERSION, REPO_URL } from "../version";
 import {
   getLearning,
   setLearning,
@@ -57,11 +58,13 @@ const SKIP_OPTIONS: { skip: SkipLength; label: string }[] = [
 
 export function SettingsScreen({
   onBack,
+  onAbout,
   onSignIn,
   onImportBook,
   importPrivateBook,
 }: {
   onBack: () => void;
+  onAbout: () => void;
   onSignIn: () => void;
   /** Hands the parsed documents to the app, which stores each one under the
    * key its own editor reads — a maintained document becomes a draft, an
@@ -647,6 +650,24 @@ export function SettingsScreen({
           ) : null}
         </section>
       ) : null}
+
+      {/* Above Danger on purpose: it is the last thing anyone should reach
+          by scrolling, and "which version am I on" is the first thing a bug
+          report needs. */}
+      <section className="card">
+        <h2>About</h2>
+        <button className="plain" onClick={onAbout}>
+          About BetterBeaver
+        </button>
+        <p className="status">
+          Version {APP_VERSION}
+          {APP_COMMIT === "" ? null : ` · build ${APP_COMMIT}`} —{" "}
+          <a href={REPO_URL} target="_blank" rel="noreferrer">
+            source on GitHub
+          </a>
+          .
+        </p>
+      </section>
 
       <section className="card">
         <h2>Danger</h2>
