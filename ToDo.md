@@ -36,6 +36,22 @@
       back from inside the app walked off the app's own history entry to
       `about:blank`. The trap now re-arms on any screen that has a back action.
       Regression test: `apps/web/src/App.back-nav.test.tsx`.
+- [x] the android back button returns to an empty page (2026-08-21) — the fix
+      above only covered screens that have a back action. At a root screen the
+      pop was still let through, and in an **installed PWA** the entry
+      underneath the launch entry is the launcher's blank document: two presses
+      from the cover and the app was gone. The trap is now held at the root too
+      whenever the app runs in standalone display mode, so an installed app
+      can't pop past its own entry; a browser tab still leaves the site.
+- [x] add a link to the GitHub repo — About screen and the Settings → About
+      card.
+- [x] info / about button including the app version — `AboutScreen`, reached
+      from the footer links row (cover + home) and from Settings. Shows version
+      and the deployed commit.
+- [x] versioning scheme — `0.MINOR.PATCH` (major feature / plan-or-iteration),
+      starting at 0.1.0; `apps/web/package.json` is the source of truth. See
+      `docs/design.md`, "Versioning".
+- [x] README should link betterbeaver.de — done, plus a Releases section.
 
 # icons to be generated
 

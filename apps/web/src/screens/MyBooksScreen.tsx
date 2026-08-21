@@ -1,5 +1,5 @@
 import type { BookSummary } from "@betterbeaver/engine";
-import { LegalLinks } from "../components/LegalLinks";
+import { FooterLinks } from "../components/FooterLinks";
 import { ProgressBar } from "../components/ProgressBar";
 import { showsCoverArt } from "../components/BookWatermark";
 import { readPrivateBook } from "../content/private-store";
@@ -34,6 +34,7 @@ export function MyBooksScreen({
   onAuthor,
   onOpenStats,
   onOpenSettings,
+  onAbout,
   onImpressum,
   onPrivacy,
 }: {
@@ -81,6 +82,7 @@ export function MyBooksScreen({
   onAuthor: () => void;
   onOpenStats: () => void;
   onOpenSettings: () => void;
+  onAbout: () => void;
   onImpressum: () => void;
   onPrivacy: () => void;
 }) {
@@ -353,7 +355,11 @@ export function MyBooksScreen({
           Edit content
         </button>
       </nav>
-      <LegalLinks onImpressum={onImpressum} onPrivacy={onPrivacy} />
+      <FooterLinks
+        onAbout={onAbout}
+        onImpressum={onImpressum}
+        onPrivacy={onPrivacy}
+      />
     </main>
   );
 }

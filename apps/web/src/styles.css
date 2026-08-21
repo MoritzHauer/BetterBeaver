@@ -1847,18 +1847,36 @@ button.danger {
   margin-top: 2rem;
 }
 
-/* Impressum/Datenschutz row (LegalLinks): centred, muted, small — legally
- * required on every screen, but not part of the app's own navigation. */
-.legal-links {
+/* About/Impressum/Datenschutz row (FooterLinks): centred, muted, small — two
+ * of the three are legally required on every screen, but none of them are
+ * part of the app's own navigation. `flex-wrap` because three labels at the
+ * app's largest text size no longer fit one line on a narrow phone. */
+.footer-links {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
   gap: 1.25rem;
   margin-top: 1.5rem;
   font-size: 0.85rem;
 }
 
-.legal-links button {
+.footer-links button {
   color: var(--locked-fg);
+}
+
+/* About: the mascot and the build stamp read as one block, centred. */
+.about-card {
+  text-align: center;
+}
+
+.about-mascot {
+  width: 120px;
+  max-width: 60%;
+  height: auto;
+}
+
+.about-version {
+  font-variant-numeric: tabular-nums;
 }
 
 /* Home top bar: title on the left, Stats/Settings icon buttons on the right. */
