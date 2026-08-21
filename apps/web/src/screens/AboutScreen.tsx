@@ -1,7 +1,11 @@
 import { useState } from "react";
 import { APP_COMMIT, APP_VERSION, REPO_URL } from "../version";
-import { isStandalone } from "../back-trap";
-import { clearNavDiary, formatNavDiary, readNavDiary } from "../nav-diary";
+import {
+  clearNavDiary,
+  formatNavDiary,
+  isStandalone,
+  readNavDiary,
+} from "../nav-diary";
 
 /**
  * About / info page: what the app is, which build you are looking at, and

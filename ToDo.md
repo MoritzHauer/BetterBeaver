@@ -36,8 +36,17 @@
       back from inside the app walked off the app's own history entry to
       `about:blank`. The trap now re-arms on any screen that has a back action.
       Regression test: `apps/web/src/App.back-nav.test.tsx`.
-- [ ] the android back button returns to an empty page — **root cause found
-      (attempt 4), awaiting device confirmation.** The diary from attempt 3
+- [ ] the android back button returns to an empty page — **attempt 5: the
+      trap is gone, replaced by real routing.** The diary after attempt 4 shows
+      the boot hang fixed but _still_ no `back` line in ~30 launches, so a
+      press has never reached the page as a `popstate` under any trap-based
+      build. `history-nav.ts` now puts the view in `history.state`, one entry
+      per screen pushed under user activation, and back is an ordinary
+      traversal. Working theory for the trap's invisibility is Chrome's
+      history-manipulation intervention (skippable entries); **unproven** — no
+      desktop Chromium here reproduces it. If the phone still shows no `back`
+      lines, it is not page-level: next step is `chrome://inspect` over USB.
+      **History (attempt 4):** The diary from attempt 3
       showed 13 boots and zero back presses: `popstate` never fired, so no
       version of the trap ever mattered. `openContentDb` had no `onblocked`
       handler, so a blocked open hung forever; the boot awaited it before

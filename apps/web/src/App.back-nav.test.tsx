@@ -2,43 +2,66 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { App } from "./App";
 import { initContentSource } from "./content/source";
-import { backActionRef, installBackTrap, isTrapArmed } from "./back-trap";
 
 /**
- * `App`'s half of hardware back: publishing the current screen's back action
- * into `backActionRef`, and clearing it when it goes away. The history entry
- * and the listener belong to `back-trap.ts` and are tested there — this
- * models what `main.tsx` does by installing the trap first, because that
- * order is the fix: the guard exists before the app that uses it.
+ * `App`'s half of hardware back: the session history mirrors the view, so a
+ * real back press walks up the screens the learner actually visited.
+ *
+ * The mechanism (entries, ordering, the on-screen-Back dedupe) is covered in
+ * `history-nav.test.ts`. What is asserted here is the composition — that
+ * navigating adds entries and that popping them puts the right screen back —
+ * because the three attempts this replaced all failed at exactly that seam:
+ * the history said one thing and the app showed another.
  */
-describe("App hardware-back wiring", () => {
+async function back(): Promise<void> {
+  window.history.back();
+  // jsdom queues the traversal; the pop lands a few ms later.
+  await new Promise((resolve) => setTimeout(resolve, 30));
+}
+
+describe("App history navigation", () => {
   beforeEach(() => {
     localStorage.clear();
     window.history.replaceState(null, "");
-    backActionRef.current = null;
-    installBackTrap();
   });
   afterEach(cleanup);
 
-  it("guards the history before the app has rendered anything", () => {
-    // `installBackTrap` already ran, as it does at module load in main.tsx.
-    // Nothing below this line needs the app to have started.
-    expect(isTrapArmed()).toBe(true);
-  });
-
-  it("publishes no back action on the cover, and one once inside", async () => {
+  it("puts the current view on the history from the first render", async () => {
     const contentInit = await initContentSource();
     render(<App contentInit={contentInit} />);
 
     await screen.findByText("Get Started");
-    expect(backActionRef.current).toBeNull();
+    await waitFor(() =>
+      expect(window.history.state).toMatchObject({
+        bbNav: { started: false },
+      }),
+    );
+  });
+
+  it("adds an entry for each screen the learner opens", async () => {
+    const contentInit = await initContentSource();
+    render(<App contentInit={contentInit} />);
+
+    await screen.findByText("Get Started");
+    const atCover = window.history.length;
 
     screen.getByText("Get Started").click();
     await screen.findByText("BetterBeaver");
-    await waitFor(() => expect(backActionRef.current).not.toBeNull());
+    await waitFor(() =>
+      expect(window.history.state).toMatchObject({ bbNav: { started: true } }),
+    );
+
+    screen.getByRole("button", { name: "Settings" }).click();
+    await screen.findByRole("heading", { name: "Settings" });
+    await waitFor(() =>
+      expect(window.history.state).toMatchObject({
+        bbNav: { screen: { screen: "settings" } },
+      }),
+    );
+    expect(window.history.length).toBe(atCover + 2);
   });
 
-  it("walks up a screen on a back press, leaving the trap armed", async () => {
+  it("walks back up the screens on a back press", async () => {
     const contentInit = await initContentSource();
     render(<App contentInit={contentInit} />);
 
@@ -48,26 +71,34 @@ describe("App hardware-back wiring", () => {
     screen.getByRole("button", { name: "Settings" }).click();
     await screen.findByRole("heading", { name: "Settings" });
 
-    window.history.replaceState(null, "");
-    window.dispatchEvent(new PopStateEvent("popstate"));
-
+    await back();
     await screen.findByText("BetterBeaver");
-    expect(isTrapArmed()).toBe(true);
+
+    // ...and again, to the cover the learner started on.
+    await back();
+    await screen.findByText("Get Started");
   });
 
-  it("keeps publishing across a re-render, as StrictMode's remount does", async () => {
+  it("does not push a forward entry when the on-screen Back is used", async () => {
     const contentInit = await initContentSource();
-    const { rerender } = render(<App contentInit={contentInit} />);
+    render(<App contentInit={contentInit} />);
 
     await screen.findByText("Get Started");
     screen.getByText("Get Started").click();
     await screen.findByText("BetterBeaver");
-    await waitFor(() => expect(backActionRef.current).not.toBeNull());
+    screen.getByRole("button", { name: "Settings" }).click();
+    await screen.findByRole("heading", { name: "Settings" });
+    const deep = window.history.length;
 
-    // An unmount cleanup clearing the ref would be run by StrictMode's dev
-    // remount with no render after it, leaving hardware back dead. The ref
-    // is published during render, so it must survive effects re-running.
-    rerender(<App contentInit={contentInit} />);
-    expect(backActionRef.current).not.toBeNull();
+    screen.getByRole("button", { name: "Back" }).click();
+    await screen.findByText("BetterBeaver");
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    // Tapping Back means "go back", so it consumes the entry rather than
+    // adding one — otherwise the next hardware back would return *into*
+    // Settings, which is the opposite of what the learner just asked for.
+    expect(window.history.length).toBe(deep);
+    await back();
+    await screen.findByText("Get Started");
   });
 });

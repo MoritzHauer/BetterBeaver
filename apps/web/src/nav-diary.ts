@@ -70,3 +70,18 @@ export function formatNavDiary(entries: NavEntry[]): string {
     )
     .join("\n");
 }
+
+/** True when the app runs as an installed PWA rather than in browser chrome.
+ * Purely diagnostic — it gates no behaviour. It used to decide whether the
+ * old back trap held at a root screen, and the owner's diary caught it
+ * reporting `false` on an installed app twice, which is how it lost that
+ * job. Recorded at boot and shown under About → Diagnostics, because "what
+ * does this device actually report" turned out to be worth knowing. */
+export function isStandalone(): boolean {
+  const iosStandalone = (window.navigator as { standalone?: boolean })
+    .standalone;
+  return (
+    iosStandalone === true ||
+    window.matchMedia("(display-mode: standalone)").matches
+  );
+}

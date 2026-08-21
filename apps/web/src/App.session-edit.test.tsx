@@ -91,8 +91,18 @@ async function startUnitSession(): Promise<void> {
 describe("session Edit button", () => {
   // No `globals: true` in this project, so RTL's auto-cleanup never runs and
   // each test would otherwise query a body holding the previous test's app.
-  beforeEach(() => localStorage.clear());
-  afterEach(cleanup);
+  beforeEach(() => {
+    localStorage.clear();
+    window.history.replaceState(null, "");
+  });
+  afterEach(async () => {
+    cleanup();
+    // Closing the sheet returns the view to the previous history entry, so
+    // `history-nav.ts` pops one for real — and jsdom runs that traversal as
+    // a task. Let it land here, with no app listening, or it arrives during
+    // the next test and restores this one's session over its cover.
+    await new Promise((resolve) => setTimeout(resolve, 30));
+  });
 
   it("opens the sheet over the session and resumes it on close", async () => {
     const contentInit = await initContentSource();

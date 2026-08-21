@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactElement } from "react";
 import type {
   BookDocument,
@@ -72,7 +72,7 @@ import { SessionEditSheet } from "./screens/edit/SessionEditSheet";
 import { PrivacyScreen } from "./screens/PrivacyScreen";
 import { ImpressumScreen } from "./screens/ImpressumScreen";
 import { AboutScreen } from "./screens/AboutScreen";
-import { backActionRef } from "./back-trap";
+import { installHistoryNav, type HistoryNav } from "./history-nav";
 import { recordNav } from "./nav-diary";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { StatsScreen } from "./screens/StatsScreen";
@@ -1283,7 +1283,6 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     if (sessionEdit !== null) {
       // Hardware back closes the sheet and leaves the session running,
       // rather than exiting the session underneath it.
-      backActionRef.current = close;
     }
     // The wrapper is unconditional, and so is the session's position inside
     // it: returning the bare session while no sheet is open would put a
@@ -1335,18 +1334,37 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     }
   }
 
-  // Hardware back / edge-swipe: every screen below publishes its visible
-  // Back (or done/cancel) action into `backActionRef` during render, and
-  // `back-trap.ts` — installed by `main.tsx` before this component exists —
-  // owns the history entry and the `popstate` listener that runs it. The
-  // arming deliberately does not live here: an effect cannot run until the
-  // boot resolves, and a stalled boot is exactly when the guard is needed.
+  // Hardware back / edge-swipe (`history-nav.ts`): the session history
+  // mirrors this view, so back is an ordinary traversal rather than
+  // something the app intercepts. `view` is everything a screen restore
+  // needs — the route, whether the cover has been dismissed, and the edit
+  // sheet that layers over a running session, which has its own back step.
   //
-  // Nothing clears the ref on unmount, deliberately. An unmount cleanup would
-  // be run by StrictMode's dev remount (effect → cleanup → effect, with no
-  // render in between to republish) and leave hardware back dead until the
-  // next commit. `App` is mounted once for the life of the document, so the
-  // only unmount is a test's, and those reset the ref themselves.
+  // `sync` runs after **every** commit, and that timing is the fix: it lands
+  // inside the user-activation window of the tap that navigated, so Chrome
+  // treats the entry as real. An entry pushed without activation is marked
+  // skippable and a hardware back press skips it without firing `popstate`
+  // at all, which is the most likely reading of four builds' worth of device
+  // evidence (see `docs/STATUS.md`, 2026-08-21).
+  const view = { started, screen, sessionEdit };
+  const navRef = useRef<HistoryNav<typeof view> | null>(null);
+  useEffect(() => {
+    const nav = installHistoryNav(view, (restored) => {
+      setStarted(restored.started);
+      setScreen(restored.screen);
+      setSessionEdit(restored.sessionEdit);
+    });
+    navRef.current = nav;
+    return () => {
+      nav.dispose();
+      navRef.current = null;
+    };
+    // Mount only, and `view` is deliberately the first render's: it is the
+    // entry the history starts on. Every later view arrives through `sync`.
+  }, []);
+  useEffect(() => {
+    navRef.current?.sync(view);
+  });
 
   // The last link in the boot chain the diary records (boot → content-ready →
   // app-mounted): between them they say how far a launch got before it went
@@ -1675,24 +1693,20 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   // right back on the cover, and a started user back on home.
   if (screen.screen === "impressum") {
     const onBack = () => setScreen({ screen: "books" });
-    backActionRef.current = onBack;
     return <ImpressumScreen onBack={onBack} />;
   }
   if (screen.screen === "about") {
     const back = screen.back ?? { screen: "books" as const };
     const onBack = () => setScreen(back);
-    backActionRef.current = onBack;
     return <AboutScreen onBack={onBack} />;
   }
   if (screen.screen === "privacy") {
     const back = screen.back ?? { screen: "books" as const };
     const onBack = () => setScreen(back);
-    backActionRef.current = onBack;
     return <PrivacyScreen onBack={onBack} />;
   }
 
   if (!started) {
-    backActionRef.current = null;
     return (
       <StartScreen
         onStart={() => setStarted(true)}
@@ -1705,7 +1719,6 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
 
   if (screen.screen === "author") {
     const onBack = () => setScreen({ screen: "books" });
-    backActionRef.current = onBack;
     return (
       <AuthorScreen
         // The naming sheet lives on the home screen (it is where the new
@@ -1787,7 +1800,6 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   }
   if (screen.screen === "settings") {
     const onBack = () => setScreen({ screen: "books" });
-    backActionRef.current = onBack;
     return (
       <SettingsScreen
         onBack={onBack}
@@ -1806,12 +1818,10 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
 
   if (screen.screen === "stats") {
     const onBack = () => setScreen({ screen: "books" });
-    backActionRef.current = onBack;
     return <StatsScreen onBack={onBack} domains={domains} />;
   }
 
   if (screen.screen === "books") {
-    backActionRef.current = () => setStarted(false);
     const hasDownload = update !== null && update.changed.length > 0;
     return (
       <>
@@ -1911,7 +1921,6 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
 
   if (screen.screen === "library") {
     const onBack = () => setScreen({ screen: "books" });
-    backActionRef.current = onBack;
     return (
       <LibraryScreen
         addBook={contentInit.addBook}
@@ -2043,7 +2052,6 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
 
     if (screen.screen === "book") {
       const onBack = () => setScreen({ screen: "books" });
-      backActionRef.current = onBack;
       return inSession(
         <BookScreen
           content={shown}
@@ -2091,7 +2099,6 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
 
     if (screen.screen === "lesson") {
       const onBack = () => goToBook(screen.bookId, screen.editing);
-      backActionRef.current = onBack;
       return inSession(
         <LessonScreen
           content={shown}
@@ -2141,7 +2148,6 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           lessonId: screen.lessonId,
           editing: screen.editing,
         });
-      backActionRef.current = onBack;
       return inSession(
         <UnitScreen
           content={shown}
@@ -2223,7 +2229,6 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           unitId: screen.unitId,
         });
       };
-      backActionRef.current = onDone;
       // Same exit as `onDone`, but lands on the trail's last content page —
       // the one the learner swiped forward from (owner request).
       const onSwipeBack = () => {
@@ -2326,7 +2331,6 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
 
     if (screen.screen === "lesson-summary") {
       const onBack = () => goToBook(screen.bookId);
-      backActionRef.current = onBack;
       return (
         <LessonSummaryScreen
           content={shown}
@@ -2362,7 +2366,6 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           lessonId: screen.lessonId,
           unitId: screen.unitId,
         });
-      backActionRef.current = onDone;
       return (
         <RecallSession
           store={shownStore}
@@ -2392,7 +2395,6 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
         unitId: screen.unitId,
       });
     };
-    backActionRef.current = onTaskDone;
     return withSessionEdit(
       <TaskSession
         store={shownStore}
@@ -2419,7 +2421,6 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
 
   if (screen.screen === "vocab") {
     const onBack = () => setScreen({ screen: "books" });
-    backActionRef.current = onBack;
     return (
       <VocabularyScreen
         booksContent={domainBooksContent}
@@ -2444,7 +2445,6 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     const bookId = domainBooksContent[0]?.topic.id ?? screen.domainId;
     const onDone = () =>
       setScreen({ screen: "vocab", domainId: screen.domainId });
-    backActionRef.current = onDone;
     return (
       <AdhocSession
         domainContent={domainContent}
@@ -2458,7 +2458,6 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   }
 
   const onReviewDone = () => setScreen({ screen: "books" });
-  backActionRef.current = onReviewDone;
   return withSessionEdit(
     <ReviewSession
       domainContent={domainContent}
