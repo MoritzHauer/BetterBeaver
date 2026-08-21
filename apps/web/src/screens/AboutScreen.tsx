@@ -1,4 +1,7 @@
+import { useState } from "react";
 import { APP_COMMIT, APP_VERSION, REPO_URL } from "../version";
+import { isStandalone } from "../back-trap";
+import { clearNavDiary, formatNavDiary, readNavDiary } from "../nav-diary";
 
 /**
  * About / info page: what the app is, which build you are looking at, and
@@ -11,6 +14,8 @@ import { APP_COMMIT, APP_VERSION, REPO_URL } from "../version";
  * badge nobody can copy out of a screenshot.
  */
 export function AboutScreen({ onBack }: { onBack: () => void }) {
+  const [diary, setDiary] = useState(readNavDiary);
+  const diaryText = formatNavDiary(diary);
   return (
     <main>
       <header className="screen-header">
@@ -71,6 +76,49 @@ export function AboutScreen({ onBack }: { onBack: () => void }) {
           Legal details are on the Impressum page; what the app stores and sends
           is on the Datenschutz page.
         </p>
+      </section>
+
+      {/* Diagnostics (2026-08-21): the hardware-back bug has survived two
+          fixes that a desktop browser said were correct, and a black screen
+          leaves nothing to inspect. This is the device's own account of what
+          happened, kept on the device — it is never sent anywhere. */}
+      <section className="card">
+        <h2>Diagnostics</h2>
+        <p className="status">
+          The last few navigation events on this device, newest at the bottom.
+          Nothing here leaves your phone; it is only useful if you are reporting
+          a bug.
+        </p>
+        <p className="status">
+          Display mode: {isStandalone() ? "installed app" : "browser"}
+        </p>
+        {diary.length === 0 ? (
+          <p className="status">Nothing recorded yet.</p>
+        ) : (
+          <pre className="diagnostics-log">{diaryText}</pre>
+        )}
+        <div className="grade-buttons">
+          <button
+            className="plain"
+            onClick={() => {
+              // Clipboard access can be refused or absent; the text is on
+              // screen and selectable either way, so a failure is silent
+              // rather than an error the reader can do nothing about.
+              void navigator.clipboard?.writeText(diaryText).catch(() => {});
+            }}
+          >
+            Copy
+          </button>
+          <button
+            className="plain"
+            onClick={() => {
+              clearNavDiary();
+              setDiary([]);
+            }}
+          >
+            Clear
+          </button>
+        </div>
       </section>
     </main>
   );

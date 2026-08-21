@@ -1864,6 +1864,23 @@ button.danger {
   color: var(--locked-fg);
 }
 
+/* About → Diagnostics: a fixed-width dump meant to be read and copied, not
+ * styled. Scrolls in both directions rather than wrapping — a wrapped log
+ * line is harder to read back than a scrolled one. */
+.diagnostics-log {
+  margin: 0.75rem 0;
+  padding: 0.5rem;
+  max-height: 14rem;
+  overflow: auto;
+  background: var(--bg);
+  border: 1px solid var(--card-border);
+  border-radius: 0.5rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  white-space: pre;
+}
+
 /* About: the mascot and the build stamp read as one block, centred. */
 .about-card {
   text-align: center;

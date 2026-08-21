@@ -72,6 +72,8 @@ import { SessionEditSheet } from "./screens/edit/SessionEditSheet";
 import { PrivacyScreen } from "./screens/PrivacyScreen";
 import { ImpressumScreen } from "./screens/ImpressumScreen";
 import { AboutScreen } from "./screens/AboutScreen";
+import { armBackTrap, trapDepth } from "./back-trap";
+import { recordNav } from "./nav-diary";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { StatsScreen } from "./screens/StatsScreen";
 import { LessonSummaryScreen } from "./screens/LessonSummaryScreen";
@@ -187,36 +189,6 @@ type Screen =
   | { screen: "stats" };
 
 type ContentSourceResult = { source: ContentSource } | { errors: string[] };
-
-/** The history entry the hardware-back trap parks on (see the effects in
- * `App`). One marker for the whole app: there is never more than one trap
- * entry, so the state only has to say "this entry is ours". */
-const BACK_TRAP = { backTrap: true };
-
-/** Pushes the trap entry unless it is already the current one. Guarded
- * because the arming effect runs after *every* commit and an unguarded push
- * would grow the history by one entry per render. */
-function armBackTrap(): void {
-  const state = window.history.state as { backTrap?: boolean } | null;
-  if (state?.backTrap !== true) {
-    window.history.pushState(BACK_TRAP, "");
-  }
-}
-
-/** True when the app is running as an installed PWA rather than in browser
- * chrome — the case where popping past our own entry lands on the launcher's
- * blank document instead of a real previous page. `display-mode: standalone`
- * covers the Android/desktop install (the manifest asks for no other mode);
- * `navigator.standalone` is iOS's pre-standard equivalent, which Safari still
- * reports for a home-screen install. */
-function isStandalone(): boolean {
-  const iosStandalone = (window.navigator as { standalone?: boolean })
-    .standalone;
-  return (
-    iosStandalone === true ||
-    window.matchMedia("(display-mode: standalone)").matches
-  );
-}
 
 const progressStore = createLocalStorageProgressStore();
 
@@ -1368,46 +1340,44 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   // the browser has nothing to pop, so a hardware/gesture back exits the app
   // entirely instead of moving up a level. `backActionRef` always holds the
   // same handler as the currently rendered screen's visible back (or
-  // done/cancel) button; a single trap entry, refilled after every pop,
-  // routes hardware back through it.
+  // done/cancel) button, and `back-trap.ts` keeps a small stack of history
+  // entries of our own that a back press lands on instead of leaving.
   //
-  // What happens at a *root* screen (`backActionRef` null — the cover) is the
-  // whole subtlety, and the 2026-07-26 fix got it half right. Letting that
-  // pop through is correct in a browser tab: the entry underneath is whatever
-  // page the visitor came from, and leaving the site is what back means
-  // there. In an **installed PWA it is not** — the entry underneath the
-  // launch entry is the launcher's own blank document, so back walked out of
-  // the app into a white page with no content and no way forward but a
-  // restart (the reported Android bug; also why the earlier fix's symptom was
-  // `about:blank`). So in standalone display mode the trap is kept armed at
-  // all times, root included: back at the cover does nothing, and you leave
-  // an installed app the way Android expects — Home, or the app switcher.
-  const trapAtRoot = isStandalone();
-
+  // **The trap is unconditional** (third attempt at this bug, 2026-08-21).
+  // The two previous versions each let some pop through — the first at every
+  // root screen, the second at a root screen when the app was not detected as
+  // an installed PWA — and on the owner's phone back still went black from
+  // every screen, cover included. At the cover this handler runs no React
+  // code at all, so a black screen there can only mean the document itself
+  // went away: the pop escaped. Rather than keep betting on which pop is safe
+  // to release and on `display-mode` being reported the way the spec says,
+  // nothing is released. Back inside the app moves up a screen; back at the
+  // root does nothing. Leaving an installed app is Home or the app switcher,
+  // and in a browser tab it costs the back button on this one site — a real
+  // price, paid deliberately, and cheap next to a black screen.
   useEffect(() => {
     function onPopState() {
       const goBack = backActionRef.current;
+      recordNav(
+        "back",
+        `handled=${goBack !== null} depth=${trapDepth()} len=${history.length}`,
+      );
       if (goBack !== null) {
         goBack();
       }
       // Re-armed synchronously rather than left to the commit effect below:
-      // a pop that ran no back action produces no commit at all, and a fast
-      // second press must never find the history unguarded.
-      if (goBack !== null || trapAtRoot) {
-        armBackTrap();
-      }
+      // a pop that ran no back action produces no commit at all.
+      armBackTrap();
     }
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, [trapAtRoot]);
+  }, []);
 
-  // Arms the trap after every commit — including the first, which is why
-  // mounting no longer pushes one of its own. Idempotent (it checks the
-  // current entry first), so only a screen change or a consumed trap pushes.
+  // Arms after every commit — including the first, which is why mounting no
+  // longer pushes one of its own. Idempotent (it tops up to a fixed depth),
+  // so a commit that changes no screen pushes nothing.
   useEffect(() => {
-    if (backActionRef.current !== null || trapAtRoot) {
-      armBackTrap();
-    }
+    armBackTrap();
   });
 
   useEffect(() => {
