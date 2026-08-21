@@ -17,6 +17,11 @@
       h1 {
         font-size: 1.2rem;
       }
+      h2 {
+        font-size: 1rem;
+        margin: 1.4rem 0 0.3rem;
+        color: #f0a24a;
+      }
       button {
         font: inherit;
         padding: 0.6rem 0.9rem;
@@ -40,11 +45,9 @@
         border-radius: 0.5rem;
         padding: 0.5rem;
       }
-      ol {
-        padding-left: 1.2rem;
-      }
-      li {
-        margin-bottom: 0.4rem;
+      p.note {
+        color: #948c7e;
+        font-size: 0.85rem;
       }
     </style>
   </head>
@@ -52,30 +55,43 @@
     <h1>History probe</h1>
 
     <p>
-      Not the app — a bare page that tests one thing: whether a
-      <code>pushState</code> entry actually lands in this browser's session
-      history, and whether pressing back delivers a <code>popstate</code> to the
-      page. Every one of the back-button fixes so far assumed both. The log
-      below survives leaving the page.
+      Not the app — a bare page testing which kind of history entry survives a
+      <b>real back press</b> on this device. Firefox for Android is reported to
+      skip entries made with <code>pushState</code> when the user presses back,
+      while still honouring them for <code>history.back()</code> — which is why
+      the app's back button works and the system one does not.
+    </p>
+    <p class="note">
+      The log is saved on this device and survives leaving the page. Do one test
+      at a time, in order, and press back only once per test.
     </p>
 
-    <ol>
-      <li>
-        Tap <b>Push entry (with tap)</b>. The log should show the length going
-        up by one.
-      </li>
-      <li>Press <b>back once</b>.</li>
-      <li>
-        If you land back on this page, read the log. If you left the site, come
-        back here and read the log — it is saved.
-      </li>
-    </ol>
+    <h2>Test A — pushState, no tap</h2>
+    <p class="note">
+      Already done automatically when this page loaded — exactly what the app
+      does at boot. Press <b>back once</b> now, then come back here and read the
+      log.
+    </p>
 
+    <h2>Test B — pushState, from a tap</h2>
     <p>
-      <button class="go" id="push">Push entry (with tap)</button>
+      <button class="go" id="push">Push entry (from this tap)</button>
+    </p>
+    <p class="note">Then press <b>back once</b> and return here.</p>
+
+    <h2>Test C — fragment navigation, from a tap</h2>
+    <p>
+      <button class="go" id="hash">Go to #probe (from this tap)</button>
+    </p>
+    <p class="note">
+      A hash change is not <code>pushState</code>, so the skipping heuristic may
+      not apply to it. Press <b>back once</b> and return here.
+    </p>
+
+    <h2>Log</h2>
+    <p>
       <button id="clear">Clear log</button>
     </p>
-
     <pre id="log">loading…</pre>
 
     <script>
@@ -110,23 +126,27 @@
           read().join("\n") || "(empty)";
       }
 
-      function state() {
+      function where() {
+        var state;
         try {
-          return JSON.stringify(history.state);
+          state = JSON.stringify(history.state);
         } catch (e) {
-          return "<unreadable>";
+          state = "<unreadable>";
         }
-      }
-
-      // 1. What the page starts with.
-      log(
-        "LOAD  len=" +
+        return (
+          "len=" +
           history.length +
           " state=" +
-          state() +
+          state +
           " url=" +
-          location.href,
-      );
+          location.pathname +
+          location.hash
+        );
+      }
+
+      // A fresh LOAD line after a back press is the tell: the press did not
+      // pop within this document, it navigated away and the page came back.
+      log("LOAD  " + where());
       log(
         "      standalone=" +
           (window.matchMedia("(display-mode: standalone)").matches ||
@@ -135,55 +155,45 @@
           (document.referrer || "(none)"),
       );
 
-      // 2. The exact thing the app does at boot: push with NO user gesture.
-      //    If the length does not go up, the entry never existed and every
-      //    fix built on it was doomed.
+      // Test A: the app's boot push — no user gesture anywhere near it.
       try {
         var before = history.length;
-        history.pushState({ probe: "no-gesture" }, "");
-        log(
-          "PUSH  no gesture: len " +
-            before +
-            " → " +
-            history.length +
-            " state=" +
-            state(),
-        );
+        history.pushState({ probe: "A-no-gesture" }, "");
+        log("A     pushState no tap: len " + before + " → " + history.length);
       } catch (e) {
-        log("PUSH  no gesture THREW: " + e);
+        log("A     pushState no tap THREW: " + e);
       }
 
-      // 3. The same push, but from a real tap — the one difference that could
-      //    matter if the browser is ignoring script-made entries.
+      // Test B: the same call, inside a real tap handler.
       document.getElementById("push").addEventListener("click", function () {
         try {
           var n = history.length;
-          history.pushState({ probe: "gesture" }, "");
-          log(
-            "PUSH  with tap: len " +
-              n +
-              " → " +
-              history.length +
-              " state=" +
-              state(),
-          );
+          history.pushState({ probe: "B-gesture" }, "");
+          log("B     pushState from tap: len " + n + " → " + history.length);
         } catch (e) {
-          log("PUSH  with tap THREW: " + e);
+          log("B     pushState from tap THREW: " + e);
         }
       });
 
-      // 4. Did the press reach the page at all?
-      window.addEventListener("popstate", function (event) {
-        log(
-          "POP   popstate! state=" +
-            JSON.stringify(event.state) +
-            " len=" +
-            history.length,
-        );
+      // Test C: a fragment navigation instead — a different mechanism, which
+      // the pushState heuristic may not cover.
+      document.getElementById("hash").addEventListener("click", function () {
+        var n = history.length;
+        location.hash = "probe-" + Date.now();
+        log("C     hash nav from tap: len " + n + " → " + history.length);
       });
 
-      // 5. Or did the document just go away? `persisted` says whether it was
-      //    kept for bfcache or destroyed outright.
+      // Did the press reach the page?
+      window.addEventListener("popstate", function (event) {
+        log(
+          "POP   popstate state=" + JSON.stringify(event.state) + " " + where(),
+        );
+      });
+      window.addEventListener("hashchange", function () {
+        log("HASH  hashchange " + where());
+      });
+
+      // Or was the document torn down instead?
       window.addEventListener("pagehide", function (event) {
         log("HIDE  pagehide persisted=" + event.persisted);
       });
