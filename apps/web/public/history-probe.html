@@ -49,6 +49,15 @@
         color: #948c7e;
         font-size: 0.85rem;
       }
+      a.link {
+        display: inline-block;
+        padding: 0.6rem 0.9rem;
+        border-radius: 0.5rem;
+        background: #e08820;
+        color: #241503;
+        font-weight: 600;
+        text-decoration: none;
+      }
     </style>
   </head>
   <body>
@@ -79,13 +88,30 @@
     </p>
     <p class="note">Then press <b>back once</b> and return here.</p>
 
-    <h2>Test C — fragment navigation, from a tap</h2>
+    <h2>Test C — fragment navigation set by script, from a tap</h2>
     <p>
-      <button class="go" id="hash">Go to #probe (from this tap)</button>
+      <button class="go" id="hash">Set location.hash (from this tap)</button>
     </p>
     <p class="note">
-      A hash change is not <code>pushState</code>, so the skipping heuristic may
-      not apply to it. Press <b>back once</b> and return here.
+      Not <code>pushState</code>, but still a script changing the location.
+      Press <b>back once</b> and return here.
+    </p>
+
+    <h2>Test D — a real link to a fragment</h2>
+    <p><a class="link" id="anchor" href="#probe-link">Follow #probe-link</a></p>
+    <p class="note">
+      No script at all: you follow a link, the browser navigates. Same document,
+      but the entry is a user navigation rather than something code inserted —
+      the closest an SPA gets to an ordinary website. Press
+      <b>back once</b> and return here.
+    </p>
+
+    <h2>Test E — a real link to another page (control)</h2>
+    <p><a class="link" href="history-probe-2.html">Go to probe page 2</a></p>
+    <p class="note">
+      A real navigation to a second document, exactly like clicking through any
+      website. This is the positive control: back <em>must</em> work here. If it
+      does not, the problem is not the History API at all.
     </p>
 
     <h2>Log</h2>
@@ -175,12 +201,18 @@
         }
       });
 
-      // Test C: a fragment navigation instead — a different mechanism, which
-      // the pushState heuristic may not cover.
+      // Test C: script-set fragment — not pushState, but still script.
       document.getElementById("hash").addEventListener("click", function () {
         var n = history.length;
         location.hash = "probe-" + Date.now();
-        log("C     hash nav from tap: len " + n + " → " + history.length);
+        log("C     script hash from tap: len " + n + " → " + history.length);
+      });
+
+      // Test D: a real link the user follows. The browser performs the
+      // navigation; no script inserts anything. If the heuristic keys on
+      // provenance, this is the one that should survive.
+      document.getElementById("anchor").addEventListener("click", function () {
+        log("D     following a real #link, len before=" + history.length);
       });
 
       // Did the press reach the page?

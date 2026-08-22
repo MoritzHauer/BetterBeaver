@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Probe page 2</title>
+    <style>
+      body {
+        font:
+          16px/1.5 system-ui,
+          sans-serif;
+        margin: 0;
+        padding: 1rem;
+        background: #16130e;
+        color: #efe9df;
+      }
+      a {
+        color: #f0a24a;
+      }
+      pre {
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-size: 0.78rem;
+        background: #221e17;
+        border: 1px solid #40392e;
+        border-radius: 0.5rem;
+        padding: 0.5rem;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Probe page 2</h1>
+    <p>
+      You got here by following a real link, so this is a <b>real navigation</b>
+      — a second document, exactly like clicking through any normal website.
+      This is the control: if back does not return to page 1 from here, then
+      nothing about history works on this device.
+    </p>
+    <p><b>Press back once</b>, then read the log on page 1.</p>
+    <p>
+      <a href="history-probe.html"
+        >← back to page 1 (link, not the back button)</a
+      >
+    </p>
+    <pre id="log"></pre>
+    <script>
+      var KEY = "bb.probeLog";
+      function read() {
+        try {
+          return JSON.parse(localStorage.getItem(KEY) || "[]");
+        } catch (e) {
+          return [];
+        }
+      }
+      function log(m) {
+        try {
+          var l = read();
+          l.push(new Date().toTimeString().slice(0, 8) + "  " + m);
+          localStorage.setItem(KEY, JSON.stringify(l.slice(-40)));
+        } catch (e) {}
+        document.getElementById("log").textContent = read().join("\n");
+      }
+      log("E2    LOADED page 2 (real navigation) len=" + history.length);
+      window.addEventListener("pageshow", function (e) {
+        log("SHOW  page2 pageshow persisted=" + e.persisted);
+      });
+      window.addEventListener("pagehide", function (e) {
+        log("HIDE  page2 pagehide persisted=" + e.persisted);
+      });
+    </script>
+  </body>
+</html>
