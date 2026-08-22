@@ -93,14 +93,13 @@ describe("session Edit button", () => {
   // each test would otherwise query a body holding the previous test's app.
   beforeEach(() => {
     localStorage.clear();
-    window.history.replaceState(null, "");
   });
   afterEach(async () => {
     cleanup();
-    // Closing the sheet returns the view to the previous history entry, so
-    // `history-nav.ts` pops one for real — and jsdom runs that traversal as
-    // a task. Let it land here, with no app listening, or it arrives during
-    // the next test and restores this one's session over its cover.
+    // Closing the sheet returns the view to the previous entry, so the router
+    // traverses for real — and jsdom runs that as a task. Let it land here,
+    // with no app listening, or it arrives during the next test and restores
+    // this one's session over its cover.
     await new Promise((resolve) => setTimeout(resolve, 30));
   });
 

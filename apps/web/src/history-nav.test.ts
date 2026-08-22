@@ -1,35 +1,40 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { installHistoryNav, type HistoryNav } from "./history-nav";
+import { installHistoryNav, viewFromUrl, type HistoryNav } from "./history-nav";
+import type { View } from "./route";
 import { readNavDiary } from "./nav-diary";
 
 /**
- * The router, tested with no React at all.
+ * The router, with no React involved.
  *
- * What matters here is the *shape of the history*, not the screens: the
- * three previous attempts at hardware back all parked a dummy entry and
- * intercepted `popstate`, and the device never delivered one. Real entries,
- * one per view, pushed from the commit that follows the tap, are the thing
- * this file exists to hold in place — plus the bookkeeping that keeps the
- * on-screen Back button from pushing a forward entry when it means "go back".
+ * Five previous versions parked entries with `pushState` and waited for
+ * `popstate`; the device never delivered one, because a real back press skips
+ * script-inserted History API entries (whatwg/html#7832, fenix#25328). What
+ * is held in place here is that the app navigates — `location.hash` — rather
+ * than fabricating history, and that going back to the previous view
+ * traverses instead of stacking a forward entry.
  */
-type View = { at: string };
+const view = (path: string): View => ({
+  started: true,
+  screen:
+    path === "books" ? { screen: "books" } : { screen: "book", bookId: path },
+  sheet: false,
+});
 
-let nav: HistoryNav<View> | null = null;
+let nav: HistoryNav | null = null;
 let restored: View[] = [];
 
 function install(initial: View): void {
-  nav = installHistoryNav<View>(initial, (view) => restored.push(view));
+  nav = installHistoryNav(initial, (v) => restored.push(v));
 }
 
-/** jsdom runs `history.back()` as a queued task, so the pop lands a few
- * milliseconds later rather than synchronously. */
+/** jsdom dispatches hashchange asynchronously, as browsers do. */
 async function settle(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 30));
 }
 
 beforeEach(() => {
   localStorage.clear();
-  window.history.replaceState(null, "");
+  window.location.hash = "";
   restored = [];
 });
 
@@ -39,126 +44,134 @@ afterEach(() => {
 });
 
 describe("installHistoryNav", () => {
-  it("puts the first view on the current entry without adding one", () => {
+  it("labels the launch entry without navigating", () => {
     const before = window.history.length;
 
-    install({ at: "cover" });
+    install(view("books"));
 
-    expect(window.history.state).toEqual({ bbNav: { at: "cover" } });
+    expect(window.location.hash).toBe("#/books");
     expect(window.history.length).toBe(before);
   });
 
-  it("pushes a real entry for each new view", () => {
-    install({ at: "cover" });
-    const before = window.history.length;
+  it("navigates by fragment, never by pushState", async () => {
+    install(view("books"));
 
-    nav?.sync({ at: "home" });
-    nav?.sync({ at: "book" });
+    nav?.sync(view("demo"));
+    await settle();
 
-    expect(window.history.length).toBe(before + 2);
-    expect(window.history.state).toEqual({ bbNav: { at: "book" } });
+    // The URL is the navigation. If this were `pushState`, the entry would be
+    // the kind a real back press skips.
+    expect(window.location.hash).toBe("#/books/demo");
   });
 
-  it("ignores a sync that does not change the view", () => {
-    install({ at: "cover" });
-    nav?.sync({ at: "home" });
-    const before = window.history.length;
-
-    // `sync` runs after every commit, and most commits are not navigations.
-    nav?.sync({ at: "home" });
-    nav?.sync({ at: "home" });
-
-    expect(window.history.length).toBe(before);
-  });
-
-  it("restores the popped view on a back press", async () => {
-    install({ at: "cover" });
-    nav?.sync({ at: "home" });
-    nav?.sync({ at: "book" });
+  it("restores the view the URL moved to", async () => {
+    install(view("books"));
+    nav?.sync(view("demo"));
+    await settle();
+    restored = [];
 
     window.history.back();
     await settle();
 
-    expect(restored).toEqual([{ at: "home" }]);
+    expect(restored).toEqual([view("books")]);
   });
 
-  it("goes back rather than forward when a view returns to the previous one", async () => {
-    install({ at: "cover" });
-    nav?.sync({ at: "home" });
-    nav?.sync({ at: "book" });
+  it("traverses rather than stacking when returning to the previous view", async () => {
+    install(view("books"));
+    nav?.sync(view("demo"));
+    await settle();
     const deep = window.history.length;
+    restored = [];
 
     // What the on-screen Back button produces: its handler names the parent
-    // screen, so this arrives as an ordinary view change. Pushing here would
-    // leave hardware back walking *into* the screen just left.
-    nav?.sync({ at: "home" });
+    // screen, so it arrives as an ordinary view change.
+    nav?.sync(view("books"));
     await settle();
 
     expect(window.history.length).toBe(deep);
-    expect(window.history.state).toEqual({ bbNav: { at: "home" } });
-    // The state was already correct, so that pop must not re-apply it.
+    expect(window.location.hash).toBe("#/books");
+    // The state was already correct; re-applying it would be a wasted render.
     expect(restored).toEqual([]);
   });
 
-  it("keeps hardware back working after an on-screen back", async () => {
-    install({ at: "cover" });
-    nav?.sync({ at: "home" });
-    nav?.sync({ at: "book" });
-    nav?.sync({ at: "home" });
+  it("keeps back working after an on-screen back", async () => {
+    install(view("books"));
+    nav?.sync(view("demo"));
     await settle();
+    nav?.sync(view("kyrgyz"));
+    await settle();
+    nav?.sync(view("demo"));
+    await settle();
+    restored = [];
 
     window.history.back();
     await settle();
 
-    expect(restored).toEqual([{ at: "cover" }]);
+    expect(restored).toEqual([view("books")]);
   });
 
-  it("drops forward entries when navigating somewhere new after a back", async () => {
-    install({ at: "cover" });
-    nav?.sync({ at: "home" });
-    nav?.sync({ at: "book" });
+  it("ignores a sync that does not change the view", async () => {
+    install(view("books"));
+    nav?.sync(view("demo"));
+    await settle();
+    const before = window.history.length;
+
+    // `sync` runs after every commit, and most commits are not navigations.
+    nav?.sync(view("demo"));
+    nav?.sync(view("demo"));
+    await settle();
+
+    expect(window.history.length).toBe(before);
+  });
+
+  it("records every arrival in the nav diary", async () => {
+    install(view("books"));
+    nav?.sync(view("demo"));
+    await settle();
+
     window.history.back();
     await settle();
-    const atHome = window.history.length;
-
-    nav?.sync({ at: "stats" });
-
-    expect(window.history.length).toBe(atHome);
-    expect(window.history.state).toEqual({ bbNav: { at: "stats" } });
-  });
-
-  it("leaves a pop it did not create alone", async () => {
-    install({ at: "cover" });
-    nav?.sync({ at: "home" });
-
-    // An entry belonging to whatever was open before the app: the press is
-    // on its way out of the app and there is nothing to restore.
-    window.dispatchEvent(new PopStateEvent("popstate", { state: null }));
-
-    expect(restored).toEqual([]);
-  });
-
-  it("records every press in the nav diary, ours or not", () => {
-    install({ at: "cover" });
-    nav?.sync({ at: "home" });
-
-    window.dispatchEvent(new PopStateEvent("popstate", { state: null }));
 
     const back = readNavDiary().filter((entry) => entry.event === "back");
-    expect(back).toHaveLength(1);
-    // A diary with no `back` lines at all is the signature of the bug this
-    // module replaced — the press never reaching the page.
-    expect(back[0]?.detail).toContain("ours=false");
+    expect(back.length).toBeGreaterThan(0);
+    expect(back.at(-1)?.detail).toContain("known=true");
+  });
+
+  it("records a route it cannot render rather than rewriting it", async () => {
+    install(view("books"));
+
+    window.location.hash = "#/nonsense";
+    await settle();
+
+    const back = readNavDiary().filter((entry) => entry.event === "back");
+    expect(back.at(-1)?.detail).toContain("known=false");
+    expect(restored).toEqual([]);
   });
 
   it("stops listening once disposed", async () => {
-    install({ at: "cover" });
-    nav?.sync({ at: "home" });
+    install(view("books"));
+    nav?.sync(view("demo"));
+    await settle();
+    restored = [];
 
     nav?.dispose();
     window.history.back();
     await settle();
 
     expect(restored).toEqual([]);
+  });
+});
+
+describe("viewFromUrl", () => {
+  it("reads the view the address bar is showing", () => {
+    window.location.hash = "#/books/kyrgyz";
+
+    expect(viewFromUrl()).toEqual(view("kyrgyz"));
+  });
+
+  it("is null for a route this build does not know", () => {
+    window.location.hash = "#/nonsense";
+
+    expect(viewFromUrl()).toBeNull();
   });
 });

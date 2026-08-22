@@ -1,3 +1,13 @@
+import { beforeEach } from "vitest";
+
+// The app's route lives in `location.hash` now (`route.ts`), and jsdom keeps
+// one window for a whole test file — so without this each test would boot on
+// the screen the previous one navigated to. Registered here rather than in
+// every App test: it is a property of the environment, not of any one suite.
+beforeEach(() => {
+  window.location.hash = "";
+});
+
 // jsdom doesn't implement matchMedia; theme.ts reads it at import time.
 window.matchMedia ??= (query: string) =>
   ({

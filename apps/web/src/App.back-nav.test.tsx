@@ -4,14 +4,14 @@ import { App } from "./App";
 import { initContentSource } from "./content/source";
 
 /**
- * `App`'s half of hardware back: the session history mirrors the view, so a
- * real back press walks up the screens the learner actually visited.
+ * `App`'s half of hardware back: each screen has a URL, so a real back press
+ * walks up the screens the learner actually visited.
  *
- * The mechanism (entries, ordering, the on-screen-Back dedupe) is covered in
- * `history-nav.test.ts`. What is asserted here is the composition — that
- * navigating adds entries and that popping them puts the right screen back —
- * because the three attempts this replaced all failed at exactly that seam:
- * the history said one thing and the app showed another.
+ * The mechanism (fragment navigation, ordering, the on-screen-Back dedupe) is
+ * covered in `history-nav.test.ts`, and the URL grammar in `route.test.ts`.
+ * What is asserted here is the composition — navigating writes the URL, and
+ * going back puts the right screen up — because the five attempts this
+ * replaced all failed at exactly that seam.
  */
 async function back(): Promise<void> {
   window.history.back();
@@ -22,20 +22,16 @@ async function back(): Promise<void> {
 describe("App history navigation", () => {
   beforeEach(() => {
     localStorage.clear();
-    window.history.replaceState(null, "");
+    window.location.hash = "";
   });
   afterEach(cleanup);
 
-  it("puts the current view on the history from the first render", async () => {
+  it("puts the current view in the URL from the first render", async () => {
     const contentInit = await initContentSource();
     render(<App contentInit={contentInit} />);
 
     await screen.findByText("Get Started");
-    await waitFor(() =>
-      expect(window.history.state).toMatchObject({
-        bbNav: { started: false },
-      }),
-    );
+    await waitFor(() => expect(window.location.hash).toBe("#/"));
   });
 
   it("adds an entry for each screen the learner opens", async () => {
@@ -47,17 +43,11 @@ describe("App history navigation", () => {
 
     screen.getByText("Get Started").click();
     await screen.findByText("BetterBeaver");
-    await waitFor(() =>
-      expect(window.history.state).toMatchObject({ bbNav: { started: true } }),
-    );
+    await waitFor(() => expect(window.location.hash).toBe("#/books"));
 
     screen.getByRole("button", { name: "Settings" }).click();
     await screen.findByRole("heading", { name: "Settings" });
-    await waitFor(() =>
-      expect(window.history.state).toMatchObject({
-        bbNav: { screen: { screen: "settings" } },
-      }),
-    );
+    await waitFor(() => expect(window.location.hash).toBe("#/settings"));
     expect(window.history.length).toBe(atCover + 2);
   });
 
