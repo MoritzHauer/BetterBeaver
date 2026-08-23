@@ -11,7 +11,6 @@ import type { BookDocument, DomainDocument } from "@betterbeaver/schema";
 import type { AuthorDocSummary } from "./backend/supabase";
 import { App } from "./App";
 import { initContentSource } from "./content/source";
-import { installBackTrap } from "./back-trap";
 
 /**
  * Edit mode is a flag on the `book`/`lesson`/`unit` routes, not a screen
@@ -112,11 +111,7 @@ async function openMenu(): Promise<void> {
 describe("edit mode as a route flag", () => {
   beforeEach(() => {
     localStorage.clear();
-    // The `popstate` listener lives in `back-trap.ts` and is installed by
-    // `main.tsx` before `App` mounts, so a test that presses hardware back
-    // has to compose it the same way (idempotent, so once per file is
-    // enough).
-    installBackTrap();
+    window.history.replaceState(null, "");
     lexiconLoadFails = false;
     maintained.clear();
     maintained.add("topic:demo");
@@ -144,8 +139,10 @@ describe("edit mode as a route flag", () => {
     expect(editBar()).not.toBeNull();
 
     // Up again, by hardware back — which must behave exactly as it does from
-    // the same screen without edit mode: one level up, still editing.
-    window.dispatchEvent(new PopStateEvent("popstate"));
+    // the same screen without edit mode: one level up, still editing. A real
+    // traversal now, not a synthetic event: the history carries the view
+    // (`history-nav.ts`), so a bare `popstate` would have nothing to restore.
+    window.history.back();
     await waitFor(() =>
       expect(screen.queryAllByRole("button", { name: /^Page \d+ of/ })).toEqual(
         [],

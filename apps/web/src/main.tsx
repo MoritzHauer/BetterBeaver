@@ -3,8 +3,7 @@ import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { BootScreen } from "./components/BootScreen";
-import { recordNav } from "./nav-diary";
-import { installBackTrap, isStandalone } from "./back-trap";
+import { isStandalone, recordNav } from "./nav-diary";
 import { bundledDomainIds, bundledBookDomainIds } from "./content/bundled";
 import { initContentSource } from "./content/source";
 import { runStorageMigrations } from "./progress/migrations";
@@ -24,14 +23,6 @@ if (!rootElement) {
 }
 
 recordNav("boot", `standalone=${isStandalone()} len=${history.length}`);
-
-// Before anything that can wait. The hardware-back trap used to be armed by
-// an effect inside `App`, which never runs if the boot below stalls — so a
-// stalled boot left the app unguarded and the next back press exited it
-// (docs/STATUS.md, 2026-08-21: thirteen boots in the nav diary, no back
-// presses at all). Guarding the history is not something that should depend
-// on the app having started successfully.
-installBackTrap();
 
 // Async boot (plan 0012): the content source reads the IndexedDB document
 // cache before first render — milliseconds, and never the network.
