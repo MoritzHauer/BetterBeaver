@@ -36,13 +36,14 @@
       back from inside the app walked off the app's own history entry to
       `about:blank`. The trap now re-arms on any screen that has a back action.
       Regression test: `apps/web/src/App.back-nav.test.tsx`.
-- [ ] the android back button returns to an empty page — **attempt 6: the app
-      has URLs now.** Every screen is a fragment route (`#/books/demo`), and
+- [x] the android back button returns to an empty page — **fixed and confirmed
+      on the device 2026-08-22 (attempt 6): the app has URLs now.** Every screen is a fragment route (`#/books/demo`), and
       navigation is a fragment navigation the browser performs rather than a
       `pushState` entry the app fabricates — which is the exact thing the
       back-trapping intervention skips. Deep links and reload-keeps-your-place
-      come along with it. Chromium-verified only; the diary decides on the
-      device. **History (attempt 5):** The diary after attempt 4 shows
+      come along with it. The device diary shows four presses walking cleanly
+      up lesson → book → home → cover, all `known=true`, and back at the cover
+      exits the app as an installed app should. **History (attempt 5):** The diary after attempt 4 shows
       the boot hang fixed but _still_ no `back` line in ~30 launches, so a
       press has never reached the page as a `popstate` under any trap-based
       build. `history-nav.ts` now puts the view in `history.state`, one entry
