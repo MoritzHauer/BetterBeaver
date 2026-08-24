@@ -107,6 +107,12 @@ export interface ContentInit {
   checkForUpdate(): Promise<ContentUpdate | null>;
   /** Downloads, validates and commits per Book, and reloads if anything committed. Throws listing any Books kept at their current version. */
   acceptUpdate(update: ContentUpdate): Promise<void>;
+  /** Settings' "Refresh content": re-downloads every member Book's documents
+   * and assets through `acceptUpdate`, whatever their cached version says,
+   * and repairs a Book whose cached documents went missing. Throws a
+   * human-readable message on failure; the cache is only ever replaced by a
+   * download that validated, never emptied up front. */
+  refreshContent(): Promise<void>;
   /** Fetches a Book from the Library, validates it against the current My Books set, caches it, and reloads. Throws a human-readable message on failure; membership is untouched on failure. */
   addBook(bookId: string, domainId: string): Promise<void>;
   /** Adds a hosted Book the signed-in author just created (spec 0021-10 §1)
@@ -407,19 +413,44 @@ export function buildMembers(
 
 /**
  * Cached versions of exactly the added+archived Books' documents — what
- * `planUpdate` scopes update-checking to (decision 11). Unchanged by plan
- * 0017: a private Book has no cached document and no catalog row, so `rec`
- * is `undefined` for it and it's skipped here too.
+ * `planUpdate` scopes update-checking to (decision 11). A private Book is
+ * skipped: it has no cached document and no catalog row, so there is
+ * nothing to compare.
+ *
+ * A member Book whose `topic:` document is **not** cached is reported at
+ * version 0 rather than dropped, which is what `planUpdate` has always
+ * documented ("0 when uncached, so a fresh cache sees everything as new")
+ * and what Settings' "Refresh content" has always relied on. Dropping it
+ * was a dead end: the Book boots into the `missing cached content` broken
+ * card, the update check then scopes itself to the very cache that is
+ * missing, finds nothing to do, and no amount of waiting or auto-updating
+ * ever brings the Book back — Remove and re-Add was the only way out.
+ *
+ * `demo` is the exception, and reports its **seed** versions instead:
+ * `buildMembers` serves it from the bundled seed when it isn't cached, so
+ * it isn't actually missing, and claiming 0 for it would offer an update on
+ * every boot exactly as `seedCatalogRows` describes.
  */
-function memberCachedVersions(
+export function memberCachedVersions(
   cachedById: Map<string, CachedDocument>,
   added: string[],
   archived: string[],
+  privateIds: ReadonlySet<string> = new Set(),
 ): Map<string, number> {
   const versions = new Map<string, number>();
   for (const bookId of [...added, ...archived]) {
+    if (privateIds.has(bookId)) {
+      continue;
+    }
     const rec = cachedById.get(documentId("topic", bookId));
     if (rec === undefined) {
+      if (bookId === "demo") {
+        for (const row of seedCatalogRows()) {
+          versions.set(row.id, row.published_version);
+        }
+        continue;
+      }
+      versions.set(documentId("topic", bookId), 0);
       continue;
     }
     versions.set(rec.id, rec.version);
@@ -428,11 +459,49 @@ function memberCachedVersions(
       continue;
     }
     const domainRec = cachedById.get(documentId("domain", domainId));
-    if (domainRec !== undefined) {
-      versions.set(domainRec.id, domainRec.version);
-    }
+    // Same rule for the Domain half: a cached Book whose Domain document is
+    // gone is just as unloadable, and just as invisible to an update check
+    // that only looks at what it still has.
+    versions.set(
+      documentId("domain", domainId),
+      domainRec !== undefined ? domainRec.version : 0,
+    );
   }
   return versions;
+}
+
+/**
+ * Every backend document id the member Books (added + archived) are built
+ * from: one `topic:` id per non-private member — taken from **membership**,
+ * so a Book whose cache went missing is included rather than skipped — plus
+ * the `domain:` id of each cached Book document. A missing Book's domain id
+ * is unknowable here (only its own document names it); `acceptUpdate`
+ * resolves that one from the topic document it downloads.
+ *
+ * Drives "Refresh content", which re-downloads exactly this set.
+ */
+export function memberDocumentIds(
+  cachedById: Map<string, CachedDocument>,
+  added: string[],
+  archived: string[],
+  privateIds: ReadonlySet<string> = new Set(),
+): string[] {
+  const ids = new Set<string>();
+  for (const bookId of [...added, ...archived]) {
+    if (privateIds.has(bookId)) {
+      continue;
+    }
+    ids.add(documentId("topic", bookId));
+    const rec = cachedById.get(documentId("topic", bookId));
+    if (rec === undefined) {
+      continue;
+    }
+    const domainId = rawDomainId(rec.doc as BookDocument);
+    if (domainId !== "") {
+      ids.add(documentId("domain", domainId));
+    }
+  }
+  return [...ids];
 }
 
 // Set once by initContentSource; read by getNoteMarkdown. Note markdown
@@ -505,17 +574,27 @@ export async function initContentSource(): Promise<ContentInit> {
   const errors = demoBroken?.errors;
   active = errors === undefined ? built : undefined;
 
-  const cachedVersions = memberCachedVersions(cachedById, added, archived);
+  const privateIds = new Set(privateById.keys());
+  const cachedVersions = memberCachedVersions(
+    cachedById,
+    added,
+    archived,
+    privateIds,
+  );
   const configured =
     SUPABASE_URL !== undefined &&
     SUPABASE_URL !== "" &&
     SUPABASE_ANON_KEY !== undefined &&
     SUPABASE_ANON_KEY !== "";
 
-  return {
+  // Named rather than returned inline so `refreshContent` can reach
+  // `acceptUpdate`: a refresh is an update whose "changed" set is simply
+  // everything, and duplicating 200 lines of validate/download/commit to
+  // say that would be the worst possible way to say it.
+  const contentInit: ContentInit = {
     result: errors !== undefined ? { errors } : { source: built.source },
     broken: errors !== undefined ? [] : broken,
-    privateBookIds: new Set(privateById.keys()),
+    privateBookIds: privateIds,
 
     async checkForUpdate(): Promise<ContentUpdate | null> {
       if (!configured || errors !== undefined) {
@@ -550,9 +629,19 @@ export async function initContentSource(): Promise<ContentInit> {
       const downloaded = new Map(rows.map((row) => [row.id, row]));
       const memberBookIds = [...added, ...archived];
 
+      // Cache first, then the row just downloaded: a Book whose cached
+      // documents are gone has no domain on this device until its topic
+      // document arrives, and the commit filter below has to know which
+      // Books a domain row belongs to even then.
       function bookDomainId(bookId: string): string {
         const rec = cachedById.get(documentId("topic", bookId));
-        return rec !== undefined ? rawDomainId(rec.doc as BookDocument) : "";
+        if (rec !== undefined) {
+          return rawDomainId(rec.doc as BookDocument);
+        }
+        const downloadedRow = downloaded.get(documentId("topic", bookId));
+        return downloadedRow !== undefined
+          ? rawDomainId(downloadedRow.published as BookDocument)
+          : "";
       }
       function effectiveTopicDoc(bookId: string): BookDocument | undefined {
         const downloadedRow = downloaded.get(documentId("topic", bookId));
@@ -587,6 +676,58 @@ export async function initContentSource(): Promise<ContentInit> {
           changedTopicBookIds.has(bookId) ||
           changedDomainIds.has(bookDomainId(bookId)),
       );
+
+      // A member Book with no cached documents (Settings' "Refresh content",
+      // an evicted IndexedDB, a half-finished Add) reaches this point with
+      // its topic row downloaded and its domain document nowhere: nothing on
+      // the device knew which Domain it belonged to, so the update check
+      // could not ask for it. Now that the topic document is in hand it can,
+      // and it must — the dry run below would otherwise validate the Book
+      // against an empty domain map, reject it, and leave the broken card
+      // exactly where it was, with the update offering a repair that can
+      // never complete.
+      const unresolvedDomainDocIds = new Set<string>();
+      for (const bookId of affected) {
+        const topicDoc = effectiveTopicDoc(bookId);
+        if (topicDoc === undefined) {
+          continue;
+        }
+        const domainId = rawDomainId(topicDoc);
+        if (domainId === "") {
+          continue;
+        }
+        const domainDocId = documentId("domain", domainId);
+        if (downloaded.has(domainDocId) || cachedById.has(domainDocId)) {
+          continue;
+        }
+        unresolvedDomainDocIds.add(domainDocId);
+      }
+      if (unresolvedDomainDocIds.size > 0) {
+        const domainIdList = [...unresolvedDomainDocIds]
+          .map((id) => `"${id}"`)
+          .join(",");
+        let domainRows: (CatalogRow & { published: unknown })[];
+        try {
+          domainRows = (await fetchCatalog(
+            "id,kind,published,published_version,schema_version",
+            `&id=in.(${domainIdList})`,
+          )) as (CatalogRow & { published: unknown })[];
+        } catch {
+          throw new Error(
+            "update failed: could not fetch the missing content — check your connection and try again",
+          );
+        }
+        // An unsupported schema version is dropped rather than committed:
+        // the Book it backs then fails its own dry run and keeps its broken
+        // card, which is the honest outcome for content this build can't read.
+        for (const row of domainRows) {
+          if (row.schema_version > CONTENT_SCHEMA_VERSION) {
+            continue;
+          }
+          rows.push(row);
+          downloaded.set(row.id, row);
+        }
+      }
 
       // Dry-run each affected Book, independently, with its new docs against
       // the rest of the member set at their *current* cached versions (spec:
@@ -835,6 +976,59 @@ export async function initContentSource(): Promise<ContentInit> {
           `update kept the current version for: ${messages.join("; ")}`,
         );
       }
+    },
+
+    /**
+     * Settings' "Refresh content" (plan 0012 §6's manual escape hatch).
+     *
+     * It used to be `clearCachedDocuments()` + reload, on the assumption
+     * recorded in `specs/0012-asset-pipeline.md` that "the next sync
+     * re-downloads". Plan 0015 scoped syncing to *cached* member documents
+     * and quietly retired that assumption: after the wipe there were no
+     * cached versions to scope to, so the next sync planned nothing, and
+     * every added Book except the seed-backed `demo` came back as a
+     * permanent "missing cached content" card. The button destroyed content
+     * it had no way to restore, while its own text promised a re-download.
+     *
+     * Now the download comes first and the cache is only ever replaced by
+     * documents that already validated: `acceptUpdate` treats every member
+     * document as changed, and a failed refresh leaves the Books exactly as
+     * they were.
+     */
+    async refreshContent(): Promise<void> {
+      if (!configured) {
+        throw new Error(
+          "content updates are not available on this build — there is no backend configured",
+        );
+      }
+      const docIds = memberDocumentIds(cachedById, added, archived, privateIds);
+      if (docIds.length === 0) {
+        return; // nothing but private Books, which have no backend copy
+      }
+      const idList = docIds.map((id) => `"${id}"`).join(",");
+      let catalog: CatalogRow[];
+      try {
+        catalog = (await fetchCatalog(
+          "id,kind,published_version,schema_version",
+          `&id=in.(${idList})`,
+        )) as CatalogRow[];
+      } catch {
+        throw new Error(
+          "could not refresh content — check your connection and try again",
+        );
+      }
+      const changed = catalog.filter(
+        (row) => row.schema_version <= CONTENT_SCHEMA_VERSION,
+      );
+      if (changed.length === 0) {
+        return;
+      }
+      await contentInit.acceptUpdate({
+        changed,
+        appOutdated: catalog.some(
+          (row) => row.schema_version > CONTENT_SCHEMA_VERSION,
+        ),
+      });
     },
 
     async addBook(bookId: string, domainId: string): Promise<void> {
@@ -1141,4 +1335,5 @@ export async function initContentSource(): Promise<ContentInit> {
       reloadAfterMembershipChange();
     },
   };
+  return contentInit;
 }

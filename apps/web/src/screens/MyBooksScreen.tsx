@@ -261,7 +261,9 @@ export function MyBooksScreen({
                 )}
                 {missingDocs && !isPrivate && (
                   <p className="status">
-                    Try removing it and re-adding it from the Library.
+                    Its lessons are re-downloaded the next time an update is
+                    found — or fetch them now with Settings &rarr; Refresh
+                    content.
                   </p>
                 )}
                 {isPrivate && (
