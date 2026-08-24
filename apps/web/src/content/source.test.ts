@@ -5,7 +5,13 @@ import {
   type DomainDocument,
 } from "@betterbeaver/schema";
 import type { AssetStems } from "@betterbeaver/engine";
-import { buildMembers, withoutDocStems } from "./source";
+import {
+  buildMembers,
+  memberCachedVersions,
+  memberDocumentIds,
+  withoutDocStems,
+} from "./source";
+import { seedDocumentVersions } from "./bundled";
 import type { CachedDocument } from "./cache";
 import type { PrivateBookRecord } from "./private-store";
 
@@ -208,5 +214,111 @@ describe("withoutDocStems", () => {
     const out = withoutDocStems(shared, [documentId("topic", "same")]);
     expect(out.audioByBook.has("same")).toBe(false);
     expect(out.audioByDomain.get("same")).toEqual(["lexicon-clip"]);
+  });
+});
+
+/**
+ * The update check is scoped to the member Books' documents, and used to
+ * scope itself to the *cached* ones — so a Book with no cached documents
+ * (Settings' old "Refresh content" emptied the store; IndexedDB eviction
+ * does it unasked) was invisible to it. It booted as a "missing cached
+ * content" broken card, the update check then found nothing to fetch for
+ * it, and no relaunch, banner or auto-update ever brought it back: Remove
+ * and re-Add was the only exit. Version 0 is what `planUpdate` has always
+ * documented for an uncached document, and it makes the repair an ordinary
+ * update.
+ */
+describe("memberCachedVersions", () => {
+  const { book, domain } = makeBook();
+  const cachedById = new Map(
+    cachedDocs(book, domain).map((doc) => [doc.id, doc]),
+  );
+
+  it("reports a cached Book's own documents at their cached versions", () => {
+    const versions = memberCachedVersions(cachedById, ["book-a"], []);
+    expect(versions.get(documentId("topic", "book-a"))).toBe(1);
+    expect(versions.get(documentId("domain", "domain-a"))).toBe(1);
+  });
+
+  it("reports a cached Book's missing Domain document at version 0 too", () => {
+    const topicOnly = new Map(
+      cachedDocs(book, domain)
+        .filter((doc) => doc.kind === "topic")
+        .map((doc) => [doc.id, doc] as const),
+    );
+    const versions = memberCachedVersions(topicOnly, ["book-a"], []);
+    expect(versions.get(documentId("topic", "book-a"))).toBe(1);
+    expect(versions.get(documentId("domain", "domain-a"))).toBe(0);
+  });
+
+  it("reports a member Book with no cached document at version 0", () => {
+    const versions = memberCachedVersions(new Map(), ["book-a"], []);
+    expect(versions.get(documentId("topic", "book-a"))).toBe(0);
+  });
+
+  it("covers archived Books too — they update while unloaded", () => {
+    const versions = memberCachedVersions(new Map(), [], ["book-a"]);
+    expect(versions.get(documentId("topic", "book-a"))).toBe(0);
+  });
+
+  it("skips a private Book, which has no backend copy to compare against", () => {
+    const versions = memberCachedVersions(
+      new Map(),
+      ["book-a"],
+      [],
+      new Set(["book-a"]),
+    );
+    expect(versions.size).toBe(0);
+  });
+
+  // `demo` is served from the bundled seed when it isn't cached, so it is
+  // not missing and must not claim 0: that would offer an update on the
+  // first boot of every fresh install, the bug `seedCatalogRows` records.
+  it("reports an uncached demo at its seed versions, not 0", () => {
+    const versions = memberCachedVersions(new Map(), ["demo"], []);
+    const seeded = seedDocumentVersions();
+    expect(versions.get(documentId("topic", "demo"))).toBe(
+      seeded.get(documentId("topic", "demo")),
+    );
+    expect(versions.get(documentId("topic", "demo"))).not.toBe(0);
+  });
+});
+
+/** What "Refresh content" re-downloads. */
+describe("memberDocumentIds", () => {
+  const { book, domain } = makeBook();
+  const cachedById = new Map(
+    cachedDocs(book, domain).map((doc) => [doc.id, doc]),
+  );
+
+  it("lists a cached Book's topic and domain documents", () => {
+    expect(memberDocumentIds(cachedById, ["book-a"], []).sort()).toEqual(
+      [documentId("topic", "book-a"), documentId("domain", "domain-a")].sort(),
+    );
+  });
+
+  it("still lists the topic document of a Book with no cache — the one that needs repairing most", () => {
+    expect(memberDocumentIds(new Map(), ["book-a"], [])).toEqual([
+      documentId("topic", "book-a"),
+    ]);
+  });
+
+  it("names each shared domain document once", () => {
+    const second = {
+      ...cachedDocs(book, domain)[0],
+      id: documentId("topic", "book-b"),
+    } as CachedDocument;
+    const byId = new Map(cachedById);
+    byId.set(second.id, second);
+    const ids = memberDocumentIds(byId, ["book-a", "book-b"], []);
+    expect(ids.filter((id) => id === documentId("domain", "domain-a"))).toEqual(
+      [documentId("domain", "domain-a")],
+    );
+  });
+
+  it("skips private Books", () => {
+    expect(
+      memberDocumentIds(cachedById, ["book-a"], [], new Set(["book-a"])),
+    ).toEqual([]);
   });
 });

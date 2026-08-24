@@ -50,7 +50,7 @@ import { createLocalStorageProgressStore } from "./progress/local-storage";
 import { createLocalStorageVocabListStore } from "./progress/vocab-lists";
 import { createLocalStorageUserEntryStore } from "./progress/user-entries";
 import { getPinnedUnitIds, togglePinnedUnits } from "./progress/pinned-tasks";
-import { AUTO_UPDATE_KEY } from "./autoUpdate";
+import { AUTO_UPDATE_KEY, RECHECK_INTERVAL_MS } from "./autoUpdate";
 import { schedulingConfig } from "./learning";
 import { isOffline } from "./offline";
 import { useStorageUnwritable } from "./storage-health";
@@ -723,19 +723,31 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
       setUpdating(false);
     }
   }
+  /**
+   * `mayApply` is false wherever a reload would cost the learner something:
+   * `acceptUpdate` reloads the app, which is invisible on My Books and
+   * unforgivable three questions into a session.
+   */
+  function handleFoundUpdate(
+    result: ContentUpdate | null,
+    mayApply: boolean,
+  ): void {
+    // Auto-update only covers an actual content download — an
+    // app-shell-only reload still needs the user's say-so.
+    if (
+      result !== null &&
+      result.changed.length > 0 &&
+      mayApply &&
+      localStorage.getItem(AUTO_UPDATE_KEY) === "on"
+    ) {
+      void acceptUpdateNow(result);
+      return;
+    }
+    setUpdate(result);
+  }
   useEffect(() => {
     void contentInit.checkForUpdate().then((result) => {
-      // Auto-update only covers an actual content download — an
-      // app-shell-only reload still needs the user's say-so.
-      if (
-        result !== null &&
-        result.changed.length > 0 &&
-        localStorage.getItem(AUTO_UPDATE_KEY) === "on"
-      ) {
-        void acceptUpdateNow(result);
-        return;
-      }
-      setUpdate(result);
+      handleFoundUpdate(result, true);
     });
   }, [contentInit]);
   async function handleAcceptUpdate() {
@@ -779,6 +791,54 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   // book-load failure path below can force one on its own), so the overlay
   // must not survive it.
   useEffect(() => setSessionEdit(null), [screen]);
+
+  // Content updates used to be looked for exactly once, at boot. On an
+  // installed PWA that is close to never: the app is resumed from the
+  // background for weeks at a time and only really boots when the OS
+  // reclaims it, so "auto-update on startup" could sit on months of
+  // published content without ever asking — which is what it looks like
+  // from the outside when the setting is on and nothing ever updates.
+  //
+  // So look again when the app comes back to the foreground, at most once
+  // per RECHECK_INTERVAL_MS. Applying it is gated on being on My Books:
+  // accepting reloads the app, and the one place that costs nothing is the
+  // screen the reload lands on anyway. Anywhere else the banner waits on
+  // My Books, exactly as a boot-time find does.
+  const lastUpdateCheckRef = useRef(Date.now());
+  const onMyBooksRef = useRef(screen.screen === "books");
+  useEffect(() => {
+    onMyBooksRef.current = screen.screen === "books";
+  }, [screen]);
+  useEffect(() => {
+    function recheck(): void {
+      if (document.visibilityState !== "visible" || isOffline()) {
+        return;
+      }
+      if (Date.now() - lastUpdateCheckRef.current < RECHECK_INTERVAL_MS) {
+        return;
+      }
+      lastUpdateCheckRef.current = Date.now();
+      // The app shell is the other half of "it never updates": the service
+      // worker only looks for a new build when a page load registers it,
+      // which for a resumed PWA is the same never. Asking it to look is the
+      // same commitment as accepting a content update — `registerType:
+      // "autoUpdate"` reloads the page the moment the new worker activates
+      // — so it is gated on the same screen, and skipped in offline mode by
+      // the guard above (which otherwise deliberately doesn't cover the
+      // service worker at all).
+      if (onMyBooksRef.current) {
+        void navigator.serviceWorker?.getRegistration().then(
+          (registration) => registration?.update(),
+          () => undefined, // no service worker (dev, unsupported browser)
+        );
+      }
+      void contentInit.checkForUpdate().then((result) => {
+        handleFoundUpdate(result, onMyBooksRef.current);
+      });
+    }
+    document.addEventListener("visibilitychange", recheck);
+    return () => document.removeEventListener("visibilitychange", recheck);
+  }, [contentInit]);
   // Holds whatever handler the currently rendered screen would run on its
   // own back button (null at the root, where back should exit normally).
   // Signed-in users get ✎ Edit buttons on the book/lesson/unit screens
@@ -1740,6 +1800,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
         onSignIn={() => setScreen({ screen: "author" })}
         onImportBook={importDocuments}
         importPrivateBook={contentInit.importPrivateBook}
+        refreshContent={contentInit.refreshContent}
       />
     );
   }

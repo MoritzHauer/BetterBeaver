@@ -4,8 +4,10 @@
  * and re-downloadable) and `private` (user-authored Books that exist nowhere
  * else). They are deliberately separate stores rather than one store with a
  * provenance flag, so that the cache sweeps — `clearCachedDocuments` behind
- * Settings' "Refresh content", and `purgeUnmembered` on Remove — cannot reach
+ * "erase all my data", and `purgeUnmembered` on Remove — cannot reach
  * private content by construction rather than by remembering a boolean.
+ * (Settings' "Refresh content" was a third sweep until it stopped emptying
+ * the store and started re-downloading into it instead.)
  *
  * Every caller must open at DB_VERSION; opening at a lower version throws
  * VersionError once any client has upgraded.
