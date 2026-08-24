@@ -19,12 +19,12 @@ Two of the five rungs the owner named do not exist today. Both turn out to be **
 - A due card is reviewed with a harder exercise as it matures, capped by what its unit actually authored, and never below the retrieval strength review already gives it today.
 - The owner's two missing steps — **pick the foreign word for an English prompt**, and **type the foreign word** — become playable on every Book that is already published, Kyrgyz included, with no content edit.
 - A learner with only a Russian keyboard can type ң, ө and ү — which today they cannot, in exercises that already ship (§9).
-- An author gets the ladder built for them where it is mechanical, and recommended where it is not (§10): a vocabulary unit reaches five of the ten ranks from one press.
+- An author gets a first account of which exercises a unit can support and where the judgement calls are (§10) — the basis [plan 0025](0025-generated-exercises.md) builds generation on.
 
 ## Non-goals
 
-- **No new task type, and exactly one new authored field.** This is the constraint that shapes the whole design: every exercise below is derived from content that already exists. The single exception is §9's optional `domain.extraChars`, which is an input-method fact about a writing system, not content.
-- **No generated content.** §10's wizard builds exercises over items the author already wrote; it never writes a sentence, a gloss or an example, and it never accepts a pedagogical choice on the author's behalf (plan 0007 decision 2). Plan 0017 decision 5 (schema stays additive for anything a private Book can contain) and 0015 §6a (only non-additive change bumps the schema version) both bite here, and derivation sidesteps both.
+- **No new task type, and exactly one new authored field.** This is the constraint that shapes the whole design: every exercise below is derived from content that already exists. Plan 0017 decision 5 (schema stays additive for anything a private Book can contain) and 0015 §6a (only non-additive change bumps the schema version) both bite here, and derivation sidesteps both. The single exception is §9's optional `domain.extraChars`, which is an input-method fact about a writing system, not content.
+- **No generated content.** §10 builds exercises over items the author already wrote; it never writes a sentence, a gloss or an example, and it never accepts a pedagogical choice on the author's behalf (plan 0007 decision 2).
 - **No per-task or per-Book difficulty override.** Rank is a property of the exercise, read from the table, never authored. An author who wants an easier unit authors easier tasks.
 - **No adaptive engine.** The rung → band mapping is a constant, identical for every learner. Same boundary 0016, 0020 and 0022 §7 each drew: no recommendation, no "which unit needs work" prompt, no per-learner model.
 - **No change to grading, to either scheduler, or to the outcome-list contract.** The ladder chooses *which exercise a card is shown as*; `applyGrade`, `recognizeQuality`, `recallQuality` and the day-granular due dates are untouched.
@@ -155,6 +155,8 @@ Deriving the list instead of authoring it was rejected: it needs a per-language 
 
 ### 10. Auto-generated exercises, and the wizard
 
+> **Superseded in large part by [plan 0025](0025-generated-exercises.md) (2026-08-17).** This section assumes authored tasks are the norm and generation is an assistant that keeps them in sync. 0025 inverts that — generation becomes the default and authored tasks the override — which dissolves most of the wizard: with nothing to keep in sync there is nothing to recommend, only a budget and per-item targets to tune. What survives here is the **mechanical/pedagogical split** below, which 0025 §1 and §3 both build on, and the cloze-blank suggester, which authors *item* markup rather than tasks and therefore outlives both plans. The section is kept in place rather than rewritten, because 0025's own argument starts from it.
+
 Authoring a unit today means adding tasks one at a time, from a list of types, with no guidance about which set is enough. The ladder gives the editor something to say — coverage — and most of the generation is mechanical. 0021 §9 already built the hard half: the Exercises page lists only the task types a unit can support, pre-filled with eligible items, because `TASK_ALLOWED_ITEM_KINDS` / `TASK_REQUIRED_ASSET` / `TASK_NEEDS_DISTRACTORS` and validator classes (e)/(f)/(o) make invalid tasks unreachable rather than explained after the fact.
 
 The line this feature must not cross is plan 0007 decision 2: **content selection is pedagogy and is never automated.** So the split is:
@@ -191,10 +193,10 @@ Each is independently shippable, `pnpm check` green after every one.
 4. **Produce-direction MCQ** — `sampleMcq`/`buildTaskSession` gain a direction, validator class (h) widened to the prompt side, fixture per the new error. `SessionScreen` unchanged by construction; a browser pass confirms the reversed question renders and grades.
 5. **Typed production (`write`)** — derived from `recall` tasks, reusing the typed-input component and `checkTypedAnswer`; strict script, so it depends on slice 1.
 6. **Review climbs the ladder** — replace `SENTENCE_REVIEW_TASK_TYPES` with the §5 rule; tests for floor, ceiling-by-rung, availability fallback, and that every existing review case (lexeme, cloze blank, pair, note, sentence) is unchanged at rung 0.
-7. **Auto-generated exercises** (§10) — the mechanical generator over a unit's items, additive and idempotent, on 0021 §9's Exercises page; band coverage per item as the recommendation's language. Vocabulary units first (the table in §10); the cloze-blank suggester is its own step and ships behind an author confirm.
+7. _(superseded)_ **Auto-generated exercises** (§10) — folded into [plan 0025](0025-generated-exercises.md), which takes this plan's ranks as its prerequisite. The cloze-blank suggester is the one piece neither plan owns; see 0025 open question 5.
 8. _(optional)_ **Band coverage line** — the read-only `Meet it ✓ · Assemble it ✓ · Produce it —` summary of §8, if slice 7 hasn't already put it on screen.
 
-Slice 1 is independent of the ladder entirely and is worth landing first on its own merits. Slices 4 and 5 each deliver one of the owner's missing steps and are usable before slice 6 exists (they appear in unit sessions via slice 3's bands); slice 6 is what turns the ladder into a progression over time; slice 7 is the authoring half and needs only slice 2.
+Slice 1 is independent of the ladder entirely and is worth landing first on its own merits. Slices 4 and 5 each deliver one of the owner's missing steps and are usable before slice 6 exists (they appear in unit sessions via slice 3's bands); slice 6 is what turns the ladder into a progression over time. The authoring half left with plan 0025, which needs only slice 2 of this one.
 
 ## Done-criteria
 
@@ -203,7 +205,6 @@ Slice 1 is independent of the ladder entirely and is worth landing first on its 
 - On the live Kyrgyz Book, with no content edit: an English prompt with Kyrgyz options is playable, and typing a word from its English prompt is playable and auto-graded.
 - A Kyrgyz cloze blank or dictation target containing ң/ө/ү can be answered correctly on a device with only a Russian keyboard, and ң typed as н is still graded wrong.
 - A lexeme at rung 0 reviews exactly as it does today; the same lexeme at rung 4 reviews as `write`; failing it returns it to the recall card.
-- A vocabulary unit with 4+ lexemes and zero tasks reaches ranks 1, 2, 4, 8 and 9 from one press, and pressing it twice changes nothing.
 - `pnpm check` green; no `CONTENT_SCHEMA_VERSION` change; no new `bb.*` key; export/import untouched.
 
 ## Open questions
