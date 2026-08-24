@@ -54,7 +54,7 @@ if (note === undefined || note.trim() === "") {
   );
   process.exit(1);
 }
-const backend = resolveBackendOrExit();
+const backend = await resolveBackendOrExit();
 if (backend.mode === "anon") {
   console.error(
     "the anon key can read the catalog but not propose — set BB_AUTHOR_TOKEN (scripts/author-token.ts)",

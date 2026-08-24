@@ -37,7 +37,14 @@ export async function mintTestSession(
   /** Which account to mint for; defaults to the throwaway test account.
    * `author-token.ts` passes the proposal-only authoring account. */
   email = EMAIL,
-): Promise<{ email: string; actionLink: string; accessToken: string }> {
+): Promise<{
+  email: string;
+  actionLink: string;
+  accessToken: string;
+  /** The long-lived half of the session — `author-auth.ts` exchanges it for
+   * a fresh access token instead of minting a new link every hour. */
+  refreshToken: string;
+}> {
   if (!URL_BASE || !SERVICE_KEY) {
     throw new Error("set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY");
   }
@@ -82,12 +89,17 @@ export async function mintTestSession(
   // — one spent here for the token, one left unspent for the browser.
   const landed = await fetch(await generateLink(), { redirect: "manual" });
   const location = landed.headers.get("location") ?? "";
-  const accessToken =
-    new URLSearchParams(location.split("#")[1] ?? "").get("access_token") ?? "";
+  const fragment = new URLSearchParams(location.split("#")[1] ?? "");
+  const accessToken = fragment.get("access_token") ?? "";
   if (accessToken === "") {
     throw new Error(`no session in redirect: ${location}`);
   }
-  return { email, actionLink: await generateLink(), accessToken };
+  return {
+    email,
+    actionLink: await generateLink(),
+    accessToken,
+    refreshToken: fragment.get("refresh_token") ?? "",
+  };
 }
 
 if (import.meta.filename === process.argv[1]) {

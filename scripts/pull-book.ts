@@ -79,7 +79,7 @@ if (readdirSync(CONTENT_DIR).length > 0) {
   process.exit(1);
 }
 
-const backend = resolveBackendOrExit();
+const backend = await resolveBackendOrExit();
 const source = publishedFrom(backend);
 
 /** The version each document was pulled at — `propose-book.ts` stamps it as

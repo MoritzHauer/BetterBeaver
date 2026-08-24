@@ -110,7 +110,11 @@ The editing loop for someone who is **not** a maintainer — a second author, an
 
    One row, `is_admin` false, `maintains` null. If `maintains` is non-null, that account can publish — revoke it with `delete from public.maintainers where user_id = '<id>';`.
 
-3. **Hand over three values.** `SUPABASE_URL`, `SUPABASE_ANON_KEY` (public by design — it ships in the app) and the printed `BB_AUTHOR_TOKEN`. The token is a JWT that **expires after an hour**; re-run the mint command for a fresh one. Nothing long-lived is ever shared, which is the point: a leaked token is dead by the next meal, and a leaked _account_ can only file proposals you decline.
+3. **Hand over three values.** `SUPABASE_URL`, `SUPABASE_ANON_KEY` (public by design — it ships in the app) and one of the two tokens the mint prints:
+   - `BB_AUTHOR_TOKEN` — the access token. Dies with the project's JWT lifetime (an hour by default). Nothing long-lived is shared, so a leak is dead by the next meal. Right for a session someone else runs, and for anywhere the value might be read by more than its intended reader.
+   - `BB_AUTHOR_REFRESH_TOKEN` — the durable half. `author-auth.ts` exchanges it for a fresh access token at every run, so nothing has to be re-pasted hourly. Export it **once**: the exchange rotates it, and the rotated token is written to `.bb-author.local` (git-ignored, mode 0600), which from then on is the live copy. Re-exporting the original after that is the usual cause of a refresh loop that "randomly" stops working.
+
+   A refresh token is a standing credential, so give it only to a machine you control — see [Where a long-lived token may live](#where-a-long-lived-token-may-live).
 
 To retire the account entirely:
 
@@ -128,6 +132,8 @@ Its open proposals lose their author (`on delete set null`) and stay in the queu
 export SUPABASE_URL=https://<ref>.supabase.co
 export SUPABASE_ANON_KEY=<anon key>
 export BB_AUTHOR_TOKEN=<from the owner>          # expires after an hour
+# or, once, instead of the line above — refreshed automatically from then on:
+export BB_AUTHOR_REFRESH_TOKEN=<from the owner>
 
 BB_CONTENT_DIR=/tmp/bb-edit node scripts/pull-book.ts kyrgyz
 # edit the JSON under /tmp/bb-edit, then — always — validate:
@@ -142,9 +148,21 @@ The proposal lands in the maintainer's queue (Edit → the document → open pro
 
 Two things this loop cannot catch, both inherited from `pull-book.ts`: a partial tree cannot run `validateContentSet`, so an item id that collides with a Book _outside_ the pulled tree still slips through to review; and assets are symlinked from the repo, so a Book whose assets are not in `content/` validates against empty stem lists.
 
+### Where a long-lived token may live
+
+The refresh token never expires on a clock — it ends when it is rotated away, revoked, or the account is deleted. That makes _where it sits_ the whole question.
+
+- **A machine you control** (your desktop, a local Claude Code session): fine. Put `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `BB_AUTHOR_REFRESH_TOKEN` in a git-ignored `.env.local` and load it per shell, or let `.bb-author.local` hold it after the first exchange.
+- **A cloud Claude Code environment's variables**: possible, but Anthropic's own guidance is against it — those values are readable by anyone who uses the environment and there is no secrets store ([cloud environments](https://code.claude.com/docs/en/cloud-environments#set-environment-variables)). A session shared from a Pro or Max account is visible to any signed-in claude.ai user, transcript included. If you do it anyway, this is the credential class where it is defensible — the worst a leak buys is proposals you decline — but prefer handing a cloud session the hourly access token, which dies on its own.
+- **Anywhere it might be echoed**: no. Load it from a file rather than putting it on a command line that reaches a log or a transcript.
+
+Two practical notes for cloud sessions specifically. Egress is filtered, so `<ref>.supabase.co` must be on the environment's allowlist (**Custom** network access) or every call fails before any credential is checked — `author-auth.ts` names that case rather than reporting a bare `fetch failed`. And rotation makes an environment variable a poor home even setting security aside: it is spent after the first run, and the live token is on the disk of whichever session ran it — which a cloud VM discards when it is reclaimed.
+
+Revoking is a Supabase-side act: delete the account (below), or sign the account's sessions out. Raising **Auth → Access token (JWT) expiry** in the dashboard is the other way to lengthen a token's life, and the wrong one — the setting is project-wide, so it lengthens every learner's session too.
+
 ### Identity precedence
 
-`scripts/author-auth.ts` resolves one of three identities, in this order: `BB_AUTHOR_TOKEN` (+ anon key) → `SUPABASE_SERVICE_ROLE_KEY` → `SUPABASE_ANON_KEY` alone. Author mode wins over the service key deliberately — minting a token is a deliberate act, and a shell carrying both should act as the weaker identity. Anon mode can pull a listed Book and nothing else.
+`scripts/author-auth.ts` resolves one of three identities, in this order: `BB_AUTHOR_TOKEN` (+ anon key) → `SUPABASE_SERVICE_ROLE_KEY` → `SUPABASE_ANON_KEY` alone. Author mode wins over the service key deliberately — minting a token is a deliberate act, and a shell carrying both should act as the weaker identity. Anon mode can pull a listed Book and nothing else. When `BB_AUTHOR_TOKEN` is absent, a stored or exported refresh token is exchanged for one first (store before env var — the store holds the rotated copy), so author mode is reached without a fresh mint.
 
 If the account is later added to `public.maintainers` for one document, the same token also publishes that document (via the `publish_document` RPC's maintainer check) — a separate decision, not something this setup implies.
 

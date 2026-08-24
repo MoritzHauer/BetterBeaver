@@ -40,9 +40,13 @@ const session = await mintTestSession("http://localhost:5173/", email);
 
 console.log(`account:  ${session.email}`);
 console.log(`expires:  ${expiresAt(session.accessToken)}`);
-console.log("\npaste into the authoring shell (never commit it):\n");
+console.log("\npaste into the authoring shell (never commit either token):\n");
 console.log(`export SUPABASE_URL=${process.env.SUPABASE_URL}`);
 console.log(
   `export SUPABASE_ANON_KEY=${process.env.SUPABASE_ANON_KEY ?? "<anon key>"}`,
 );
 console.log(`export BB_AUTHOR_TOKEN=${session.accessToken}`);
+console.log(
+  `\nor, to stop re-minting every hour, the durable half — one exchange only,\nafter which the rotated token lives in .bb-author.local:\n`,
+);
+console.log(`export BB_AUTHOR_REFRESH_TOKEN=${session.refreshToken}`);
