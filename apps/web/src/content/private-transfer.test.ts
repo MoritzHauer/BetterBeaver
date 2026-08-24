@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { CONTENT_SCHEMA_VERSION } from "@betterbeaver/schema";
-import { checkImportFileShape } from "./private-transfer";
+import { checkImportFileShape, readPrivateBookFile } from "./private-transfer";
 
 // Pure rejection-rule checks only (spec 0017-5 §3 rules 1-2 / done criterion
 // 2) — no IndexedDB, no DOM. Everything else about import needs live state
@@ -50,5 +50,40 @@ describe("checkImportFileShape", () => {
   it("rejects a non-object", () => {
     const result = checkImportFileShape(null);
     expect(result.ok).toBe(false);
+  });
+});
+
+describe("readPrivateBookFile", () => {
+  // The one import case that is not a rejection rule: a file from a device
+  // still on schema version 1 is *accepted* (`<= CONTENT_SCHEMA_VERSION`), so
+  // the local migration has to run here or it validates into a broken Book.
+  it("migrates a version-1 components breakdown out of an imported file", async () => {
+    const result = await readPrivateBookFile({
+      ...validFile,
+      schemaVersion: 1,
+      book: { topic: { id: "bk" }, items: [] },
+      domain: {
+        entries: [
+          {
+            id: "dm-e1",
+            kind: "lexeme",
+            payload: {
+              script: "окумуштуу",
+              components: [{ script: "оку", gloss: "study" }],
+            },
+          },
+        ],
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const entry = result.domain.entries[0] as {
+        payload: { components: unknown[] };
+      };
+      expect(entry.payload.components).toEqual([
+        { text: "оку", gloss: "study" },
+      ]);
+    }
   });
 });

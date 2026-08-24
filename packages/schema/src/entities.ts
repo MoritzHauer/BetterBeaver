@@ -105,6 +105,17 @@ export const linkSchema = z.object({
 });
 export type Link = z.infer<typeof linkSchema>;
 
+/** One part of a hand-authored morpheme breakdown (plan 0023 §4). `text` and
+ * `gloss` are what renders; `entryId` is navigation only, so the breakdown
+ * displays without resolving anything. */
+export const componentSchema = z.object({
+  text: z.string(),
+  gloss: z.string(),
+  /** The part's own lexicon entry, when one exists — navigation only. */
+  entryId: slugSchema.optional(),
+});
+export type Component = z.infer<typeof componentSchema>;
+
 /** Plan 0008: the former Unit, renamed — the unlock-chain/progress level under a Book; its content refs moved down to the new, daily-sized `Unit`. */
 export const lessonSchema = z.object({
   id: slugSchema,
@@ -141,10 +152,16 @@ const lexemePayloadSchema = z.object({
   imageRef: slugSchema.optional(),
   /** Authored one side only; see `linkSchema` (plan 0006, validator class (z)). */
   links: z.array(linkSchema).optional(),
-  /** Hand-authored compound breakdown (plan 0008 step 5), e.g. кайнэне → [{script: "кайн", gloss: "in-law"}, {script: "эне", gloss: "mother"}]. */
-  components: z
-    .array(z.object({ script: z.string(), gloss: z.string() }))
-    .optional(),
+  /** Hand-authored compound breakdown (plan 0008 step 5), reshaped to the
+   * shared component shape by plan 0023 §4, e.g. кайнэне → [{text: "кайн",
+   * gloss: "in-law"}, {text: "эне", gloss: "mother"}]. */
+  components: z.array(componentSchema).optional(),
+  /** A bound morpheme: an affix that only occurs attached (plan 0023 §1–2).
+   * Absent = an ordinary free-standing word. */
+  bound: z.enum(["prefix", "suffix"]).optional(),
+  /** Vowel-harmony allomorphs, hand-authored and closed (plan 0023 §3) —
+   * never generated, and meaningless unless `bound` is set. */
+  variants: z.array(z.string()).optional(),
 });
 
 const conceptPayloadSchema = z.object({
@@ -155,6 +172,9 @@ const conceptPayloadSchema = z.object({
   imageRef: slugSchema.optional(),
   /** Authored one side only; see `linkSchema` (plan 0006, validator class (z)). */
   links: z.array(linkSchema).optional(),
+  /** The same breakdown a lexeme carries (plan 0023 §4), which is what makes
+   * cardio·myo·pathy work with no language-specific code. */
+  components: z.array(componentSchema).optional(),
 });
 
 /**

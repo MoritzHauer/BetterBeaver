@@ -12,6 +12,25 @@ function lexeme(id: string, script: string): Item {
   };
 }
 
+/** An affix entry (plan 0023 §1): an ordinary lexeme carrying `bound`. */
+function boundLexeme(
+  id: string,
+  script: string,
+  bound: "prefix" | "suffix",
+): Item {
+  return {
+    id,
+    kind: "lexeme",
+    payload: {
+      script,
+      transliteration: script,
+      gloss: `gloss for ${script}`,
+      bound,
+    },
+    sourceRef: "t-resource-1",
+  };
+}
+
 function concept(id: string, term: string): Item {
   return {
     id,
@@ -74,5 +93,20 @@ describe("resolveToken", () => {
   it("returns undefined for a token with no exact or prefix match", () => {
     const entries = [lexeme("ky-item-salam", "салам")];
     expect(resolveToken("рахмат", entries)).toBeUndefined();
+  });
+
+  it("never matches a bound prefix affix, so the word it would outrank still wins", () => {
+    // The one leak plan 0023 §1 found: "гидро-" is longer than "гид", so
+    // longest-prefix would hand the learner the affix, not the word.
+    const affix = boundLexeme("ky-entry-gidro", "гидро", "prefix");
+    const word = lexeme("ky-entry-gid", "гид");
+    expect(resolveToken("гидроузел", [affix, word])).toBe(word);
+  });
+
+  it("still resolves a bound suffix affix tapped on its own", () => {
+    // Only prefixes leak (plan 0023 §1): a learner tapping a suffix in a
+    // breakdown must still reach its entry.
+    const affix = boundLexeme("ky-entry-sfx-luu", "-луу", "suffix");
+    expect(resolveToken("-луу", [affix])).toBe(affix);
   });
 });

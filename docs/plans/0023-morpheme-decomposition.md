@@ -109,7 +109,7 @@ Each ships independently; the app works after every one.
 
 **D — the Kyrgyz suffix table.** Content only, no code. §Bootstrapping below.
 
-**B — the matcher.** §8.
+**B — the matcher.** §8. **B2 — backtracking and ranked candidates.** §8a, amending §8 after B landed.
 
 **C — word building.** Its own plan; §8 sketches it only.
 
@@ -154,6 +154,33 @@ The converter stays a throwaway. If it gets run a third time, promote it to `scr
 Runs **in the entry editor only**, behind a "Suggest breakdown" button, never learner-facing and never auto-applied. It has no morphotactic model (see Non-goals), so it will sometimes propose a well-formed nonsense split; the author rejects it at zero cost. That asymmetry — cheap wrong suggestion, expensive wrong auto-commit — is why it is a button.
 
 One runnable check: a table of ~10 known words and their expected splits, plus one that must return `undefined`.
+
+### 8a. B2 — backtracking, and several candidates instead of one
+
+_Amendment, 2026-08-17, after slice B landed and its own report named the hole._
+
+Slice B implemented §8 exactly as pinned, and the pinned algorithm has a failure the design did not foresee: **peeling greedily with no backtracking destroys valid splits.** Once the table holds both `-луу` and the verbal-noun `-уу`, `суулуу` peels `-луу`, then greedily peels `-уу` off the *stem* `суу`, leaving `с` — not a free entry, so step 3's all-or-nothing rule discards a word that decomposes perfectly well. Greedy peeling commits to the first path and step 3 then punishes it. Stems ending in a suffix form are common in an agglutinative language, so this is not an edge case; it would have shown up on the first day of slice D as "the button never works".
+
+**B2 replaces the single greedy walk with a search over every decomposition, and returns the candidates ranked instead of one answer.**
+
+`proposeSplits(script, entries, limit?): Component[][]` — best first, empty when nothing decomposes. Same candidate rules as §8 (suffix entries, `variants` ∪ `script`, hyphen-stripped, residue must resolve as a free entry, at least one suffix); only the walk changes, from "peel the longest and hope" to "enumerate, then rank".
+
+Ranking, pinned: **fewer parts first**, then the **longer root**, then the joined entry ids lexicographically so the order never depends on pool order. Fewest parts is the shallowest analysis that still explains the word, which is what an author usually wants; the rest is determinism, not judgement.
+
+Two caps, both guards rather than semantics: at most 6 suffixes deep and at most 64 complete candidates explored before ranking. A pathological pool cannot make the editor hang.
+
+The button then does what the count implies: one candidate fills the rows as before, **several render as a chooser and nothing is applied until the author taps one**, none says "No breakdown found". This keeps §8's asymmetry intact — the tap is still the validation — and it is why ranking is allowed to be imperfect: the runner-up is one tap away, not lost.
+
+### 8b. Scoring a split for sense — considered, deferred
+
+The obvious next step is to ask whether a *well-formed* split is a *sensible* one (§7's `тамчы` → `там·чы`, "wall" + agent, for a word meaning "drop"), by scoring candidates against meaning rather than form. Deferred, deliberately:
+
+- **A translator is the wrong instrument, and unnecessary.** The signal is already in the lexicon: the word carries its `gloss` and so does every affix entry. What a scorer needs is a judgement about whether the part glosses *compose* into the word gloss — derivational semantics, not translation. No MT API answers that question, and Kyrgyz MT quality is poor anyway.
+- **Offline-first does not forbid it.** Worth recording, since it looks like it should: the matcher is author-only, in an edit surface that already requires the network. A call here breaks no invariant. The objection is value, not architecture.
+- **The right place is the authoring pipeline, not the app.** Slice D drafts a TSV on a workstation, where `apertium-kir`'s FST — a real morphological analyzer, already named in §Bootstrapping as the completeness cross-check — answers this question properly and offline, and where a bulk review pass costs no code and no runtime dependency. The §Non-goals ban on an FST is about the shipped runtime; a check over the table before it is published is a different thing.
+- **A confident wrong ranking is worse than an obviously wrong suggestion.** An implausible proposal costs one tap to reject. A scored one invites trust. Scoring makes the failure quieter, not rarer.
+
+Revisit only if slice D's real table shows the chooser routinely surfacing nonsense above the right answer — which is a measurement, not a guess, and cannot be taken before the table exists.
 
 ### 9. C — the word-building task
 

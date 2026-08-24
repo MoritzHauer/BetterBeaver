@@ -1009,6 +1009,35 @@ input[type="text"] {
   background: var(--card-bg);
 }
 
+/* The morpheme breakdown (plan 0023 §6) is a `.chips` row of ordinary chips,
+ * with two things a chip row does not give on its own: each part stacks its
+ * gloss under its text (a `.status` span is inline, so without this the two
+ * run together as "оку study"), and the middot between parts joins them
+ * rather than being one — it carries no chip border and sits on the text
+ * line, not centred against the taller two-line part. */
+.entry-breakdown .breakdown-part {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.1rem 0.6rem;
+  font-size: 0.8rem;
+}
+
+/* `button.plain` (border/background: none) outranks `.chip` on specificity,
+ * so without this the *tappable* part rendered flat while the inert ones
+ * beside it wore the pill — the affordance exactly backwards, and visible
+ * here in a way it never was for link chips, which are all buttons. */
+.entry-breakdown button.chip {
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+}
+
+.breakdown-join {
+  align-self: flex-start;
+  padding-top: 0.1rem;
+  opacity: 0.6;
+}
+
 button.speaker {
   font-size: 1.25rem;
   min-height: 2.75rem;
@@ -1587,6 +1616,37 @@ input[type="email"],
   display: flex;
   gap: 0.25rem;
   flex-shrink: 0;
+}
+
+/* The chooser plan 0023 §8a puts under "Suggest breakdown" when the search
+ * finds more than one decomposition: a plain list of candidate splits, each
+ * one tap. No bullets and no indent — the rows are controls, not prose. */
+.split-choices {
+  list-style: none;
+  /* Its container is `.editor-add`, a wrapping flex row of controls; without
+   * a full-width basis the candidates get squeezed into a narrow column
+   * beside "Suggest breakdown" instead of sitting under it. */
+  flex: 1 0 100%;
+  margin: 0.1rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.split-choices button.chip {
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+}
+
+/* One breakdown part (plan 0023 §6) is three stacked fields plus its
+ * move/remove rail, so it can't be an `.editor-list li` flex row like the
+ * allomorph list beside it. The rule is only the separator: without it the
+ * sheet reads as nine unrelated fields rather than three parts. */
+.morphology-part {
+  border-bottom: 1px solid var(--card-border);
+  padding-bottom: 0.4rem;
+  margin-bottom: 0.4rem;
 }
 
 .editor-row-actions .plain {
