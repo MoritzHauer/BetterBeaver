@@ -34,6 +34,9 @@ const EMAIL = process.env.BB_TEST_EMAIL ?? "claude-test@example.com";
 /** The link, plus the token the redirect would hand the app. */
 export async function mintTestSession(
   redirectTo = "http://localhost:5173/",
+  /** Which account to mint for; defaults to the throwaway test account.
+   * `author-token.ts` passes the proposal-only authoring account. */
+  email = EMAIL,
 ): Promise<{ email: string; actionLink: string; accessToken: string }> {
   if (!URL_BASE || !SERVICE_KEY) {
     throw new Error("set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY");
@@ -53,11 +56,11 @@ export async function mintTestSession(
 
   // Already registered comes back 422; every other failure is real.
   const created = await admin("admin/users", {
-    email: EMAIL,
+    email,
     email_confirm: true,
   });
   if (!created.ok && !JSON.stringify(created.body).includes("already been")) {
-    throw new Error(`creating ${EMAIL}: ${JSON.stringify(created.body)}`);
+    throw new Error(`creating ${email}: ${JSON.stringify(created.body)}`);
   }
 
   // `redirect_to` belongs at the top level — nested under `options` it is
@@ -65,7 +68,7 @@ export async function mintTestSession(
   const generateLink = async () => {
     const link = await admin("admin/generate_link", {
       type: "magiclink",
-      email: EMAIL,
+      email,
       redirect_to: redirectTo,
     });
     if (!link.ok) {
@@ -84,7 +87,7 @@ export async function mintTestSession(
   if (accessToken === "") {
     throw new Error(`no session in redirect: ${location}`);
   }
-  return { email: EMAIL, actionLink: await generateLink(), accessToken };
+  return { email, actionLink: await generateLink(), accessToken };
 }
 
 if (import.meta.filename === process.argv[1]) {

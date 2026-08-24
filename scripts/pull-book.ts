@@ -8,12 +8,15 @@
 // only (plan 0015 decision 10) — a Library Book resurrected there would be
 // bundled into the app.
 //
-// Service key, not anon: the `catalog` view exposes only listed+published
-// documents, and an unlisted or in-review Book must stay editable.
+// Three identities work (`author-auth.ts`): the service key reads the
+// `documents` table, so it can pull an unlisted or never-listed Book;
+// `BB_AUTHOR_TOKEN` and a bare `SUPABASE_ANON_KEY` read the `catalog` view,
+// which is listed + published rows only. A proposal-only author pulls with
+// the anon path and pushes back with `propose-book.ts`.
 //
 //   BB_CONTENT_DIR=/tmp/bb-edit \
 //   SUPABASE_URL=https://<ref>.supabase.co \
-//   SUPABASE_SERVICE_ROLE_KEY=... \
+//   SUPABASE_ANON_KEY=... BB_AUTHOR_TOKEN=... \
 //   node scripts/pull-book.ts kyrgyz
 //
 // Then edit the files, validate, and push:
@@ -47,17 +50,16 @@ import {
   writeDomainDocument,
   writeBookDocument,
 } from "./content-fs.ts";
+import { publishedFrom, resolveBackendOrExit } from "./author-auth.ts";
 
 /** The repo's frozen tree — the source of the assets a pull links in, and
  * never a pull destination (that is `CONTENT_DIR`). */
 const REPO_CONTENT_DIR = new URL("../content", import.meta.url).pathname;
 
 const bookId = process.argv[2];
-const url = process.env.SUPABASE_URL;
-const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-if (bookId === undefined || !url || !key) {
+if (bookId === undefined) {
   console.error(
-    "usage: BB_CONTENT_DIR=<scratch dir> SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... node scripts/pull-book.ts <book-id>",
+    "usage: BB_CONTENT_DIR=<scratch dir> SUPABASE_URL=... {SUPABASE_ANON_KEY [+ BB_AUTHOR_TOKEN] | SUPABASE_SERVICE_ROLE_KEY} node scripts/pull-book.ts <book-id>",
   );
   process.exit(1);
 }
@@ -77,6 +79,9 @@ if (readdirSync(CONTENT_DIR).length > 0) {
   process.exit(1);
 }
 
+const backend = resolveBackendOrExit();
+const source = publishedFrom(backend);
+
 /** The version each document was pulled at — `propose-book.ts` stamps it as
  * the proposal's `base_version`. Reading it live at propose time instead
  * would silently rebase onto a publish that landed meanwhile, and the
@@ -85,8 +90,8 @@ const baseVersions: Record<string, number> = {};
 
 async function published(id: string): Promise<unknown> {
   const response = await fetch(
-    `${url}/rest/v1/documents?select=published,published_version&id=eq.${encodeURIComponent(id)}`,
-    { headers: { apikey: key!, Authorization: `Bearer ${key}` } },
+    `${backend.url}/rest/v1/${source}?select=published,published_version&id=eq.${encodeURIComponent(id)}`,
+    { headers: backend.headers() },
   );
   if (!response.ok) {
     throw new Error(`${id}: ${response.status} ${await response.text()}`);
@@ -96,7 +101,11 @@ async function published(id: string): Promise<unknown> {
     published_version: number;
   }[];
   if (rows.length !== 1) {
-    throw new Error(`${id}: expected 1 document, got ${rows.length}`);
+    throw new Error(
+      source === "catalog"
+        ? `${id}: not in the catalog — it is unlisted, never published, or misspelled; an unlisted Book needs SUPABASE_SERVICE_ROLE_KEY`
+        : `${id}: expected 1 document, got ${rows.length}`,
+    );
   }
   if (rows[0].published === null) {
     throw new Error(`${id}: never published — nothing to pull`);

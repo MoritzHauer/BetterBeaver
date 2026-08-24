@@ -82,6 +82,72 @@ await page.goto(actionLink); // lands on the app, already signed in
 
 **This is production.** The test account owns nothing — give it maintainer rights by having it create its own Book in the app, never by granting it rows on a real document. Cleanup command (and the caveat that its documents outlive it) is in the script's header comment.
 
+## Authoring without a service key (proposal-only account)
+
+The editing loop for someone who is **not** a maintainer — a second author, another machine, or an agent session. They can read the published catalog and file proposals; they cannot publish, list, or see anything unlisted. The service key never leaves the owner's machine.
+
+### One-time setup (owner)
+
+1. **Create the account.** It is created on first mint, so this is just the mint command — run it once from the repo root:
+
+   ```sh
+   SUPABASE_URL=https://<ref>.supabase.co \
+   SUPABASE_SERVICE_ROLE_KEY=<service key> \
+   node scripts/author-token.ts
+   ```
+
+   Override the address with `BB_AUTHOR_EMAIL=...`; the default is `claude-author@betterbeaver.de`. The address never receives mail (sign-in happens through `admin/generate_link`), so it does not have to be a real inbox — but keep it distinct from your own account and from `claude-test@example.com`, so the review queue shows who proposed what.
+
+2. **Grant it nothing.** No `public.admins` row, no `public.maintainers` row. That is the whole security model — the account's abilities are exactly what the `authenticated` policies give a stranger: `select` on `catalog`, and `insert`/`select`/`delete` of its own `proposals`. Verify with:
+
+   ```sql
+   select u.email, a.user_id is not null as is_admin, m.doc_id as maintains
+   from auth.users u
+   left join public.admins a on a.user_id = u.id
+   left join public.maintainers m on m.user_id = u.id
+   where u.email = 'claude-author@betterbeaver.de';
+   ```
+
+   One row, `is_admin` false, `maintains` null. If `maintains` is non-null, that account can publish — revoke it with `delete from public.maintainers where user_id = '<id>';`.
+
+3. **Hand over three values.** `SUPABASE_URL`, `SUPABASE_ANON_KEY` (public by design — it ships in the app) and the printed `BB_AUTHOR_TOKEN`. The token is a JWT that **expires after an hour**; re-run the mint command for a fresh one. Nothing long-lived is ever shared, which is the point: a leaked token is dead by the next meal, and a leaked _account_ can only file proposals you decline.
+
+To retire the account entirely:
+
+```sh
+curl -X DELETE "$SUPABASE_URL/auth/v1/admin/users/<user id>" \
+  -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+  -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY"
+```
+
+Its open proposals lose their author (`on delete set null`) and stay in the queue; decide or delete them first if you would rather they vanish.
+
+### The loop (author)
+
+```sh
+export SUPABASE_URL=https://<ref>.supabase.co
+export SUPABASE_ANON_KEY=<anon key>
+export BB_AUTHOR_TOKEN=<from the owner>          # expires after an hour
+
+BB_CONTENT_DIR=/tmp/bb-edit node scripts/pull-book.ts kyrgyz
+# edit the JSON under /tmp/bb-edit, then — always — validate:
+BB_CONTENT_DIR=/tmp/bb-edit corepack pnpm exec vitest run \
+  packages/schema/src/content.test.ts
+BB_CONTENT_DIR=/tmp/bb-edit node scripts/propose-book.ts "what changed and why"
+```
+
+Keep the token out of shell history and out of command lines that get logged: put the three exports in a git-ignored `.env.local` and load it with `set -a; . .env.local; set +a`.
+
+The proposal lands in the maintainer's queue (Edit → the document → open proposals) with a structural diff. Accepting it puts the change in the maintainer's **draft** — a second look before anything reaches learners. The author can withdraw their own proposal while it is open.
+
+Two things this loop cannot catch, both inherited from `pull-book.ts`: a partial tree cannot run `validateContentSet`, so an item id that collides with a Book _outside_ the pulled tree still slips through to review; and assets are symlinked from the repo, so a Book whose assets are not in `content/` validates against empty stem lists.
+
+### Identity precedence
+
+`scripts/author-auth.ts` resolves one of three identities, in this order: `BB_AUTHOR_TOKEN` (+ anon key) → `SUPABASE_SERVICE_ROLE_KEY` → `SUPABASE_ANON_KEY` alone. Author mode wins over the service key deliberately — minting a token is a deliberate act, and a shell carrying both should act as the weaker identity. Anon mode can pull a listed Book and nothing else.
+
+If the account is later added to `public.maintainers` for one document, the same token also publishes that document (via the `publish_document` RPC's maintainer check) — a separate decision, not something this setup implies.
+
 ## Publishing local content/ edits (ingest, schema bumps)
 
 Content authored locally in the `content/` tree (an `/ingest` run, or the admin republish step of a `CONTENT_SCHEMA_VERSION` bump) ships with:
