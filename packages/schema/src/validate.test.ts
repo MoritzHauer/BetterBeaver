@@ -3,7 +3,14 @@ import { validateContent, type ValidateContentResult } from "./validate.js";
 import { bookSchema, BOOK_ICONS } from "./entities.js";
 
 type LinkLike = { type: string; entryId: string };
-type ComponentLike = { text: string; gloss: string; entryId?: string };
+type ComponentLike = {
+  text?: string;
+  /** The schema-version-1 spelling of `text` (plan 0023 §7) — still what
+   * every published document carries until the republish runs. */
+  script?: string;
+  gloss: string;
+  entryId?: string;
+};
 type ConceptItemLike = {
   id: string;
   kind: "concept";
@@ -989,6 +996,70 @@ describe("validateContent", () => {
         `expected valid content, got errors: ${result.errors.join("; ")}`,
       );
     }
+  });
+
+  /**
+   * A build advertising `CONTENT_SCHEMA_VERSION` 2 promises to read version
+   * 1 documents, and every published document is still version 1 until the
+   * bump procedure's republish runs. Rejecting the old spelling made adding
+   * the live Kyrgyz Book fail with `payload.components.0.text: Invalid
+   * input`.
+   */
+  it("reads a version-1 breakdown, whose parts spell `text` as `script`", () => {
+    const { input, entry1, resource } = makeFixture();
+    const entry2: LexemeItemLike = {
+      id: "ky-entry-ene",
+      kind: "lexeme",
+      payload: { script: "эне", transliteration: "ene", gloss: "mother" },
+      sourceRef: resource.id,
+    };
+    input.entries.push(entry2);
+    entry1.payload.components = [
+      { script: "кайн", gloss: "in-law" },
+      { script: "эне", gloss: "mother", entryId: entry2.id },
+    ];
+
+    const result = validateContent(input);
+
+    if ("errors" in result) {
+      throw new Error(
+        `expected valid content, got errors: ${result.errors.join("; ")}`,
+      );
+    }
+    // Normalized on the way in, so nothing downstream sees two spellings.
+    const parsed = result.entries.find((e) => e.id === entry1.id);
+    expect(
+      parsed?.kind === "lexeme" ? parsed.payload.components : undefined,
+    ).toEqual([
+      { text: "кайн", gloss: "in-law" },
+      { text: "эне", gloss: "mother", entryId: entry2.id },
+    ]);
+  });
+
+  it("still reports a dangling entryId on a version-1 breakdown", () => {
+    const { input, entry1 } = makeFixture();
+    entry1.payload.components = [
+      { script: "кайн", gloss: "in-law", entryId: "ky-entry-missing" },
+    ];
+
+    const errors = expectErrors(validateContent(input));
+
+    expect(
+      errors.some(
+        (e) => e.includes(entry1.id) && e.includes("dangling component entry"),
+      ),
+    ).toBe(true);
+  });
+
+  it("still rejects a part carrying neither spelling", () => {
+    const { input, entry1 } = makeFixture();
+    entry1.payload.components = [{ gloss: "in-law" }];
+
+    const errors = expectErrors(validateContent(input));
+
+    expect(errors.some((e) => e.includes("payload.components.0.text"))).toBe(
+      true,
+    );
   });
 
   it("(aa) reports a dangling component entry reference on a lexeme", () => {

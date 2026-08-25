@@ -108,12 +108,45 @@ export type Link = z.infer<typeof linkSchema>;
 /** One part of a hand-authored morpheme breakdown (plan 0023 §4). `text` and
  * `gloss` are what renders; `entryId` is navigation only, so the breakdown
  * displays without resolving anything. */
-export const componentSchema = z.object({
+const componentObjectSchema = z.object({
   text: z.string(),
   gloss: z.string(),
   /** The part's own lexicon entry, when one exists — navigation only. */
   entryId: slugSchema.optional(),
 });
+
+/**
+ * Reads a schema-version-**1** component as well: plan 0023 §7 renamed
+ * `script` to `text` here, and this normalizes the old name on the way in.
+ *
+ * That direction of compatibility is not optional, it is what
+ * `CONTENT_SCHEMA_VERSION` promises. The gate everywhere is
+ * `schema_version <= CONTENT_SCHEMA_VERSION`: a bump exists to stop an
+ * **older** client reading a **newer** document, and says nothing about the
+ * reverse — a v2 client advertises that it reads v1 documents, and every
+ * published document is still v1 until the bump procedure's republish runs.
+ * Without this, a build that claims to read v1 rejected the only v1 content
+ * there is: adding the Kyrgyz Book failed with `payload.components.0.text:
+ * Invalid input`, and it would have failed for every learner, on every
+ * Book carrying a breakdown, for as long as the republish was outstanding.
+ *
+ * Writing is unaffected — the parsed shape is always `text`, so nothing
+ * downstream sees two spellings, and the republish stays worth doing (it is
+ * what lets this normalizer eventually go). Same rename, same rule as
+ * `content/private-migrations.ts`, which does it for the one document kind
+ * no republish can ever reach.
+ */
+export const componentSchema = z.preprocess((value) => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return value;
+  }
+  const part = value as Record<string, unknown>;
+  if ("text" in part || typeof part.script !== "string") {
+    return value;
+  }
+  const { script, ...rest } = part;
+  return { ...rest, text: script };
+}, componentObjectSchema);
 export type Component = z.infer<typeof componentSchema>;
 
 /** Plan 0008: the former Unit, renamed — the unlock-chain/progress level under a Book; its content refs moved down to the new, daily-sized `Unit`. */
