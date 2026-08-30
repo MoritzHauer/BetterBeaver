@@ -21,6 +21,14 @@ insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_typ
 values ('assets', 'assets', true, 10485760, array['audio/*', 'image/*'])
 on conflict (id) do nothing;
 
+-- `create policy` has no `if not exists`, and storage.objects is a pre-existing
+-- table these policies may already have been hand-applied to (unlike the tables
+-- the other migrations create outright). Drop-then-create keeps this rerunnable.
+drop policy if exists "assets maintainer insert" on storage.objects;
+drop policy if exists "assets maintainer update" on storage.objects;
+drop policy if exists "assets maintainer delete" on storage.objects;
+drop policy if exists "assets public read" on storage.objects;
+
 create policy "assets maintainer insert"
   on storage.objects for insert to authenticated
   with check (

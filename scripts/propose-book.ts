@@ -19,16 +19,24 @@
 //
 //   BB_CONTENT_DIR=/tmp/bb-edit \
 //   SUPABASE_URL=https://<ref>.supabase.co \
-//   SUPABASE_SERVICE_ROLE_KEY=... \
+//   SUPABASE_ANON_KEY=... BB_AUTHOR_TOKEN=... \
 //   node scripts/propose-book.ts "what changed and why"
 //
-// The service key bypasses RLS, so rows land with `author: null`: they
-// appear in the maintainer's review queue (that policy keys on
-// `is_maintainer(doc_id)`), but they belong to no account — nobody can
-// withdraw them in the app, and they never show under "My proposals".
-// Hence the open-proposal guard below: a rerun would otherwise pile up
-// un-withdrawable duplicates. Decide the open one first, or delete it with
-// the service key.
+// Two identities can propose (`author-auth.ts`), and which one is used
+// changes what the rows are:
+//
+//   author mode (BB_AUTHOR_TOKEN) — the preferred one. Rows carry a real
+//     `author`, so they show under "My proposals" and the author can
+//     withdraw them in the app while they are open. This is the whole
+//     credential a non-maintainer needs: RLS lets that account read the
+//     `catalog` view and insert its own proposals, and nothing else.
+//   service mode (SUPABASE_SERVICE_ROLE_KEY) — bypasses RLS, so rows land
+//     with `author: null`: they appear in the maintainer's review queue
+//     (that policy keys on `is_maintainer(doc_id)`), but they belong to no
+//     account — nobody can withdraw them in the app, and they never show
+//     under "My proposals". Hence the open-proposal guard below: a rerun
+//     would otherwise pile up un-withdrawable duplicates. Decide the open
+//     one first, or delete it with the service key.
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { documentId } from "../packages/schema/src/documents.ts";
@@ -37,29 +45,36 @@ import {
   CONTENT_DIR,
   loadContentDocuments,
 } from "./content-fs.ts";
+import { publishedFrom, resolveBackendOrExit } from "./author-auth.ts";
 
 const note = process.argv[2];
-const url = process.env.SUPABASE_URL;
-const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-if (note === undefined || note.trim() === "" || !url || !key) {
+if (note === undefined || note.trim() === "") {
   console.error(
-    'usage: BB_CONTENT_DIR=<pull-book tree> SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... node scripts/propose-book.ts "<note for the reviewer>"',
+    'usage: BB_CONTENT_DIR=<pull-book tree> SUPABASE_URL=... {SUPABASE_ANON_KEY + BB_AUTHOR_TOKEN | SUPABASE_SERVICE_ROLE_KEY} node scripts/propose-book.ts "<note for the reviewer>"',
   );
   process.exit(1);
 }
+const backend = await resolveBackendOrExit();
+if (backend.mode === "anon") {
+  console.error(
+    "the anon key can read the catalog but not propose — set BB_AUTHOR_TOKEN (scripts/author-token.ts)",
+  );
+  process.exit(1);
+}
+// Resolved once, up front: an expired token should fail before the first
+// document is compared, not halfway through a multi-document push.
+const authorId = backend.mode === "author" ? await backend.userId() : null;
+const source = publishedFrom(backend);
 
 async function rest(
   path: string,
   init: RequestInit & { prefer?: string } = {},
 ): Promise<Response> {
-  const response = await fetch(`${url}/rest/v1/${path}`, {
+  const response = await fetch(`${backend.url}/rest/v1/${path}`, {
     ...init,
-    headers: {
-      apikey: key!,
-      Authorization: `Bearer ${key}`,
-      "Content-Type": "application/json",
-      ...(init.prefer !== undefined ? { Prefer: init.prefer } : {}),
-    },
+    headers: backend.headers(
+      init.prefer !== undefined ? { Prefer: init.prefer } : {},
+    ),
   });
   if (!response.ok) {
     throw new Error(`${path}: ${response.status} ${await response.text()}`);
@@ -107,11 +122,13 @@ let unchanged = 0;
 for (const { id, doc } of local) {
   const eq = `id=eq.${encodeURIComponent(id)}`;
   const rows = (await (
-    await rest(`documents?select=published&${eq}`)
+    await rest(`${source}?select=published&${eq}`)
   ).json()) as { published: unknown }[];
   if (rows.length !== 1) {
     throw new Error(
-      `${id}: not in the backend — a new document cannot be proposed against nothing; publish it with republish-content.ts`,
+      source === "catalog"
+        ? `${id}: not in the catalog — a proposal needs a published, listed document to sit against; ask a maintainer to publish it first`
+        : `${id}: not in the backend — a new document cannot be proposed against nothing; publish it with republish-content.ts`,
     );
   }
   // Compared against what is published *now* — "is there anything to
@@ -126,14 +143,20 @@ for (const { id, doc } of local) {
       `${id}: no entry in ${BASE_VERSIONS_FILE} — it was not pulled into this tree, so its base version is unknown`,
     );
   }
+  // Scoped to this identity's own rows: in author mode a duplicate is
+  // withdrawable in the app, in service mode it is not, which is why the
+  // guard exists at all.
+  const mine = authorId === null ? "author=is.null" : `author=eq.${authorId}`;
   const open = (await (
     await rest(
-      `proposals?select=id&doc_id=eq.${encodeURIComponent(id)}&status=eq.open&author=is.null`,
+      `proposals?select=id&doc_id=eq.${encodeURIComponent(id)}&status=eq.open&${mine}`,
     )
   ).json()) as { id: string }[];
   if (open.length > 0) {
     throw new Error(
-      `${id}: an authorless proposal is already open (${open[0].id}) — decide it in the app first, or delete it with the service key`,
+      authorId === null
+        ? `${id}: an authorless proposal is already open (${open[0].id}) — decide it in the app first, or delete it with the service key`
+        : `${id}: you already have an open proposal (${open[0].id}) — withdraw it in the app, or wait for it to be decided`,
     );
   }
   await rest("proposals", {
@@ -143,6 +166,9 @@ for (const { id, doc } of local) {
       doc_id: id,
       base_version: baseVersion,
       proposed_doc: doc,
+      // No column default and RLS checks it against auth.uid(), so author
+      // mode must send it explicitly; service mode leaves it null.
+      ...(authorId === null ? {} : { author: authorId }),
       note: note.trim(),
     }),
   });
