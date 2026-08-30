@@ -34,7 +34,7 @@ After this plan:
 - **No named, multiple, or shareable focus sets.** One set per domain. Libraries of word lists are what `VocabList` already is — a second one with a scheduling side effect is a different feature wearing the same clothes. See §1.
 - **No `matching` inside a drill.** It grades a whole set in one question, which cannot express a per-item mastery count. It stays a Vocabulary-mode session. See §2.
 - **No mistake log.** The suggester derives its candidates from `SrsState` that is already stored. See §4.
-- **No server sync.** `bb.focus.*` rides the existing `bb.*` backup sweep, so export/import and "erase all my data" cover it the day it lands; cross-device sync arrives with backlog item 4 or not at all.
+- **No server sync.** `bb.focus.*` rides the existing `bb.*` backup sweep, so export/import and "erase all my data" cover it the day it lands; cross-device sync arrives with backlog item 5 or not at all.
 - **No cross-domain set**, and no per-Book set. Item ids are globally unique but a learner studies one language at a time; per-domain matches `VocabListStore` and the per-domain streak.
 
 ## Design

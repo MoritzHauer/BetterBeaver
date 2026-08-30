@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import type { Item } from "@betterbeaver/schema";
 import { itemDisplayText, recognizePrompt } from "@betterbeaver/schema";
 import { resolveToken } from "@betterbeaver/engine";
@@ -108,8 +108,10 @@ export function EntryPopup({
     entry !== undefined
       ? families.filter((family) => family.entryIds.includes(entry.id))
       : [];
+  // Both lexicon payloads carry the breakdown (plan 0023 §4), which is what
+  // makes `cardio·myo·pathy` work with no language-specific code.
   const components =
-    entry !== undefined && entry.kind === "lexeme"
+    entry !== undefined && (entry.kind === "lexeme" || entry.kind === "concept")
       ? (entry.payload.components ?? [])
       : [];
 
@@ -158,20 +160,48 @@ export function EntryPopup({
             <p>{itemDisplayText(entry)}</p>
             <ExampleLine entry={entry} />
             {components.length > 0 ? (
-              <p className="chips">
+              <p className="chips entry-breakdown">
                 {components.map((component, index) => {
-                  const target = resolveToken(component.script, entries);
+                  // The authored `entryId` is the only navigation (plan 0023
+                  // §4: "inline text is what displays; the link is what
+                  // navigates"). No `resolveToken` fallback: its prefix
+                  // matching resolves a token to a *different* word silently
+                  // (plan 0021 §6), and a part's surface slice differs from
+                  // the lemma it points at — `туу` in the word, `-туу` as an
+                  // entry — so it would guess wrong most of the time here.
+                  const target =
+                    component.entryId !== undefined
+                      ? entries.find((e) => e.id === component.entryId)
+                      : undefined;
                   return (
-                    <button
-                      key={`${component.script}-${index}`}
-                      type="button"
-                      className="plain chip"
-                      onClick={() =>
-                        target !== undefined && openEntry(target.id)
-                      }
-                    >
-                      {component.script} — {component.gloss}
-                    </button>
+                    <Fragment key={`${component.text}-${index}`}>
+                      {index > 0 ? (
+                        <span className="breakdown-join" aria-hidden="true">
+                          ·
+                        </span>
+                      ) : null}
+                      {target !== undefined ? (
+                        // `.chip` is the affordance and marks only this
+                        // branch: a part you can follow is the one that gets
+                        // the pill.
+                        <button
+                          type="button"
+                          className="plain chip breakdown-part"
+                          onClick={() => openEntry(target.id)}
+                        >
+                          {component.text}
+                          <span className="status">{component.gloss}</span>
+                        </button>
+                      ) : (
+                        // Inert *text*, not a disabled button and not a chip:
+                        // an unlinked part is complete as authored, not a
+                        // control that failed.
+                        <span className="breakdown-part">
+                          {component.text}
+                          <span className="status">{component.gloss}</span>
+                        </span>
+                      )}
+                    </Fragment>
                   );
                 })}
               </p>

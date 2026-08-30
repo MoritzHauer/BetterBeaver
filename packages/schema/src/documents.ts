@@ -23,7 +23,10 @@
  * harmlessly instead of rejecting the document, so there's nothing to force
  * a republish over.
  */
-export const CONTENT_SCHEMA_VERSION = 1;
+/** Version 2: plan 0023 §7 renamed `lexemePayload.components[].script` to
+ * `text`, which is breaking. The same plan's `entryId`, `bound` and
+ * `variants` are additive and ride along on this one bump. */
+export const CONTENT_SCHEMA_VERSION = 2;
 
 /**
  * Backend/cache document identity: `<kind>:<content-id>` (e.g.

@@ -589,6 +589,35 @@ export function withPayload(
   return { ...entity, payload: next };
 }
 
+/** Reads a payload array key off the raw entity — `[]` when absent or not an
+ * array. The elements stay `unknown`: this is the working document, where a
+ * `components` entry may be half-typed or not an object at all, and only the
+ * caller knows which key it is about to read out of one. */
+export function payloadList(entity: Entity, key: string): unknown[] {
+  const value = obj(entity.payload)[key];
+  return Array.isArray(value) ? value : [];
+}
+
+/** Writes a payload array key, **deleting** it when the array is empty — the
+ * same absent-not-empty rule `withPayload` follows, for the same `optional()`
+ * reason, and load-bearing for `variants` in particular: validator class (ab)
+ * errors on `variants` present without `bound`, so a leftover `[]` after the
+ * author removes the last allomorph is a problem marker with no control left
+ * to clear it. */
+export function withPayloadList(
+  entity: Entity,
+  key: string,
+  values: unknown[],
+): Entity {
+  const payload = { ...obj(entity.payload) };
+  if (values.length === 0) {
+    delete payload[key];
+  } else {
+    payload[key] = values;
+  }
+  return { ...entity, payload };
+}
+
 /** Sets an optional top-level key, or **deletes** it when the value is
  * empty (`undefined`, `""` or `false`). Deleting is the whole point: zod's
  * `optional()` expects the key absent, and an `undefined` value survives in

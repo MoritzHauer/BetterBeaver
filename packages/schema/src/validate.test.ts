@@ -3,6 +3,14 @@ import { validateContent, type ValidateContentResult } from "./validate.js";
 import { bookSchema, BOOK_ICONS } from "./entities.js";
 
 type LinkLike = { type: string; entryId: string };
+type ComponentLike = {
+  text?: string;
+  /** The schema-version-1 spelling of `text` (plan 0023 §7) — still what
+   * every published document carries until the republish runs. */
+  script?: string;
+  gloss: string;
+  entryId?: string;
+};
 type ConceptItemLike = {
   id: string;
   kind: "concept";
@@ -12,6 +20,7 @@ type ConceptItemLike = {
     audioRef?: string;
     imageRef?: string;
     links?: LinkLike[];
+    components?: ComponentLike[];
   };
   sourceRef: string;
 };
@@ -27,7 +36,9 @@ type LexemeItemLike = {
     audioRef?: string;
     imageRef?: string;
     links?: LinkLike[];
-    components?: { script: string; gloss: string }[];
+    components?: ComponentLike[];
+    bound?: string;
+    variants?: string[];
   };
   sourceRef: string;
 };
@@ -965,11 +976,190 @@ describe("validateContent", () => {
   });
 
   it("accepts a lexeme entry with a components breakdown", () => {
-    const { input, entry1 } = makeFixture();
+    const { input, entry1, resource } = makeFixture();
+    const entry2: LexemeItemLike = {
+      id: "ky-entry-ene",
+      kind: "lexeme",
+      payload: { script: "эне", transliteration: "ene", gloss: "mother" },
+      sourceRef: resource.id,
+    };
+    input.entries.push(entry2);
+    entry1.payload.components = [
+      { text: "кайн", gloss: "in-law" },
+      { text: "эне", gloss: "mother", entryId: entry2.id },
+    ];
+
+    const result = validateContent(input);
+
+    if ("errors" in result) {
+      throw new Error(
+        `expected valid content, got errors: ${result.errors.join("; ")}`,
+      );
+    }
+  });
+
+  /**
+   * A build advertising `CONTENT_SCHEMA_VERSION` 2 promises to read version
+   * 1 documents, and every published document is still version 1 until the
+   * bump procedure's republish runs. Rejecting the old spelling made adding
+   * the live Kyrgyz Book fail with `payload.components.0.text: Invalid
+   * input`.
+   */
+  it("reads a version-1 breakdown, whose parts spell `text` as `script`", () => {
+    const { input, entry1, resource } = makeFixture();
+    const entry2: LexemeItemLike = {
+      id: "ky-entry-ene",
+      kind: "lexeme",
+      payload: { script: "эне", transliteration: "ene", gloss: "mother" },
+      sourceRef: resource.id,
+    };
+    input.entries.push(entry2);
     entry1.payload.components = [
       { script: "кайн", gloss: "in-law" },
-      { script: "эне", gloss: "mother" },
+      { script: "эне", gloss: "mother", entryId: entry2.id },
     ];
+
+    const result = validateContent(input);
+
+    if ("errors" in result) {
+      throw new Error(
+        `expected valid content, got errors: ${result.errors.join("; ")}`,
+      );
+    }
+    // Normalized on the way in, so nothing downstream sees two spellings.
+    const parsed = result.entries.find((e) => e.id === entry1.id);
+    expect(
+      parsed?.kind === "lexeme" ? parsed.payload.components : undefined,
+    ).toEqual([
+      { text: "кайн", gloss: "in-law" },
+      { text: "эне", gloss: "mother", entryId: entry2.id },
+    ]);
+  });
+
+  it("still reports a dangling entryId on a version-1 breakdown", () => {
+    const { input, entry1 } = makeFixture();
+    entry1.payload.components = [
+      { script: "кайн", gloss: "in-law", entryId: "ky-entry-missing" },
+    ];
+
+    const errors = expectErrors(validateContent(input));
+
+    expect(
+      errors.some(
+        (e) => e.includes(entry1.id) && e.includes("dangling component entry"),
+      ),
+    ).toBe(true);
+  });
+
+  it("still rejects a part carrying neither spelling", () => {
+    const { input, entry1 } = makeFixture();
+    entry1.payload.components = [{ gloss: "in-law" }];
+
+    const errors = expectErrors(validateContent(input));
+
+    expect(errors.some((e) => e.includes("payload.components.0.text"))).toBe(
+      true,
+    );
+  });
+
+  it("(aa) reports a dangling component entry reference on a lexeme", () => {
+    const { input, entry1 } = makeFixture();
+    entry1.payload.components = [
+      { text: "кайн", gloss: "in-law", entryId: "ky-entry-missing" },
+    ];
+
+    const errors = expectErrors(validateContent(input));
+
+    expect(
+      errors.some(
+        (e) => e.includes(entry1.id) && e.includes("dangling component entry"),
+      ),
+    ).toBe(true);
+  });
+
+  it("(aa) reports a dangling component entry reference on a concept", () => {
+    const { input, family1, resource } = makeFixture();
+    input.domain.kind = "general";
+    const entry: ConceptItemLike = {
+      id: "ky-entry-cardiomyopathy",
+      kind: "concept",
+      payload: {
+        term: "cardiomyopathy",
+        definition: "disease of the heart muscle",
+        components: [
+          { text: "cardio", gloss: "heart", entryId: "ky-entry-missing" },
+        ],
+      },
+      sourceRef: resource.id,
+    };
+    input.entries.splice(0, input.entries.length, entry);
+    family1.entryIds = [entry.id];
+
+    const errors = expectErrors(validateContent(input));
+
+    expect(
+      errors.some(
+        (e) => e.includes(entry.id) && e.includes("dangling component entry"),
+      ),
+    ).toBe(true);
+  });
+
+  it("(aa) accepts a component that names its own entry as its root", () => {
+    const { input, entry1 } = makeFixture();
+    entry1.payload.components = [
+      { text: "Салам", gloss: "hi", entryId: entry1.id },
+    ];
+
+    const result = validateContent(input);
+
+    if ("errors" in result) {
+      throw new Error(
+        `expected valid content, got errors: ${result.errors.join("; ")}`,
+      );
+    }
+  });
+
+  it('(ab) reports "variants" on an entry with no "bound"', () => {
+    const { input, entry1 } = makeFixture();
+    entry1.payload.variants = ["-луу", "-лүү"];
+
+    const errors = expectErrors(validateContent(input));
+
+    expect(
+      errors.some(
+        (e) => e.includes(entry1.id) && e.includes('"variants" requires'),
+      ),
+    ).toBe(true);
+  });
+
+  it("(ab) accepts variants alongside bound", () => {
+    const { input, entry1 } = makeFixture();
+    entry1.payload.bound = "suffix";
+    entry1.payload.variants = ["-луу", "-лүү"];
+
+    const result = validateContent(input);
+
+    if ("errors" in result) {
+      throw new Error(
+        `expected valid content, got errors: ${result.errors.join("; ")}`,
+      );
+    }
+  });
+
+  it("accepts a bound suffix entry with variants and no components (the slice D shape)", () => {
+    const { input, resource } = makeFixture();
+    input.entries.push({
+      id: "ky-entry-sfx-luu",
+      kind: "lexeme",
+      payload: {
+        script: "-луу",
+        transliteration: "-luu",
+        gloss: "having, provided with (N→Adj)",
+        bound: "suffix",
+        variants: ["-луу", "-лүү", "-дуу", "-дүү"],
+      },
+      sourceRef: resource.id,
+    });
 
     const result = validateContent(input);
 
