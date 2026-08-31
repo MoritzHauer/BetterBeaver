@@ -105,6 +105,50 @@ export const linkSchema = z.object({
 });
 export type Link = z.infer<typeof linkSchema>;
 
+/** One part of a hand-authored morpheme breakdown (plan 0023 §4). `text` and
+ * `gloss` are what renders; `entryId` is navigation only, so the breakdown
+ * displays without resolving anything. */
+const componentObjectSchema = z.object({
+  text: z.string(),
+  gloss: z.string(),
+  /** The part's own lexicon entry, when one exists — navigation only. */
+  entryId: slugSchema.optional(),
+});
+
+/**
+ * Reads a schema-version-**1** component as well: plan 0023 §7 renamed
+ * `script` to `text` here, and this normalizes the old name on the way in.
+ *
+ * That direction of compatibility is not optional, it is what
+ * `CONTENT_SCHEMA_VERSION` promises. The gate everywhere is
+ * `schema_version <= CONTENT_SCHEMA_VERSION`: a bump exists to stop an
+ * **older** client reading a **newer** document, and says nothing about the
+ * reverse — a v2 client advertises that it reads v1 documents, and every
+ * published document is still v1 until the bump procedure's republish runs.
+ * Without this, a build that claims to read v1 rejected the only v1 content
+ * there is: adding the Kyrgyz Book failed with `payload.components.0.text:
+ * Invalid input`, and it would have failed for every learner, on every
+ * Book carrying a breakdown, for as long as the republish was outstanding.
+ *
+ * Writing is unaffected — the parsed shape is always `text`, so nothing
+ * downstream sees two spellings, and the republish stays worth doing (it is
+ * what lets this normalizer eventually go). Same rename, same rule as
+ * `content/private-migrations.ts`, which does it for the one document kind
+ * no republish can ever reach.
+ */
+export const componentSchema = z.preprocess((value) => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return value;
+  }
+  const part = value as Record<string, unknown>;
+  if ("text" in part || typeof part.script !== "string") {
+    return value;
+  }
+  const { script, ...rest } = part;
+  return { ...rest, text: script };
+}, componentObjectSchema);
+export type Component = z.infer<typeof componentSchema>;
+
 /** Plan 0008: the former Unit, renamed — the unlock-chain/progress level under a Book; its content refs moved down to the new, daily-sized `Unit`. */
 export const lessonSchema = z.object({
   id: slugSchema,
@@ -141,10 +185,16 @@ const lexemePayloadSchema = z.object({
   imageRef: slugSchema.optional(),
   /** Authored one side only; see `linkSchema` (plan 0006, validator class (z)). */
   links: z.array(linkSchema).optional(),
-  /** Hand-authored compound breakdown (plan 0008 step 5), e.g. кайнэне → [{script: "кайн", gloss: "in-law"}, {script: "эне", gloss: "mother"}]. */
-  components: z
-    .array(z.object({ script: z.string(), gloss: z.string() }))
-    .optional(),
+  /** Hand-authored compound breakdown (plan 0008 step 5), reshaped to the
+   * shared component shape by plan 0023 §4, e.g. кайнэне → [{text: "кайн",
+   * gloss: "in-law"}, {text: "эне", gloss: "mother"}]. */
+  components: z.array(componentSchema).optional(),
+  /** A bound morpheme: an affix that only occurs attached (plan 0023 §1–2).
+   * Absent = an ordinary free-standing word. */
+  bound: z.enum(["prefix", "suffix"]).optional(),
+  /** Vowel-harmony allomorphs, hand-authored and closed (plan 0023 §3) —
+   * never generated, and meaningless unless `bound` is set. */
+  variants: z.array(z.string()).optional(),
 });
 
 const conceptPayloadSchema = z.object({
@@ -155,6 +205,9 @@ const conceptPayloadSchema = z.object({
   imageRef: slugSchema.optional(),
   /** Authored one side only; see `linkSchema` (plan 0006, validator class (z)). */
   links: z.array(linkSchema).optional(),
+  /** The same breakdown a lexeme carries (plan 0023 §4), which is what makes
+   * cardio·myo·pathy work with no language-specific code. */
+  components: z.array(componentSchema).optional(),
 });
 
 /**

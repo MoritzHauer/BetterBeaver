@@ -8,7 +8,6 @@ import {
 } from "../backend/supabase";
 import type { User } from "@supabase/supabase-js";
 import type { BookDocument, DomainDocument } from "@betterbeaver/schema";
-import { clearCachedDocuments } from "../content/cache";
 import { readPrivateBook } from "../content/private-store";
 import { parsePrivateBookImport } from "../content/private-transfer";
 import { eraseAllData, exportBackup, importBackup } from "../progress/backup";
@@ -17,6 +16,7 @@ import { AUTO_UPDATE_KEY } from "../autoUpdate";
 import { OFFLINE_KEY, isOffline } from "../offline";
 import { getThemePref, setThemePref, type ThemePref } from "../theme";
 import { getDisplayName, setDisplayName } from "../identity";
+import { APP_COMMIT, APP_VERSION, REPO_URL } from "../version";
 import {
   getLearning,
   setLearning,
@@ -57,12 +57,19 @@ const SKIP_OPTIONS: { skip: SkipLength; label: string }[] = [
 
 export function SettingsScreen({
   onBack,
+  onAbout,
   onSignIn,
   onImportBook,
   importPrivateBook,
+  refreshContent,
 }: {
   onBack: () => void;
+  onAbout: () => void;
   onSignIn: () => void;
+  /** Re-downloads every member Book's documents and assets, then reloads
+   * (`content/source.ts`). Rejects with a human-readable message; the cached
+   * documents are untouched unless a validated download replaces them. */
+  refreshContent: () => Promise<void>;
   /** Hands the parsed documents to the app, which stores each one under the
    * key its own editor reads — a maintained document becomes a draft, an
    * unmaintained one becomes a proposal — and opens the first. The mode
@@ -99,6 +106,9 @@ export function SettingsScreen({
   const [privateImportError, setPrivateImportError] = useState<string | null>(
     null,
   );
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+  const [refreshDone, setRefreshDone] = useState(false);
   const progressFileRef = useRef<HTMLInputElement>(null);
   const bookFileRef = useRef<HTMLInputElement>(null);
   const domainFileRef = useRef<HTMLInputElement>(null);
@@ -457,21 +467,41 @@ export function SettingsScreen({
 
       <section className="card">
         <h2>Content</h2>
-        {/* Both controls need the network: refreshing deletes the cached
-            documents before re-downloading them, which in offline mode would
-            leave every added Book unloadable with no way to get it back. */}
+        {/* Both controls need the network: a refresh is a re-download, and
+            offline there is nothing to download from. */}
         <button
           className="plain"
-          disabled={offlineOn}
+          disabled={offlineOn || refreshing}
           onClick={() => {
-            void clearCachedDocuments().then(() => location.reload());
+            setRefreshError(null);
+            setRefreshDone(false);
+            setRefreshing(true);
+            // Resolving without a reload means every member Book was already
+            // at the version the backend serves (or is local-only): nothing
+            // was committed, so nothing navigates and the status line is the
+            // only sign the button did anything.
+            refreshContent().then(
+              () => {
+                setRefreshing(false);
+                setRefreshDone(true);
+              },
+              (error: unknown) => {
+                setRefreshing(false);
+                setRefreshError(
+                  error instanceof Error ? error.message : String(error),
+                );
+              },
+            );
           }}
         >
-          Refresh content
+          {refreshing ? "Refreshing…" : "Refresh content"}
         </button>
         <p className="status">
-          Clears cached lessons and re-downloads. Your progress is not affected.
+          Re-downloads your Books' lessons from the server, and repairs a Book
+          that stopped loading. Your progress is not affected.
         </p>
+        {refreshError !== null && <p className="error-text">{refreshError}</p>}
+        {refreshDone && <p className="status">Your Books are up to date.</p>}
         <label>
           <input
             type="checkbox"
@@ -479,11 +509,12 @@ export function SettingsScreen({
             disabled={offlineOn}
             onChange={(event) => toggleAutoUpdate(event.target.checked)}
           />{" "}
-          Auto-update on startup
+          Auto-update content
         </label>
         <p className="status">
           Apply a found content update right away instead of showing the update
-          banner.
+          banner. Applies when the app starts and when you come back to My
+          Books.
         </p>
         {offlineOn ? (
           <p className="setting-hint">Unavailable while offline mode is on.</p>
@@ -647,6 +678,24 @@ export function SettingsScreen({
           ) : null}
         </section>
       ) : null}
+
+      {/* Above Danger on purpose: it is the last thing anyone should reach
+          by scrolling, and "which version am I on" is the first thing a bug
+          report needs. */}
+      <section className="card">
+        <h2>About</h2>
+        <button className="plain" onClick={onAbout}>
+          About BetterBeaver
+        </button>
+        <p className="status">
+          Version {APP_VERSION}
+          {APP_COMMIT === "" ? null : ` · build ${APP_COMMIT}`} —{" "}
+          <a href={REPO_URL} target="_blank" rel="noreferrer">
+            source on GitHub
+          </a>
+          .
+        </p>
+      </section>
 
       <section className="card">
         <h2>Danger</h2>

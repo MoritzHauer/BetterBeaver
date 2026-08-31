@@ -111,6 +111,7 @@ async function openMenu(): Promise<void> {
 describe("edit mode as a route flag", () => {
   beforeEach(() => {
     localStorage.clear();
+    window.history.replaceState(null, "");
     lexiconLoadFails = false;
     maintained.clear();
     maintained.add("topic:demo");
@@ -138,8 +139,10 @@ describe("edit mode as a route flag", () => {
     expect(editBar()).not.toBeNull();
 
     // Up again, by hardware back — which must behave exactly as it does from
-    // the same screen without edit mode: one level up, still editing.
-    window.dispatchEvent(new PopStateEvent("popstate"));
+    // the same screen without edit mode: one level up, still editing. A real
+    // traversal now, not a synthetic event: the history carries the view
+    // (`history-nav.ts`), so a bare `popstate` would have nothing to restore.
+    window.history.back();
     await waitFor(() =>
       expect(screen.queryAllByRole("button", { name: /^Page \d+ of/ })).toEqual(
         [],

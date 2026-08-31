@@ -50,7 +50,7 @@ import { createLocalStorageProgressStore } from "./progress/local-storage";
 import { createLocalStorageVocabListStore } from "./progress/vocab-lists";
 import { createLocalStorageUserEntryStore } from "./progress/user-entries";
 import { getPinnedUnitIds, togglePinnedUnits } from "./progress/pinned-tasks";
-import { AUTO_UPDATE_KEY } from "./autoUpdate";
+import { AUTO_UPDATE_KEY, RECHECK_INTERVAL_MS } from "./autoUpdate";
 import { schedulingConfig } from "./learning";
 import { isOffline } from "./offline";
 import { useStorageUnwritable } from "./storage-health";
@@ -71,6 +71,10 @@ import type { EditTarget } from "./screens/edit/types";
 import { SessionEditSheet } from "./screens/edit/SessionEditSheet";
 import { PrivacyScreen } from "./screens/PrivacyScreen";
 import { ImpressumScreen } from "./screens/ImpressumScreen";
+import { AboutScreen } from "./screens/AboutScreen";
+import { installHistoryNav, viewFromUrl, type HistoryNav } from "./history-nav";
+import type { Screen, View } from "./route";
+import { recordNav } from "./nav-diary";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { StatsScreen } from "./screens/StatsScreen";
 import { LessonSummaryScreen } from "./screens/LessonSummaryScreen";
@@ -95,91 +99,6 @@ import {
   lessonScopeChanged,
   unitScopeChanged,
 } from "./screens/edit/diffView";
-
-// Edit mode is a flag on the three learner routes, not a screen of its own
-// (plan 0021 §8): `✎` sets `editing` on the screen you are already reading,
-// and navigating book → lesson → unit carries it through. That is the whole
-// point — entering edit mode never moves you, and neither does moving while
-// in it.
-type Screen =
-  | { screen: "books" }
-  | {
-      screen: "book";
-      bookId: string;
-      editing?: boolean;
-      /** Open the Book settings sheet on arrival — the same "one tap from the
-       * thing that caused it" rule `atPage` follows for the Unit trail. A
-       * publish error about a resource has nothing to show on the page since
-       * slice 14 moved Sources into the sheet. */
-      atSettings?: boolean;
-    }
-  // The lesson level sits between book and unit (plan 0008).
-  | { screen: "lesson"; bookId: string; lessonId: string; editing?: boolean }
-  | {
-      screen: "unit";
-      bookId: string;
-      lessonId: string;
-      unitId: string;
-      /** Open the trail on its last content page rather than the Overview —
-       * set only by the practice session's back-swipe. */
-      atEnd?: boolean;
-      /** Open on a named trail page — set by a What-changed row or a publish
-       * error deep-link (spec 0021-10 §3). */
-      atPage?: string;
-      editing?: boolean;
-    }
-  | {
-      screen: "task";
-      bookId: string;
-      lessonId: string;
-      unitId: string;
-      taskId: string;
-      /** Set only by Preview (spec 0021-9 §1): the session then runs over
-       * the draft's own content, against a store that records nothing. */
-      editing?: boolean;
-    }
-  // Pooled unit-level practice (plan 0010): one shuffled session across an
-  // entire unit's task set, launched by UnitScreen's sticky Practice bar.
-  | {
-      screen: "unit-session";
-      bookId: string;
-      lessonId: string;
-      unitId: string;
-      editing?: boolean;
-    }
-  // Cross-unit recall session (plan 0016): practice-only over a sample of
-  // the LINKED unit's tasks; onDone returns to the LINKING unit's Overview.
-  | {
-      screen: "recall-session";
-      bookId: string;
-      lessonId: string;
-      unitId: string; // the linking unit, for onDone back-nav
-      recallUnitId: string; // the linked unit whose tasks are sampled
-      editing?: boolean;
-    }
-  // Lesson summary (plan 0020 §5): shown after the unit session that
-  // completed the lesson. Derived tiles only — nothing is persisted for it.
-  | { screen: "lesson-summary"; bookId: string; lessonId: string }
-  // Review, Vocabulary, and ad-hoc study are domain-scoped (plan 0006): the
-  // review queue, lists, and streak all key on the domain now, not the book.
-  | { screen: "review"; domainId: string }
-  | { screen: "vocab"; domainId: string }
-  | { screen: "adhoc"; domainId: string; mode: AdhocMode; itemIds: string[] }
-  // Library (plan 0015): browse the full catalog and Add a Book. Entered
-  // from My Books; back returns there.
-  | { screen: "library" }
-  // Authoring (plan 0012 step 2): sign-in + document list, the editor, and
-  // the static privacy note. Learner flows never route here.
-  | { screen: "author" }
-  // The two legal pages (§ 5 DDG, Art. 13 GDPR), reached from the legal links
-  // on the cover and the home screen. `back` returns to the sign-in form for
-  // the one link that isn't the footer (AuthorScreen's "privacy note").
-  | { screen: "privacy"; back?: Screen }
-  | { screen: "impressum" }
-  // Learner settings and stats (reached from the home top bar); both are
-  // back-button screens over on-device state.
-  | { screen: "settings" }
-  | { screen: "stats" };
 
 type ContentSourceResult = { source: ContentSource } | { errors: string[] };
 
@@ -804,19 +723,31 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
       setUpdating(false);
     }
   }
+  /**
+   * `mayApply` is false wherever a reload would cost the learner something:
+   * `acceptUpdate` reloads the app, which is invisible on My Books and
+   * unforgivable three questions into a session.
+   */
+  function handleFoundUpdate(
+    result: ContentUpdate | null,
+    mayApply: boolean,
+  ): void {
+    // Auto-update only covers an actual content download — an
+    // app-shell-only reload still needs the user's say-so.
+    if (
+      result !== null &&
+      result.changed.length > 0 &&
+      mayApply &&
+      localStorage.getItem(AUTO_UPDATE_KEY) === "on"
+    ) {
+      void acceptUpdateNow(result);
+      return;
+    }
+    setUpdate(result);
+  }
   useEffect(() => {
     void contentInit.checkForUpdate().then((result) => {
-      // Auto-update only covers an actual content download — an
-      // app-shell-only reload still needs the user's say-so.
-      if (
-        result !== null &&
-        result.changed.length > 0 &&
-        localStorage.getItem(AUTO_UPDATE_KEY) === "on"
-      ) {
-        void acceptUpdateNow(result);
-        return;
-      }
-      setUpdate(result);
+      handleFoundUpdate(result, true);
     });
   }, [contentInit]);
   async function handleAcceptUpdate() {
@@ -826,7 +757,14 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     await acceptUpdateNow(update);
   }
 
+  // The URL wins when it names a route (`route.ts`): a reload, a shared deep
+  // link and a back press all arrive that way, and the app has to come up
+  // showing what the address says rather than starting over at home.
   const [screen, setScreen] = useState<Screen>(() => {
+    const fromUrl = viewFromUrl();
+    if (fromUrl !== null && fromUrl.started) {
+      return fromUrl.screen;
+    }
     try {
       const bookId = sessionStorage.getItem(OPEN_EDITING_KEY);
       if (bookId !== null) {
@@ -853,9 +791,56 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   // book-load failure path below can force one on its own), so the overlay
   // must not survive it.
   useEffect(() => setSessionEdit(null), [screen]);
+
+  // Content updates used to be looked for exactly once, at boot. On an
+  // installed PWA that is close to never: the app is resumed from the
+  // background for weeks at a time and only really boots when the OS
+  // reclaims it, so "auto-update on startup" could sit on months of
+  // published content without ever asking — which is what it looks like
+  // from the outside when the setting is on and nothing ever updates.
+  //
+  // So look again when the app comes back to the foreground, at most once
+  // per RECHECK_INTERVAL_MS. Applying it is gated on being on My Books:
+  // accepting reloads the app, and the one place that costs nothing is the
+  // screen the reload lands on anyway. Anywhere else the banner waits on
+  // My Books, exactly as a boot-time find does.
+  const lastUpdateCheckRef = useRef(Date.now());
+  const onMyBooksRef = useRef(screen.screen === "books");
+  useEffect(() => {
+    onMyBooksRef.current = screen.screen === "books";
+  }, [screen]);
+  useEffect(() => {
+    function recheck(): void {
+      if (document.visibilityState !== "visible" || isOffline()) {
+        return;
+      }
+      if (Date.now() - lastUpdateCheckRef.current < RECHECK_INTERVAL_MS) {
+        return;
+      }
+      lastUpdateCheckRef.current = Date.now();
+      // The app shell is the other half of "it never updates": the service
+      // worker only looks for a new build when a page load registers it,
+      // which for a resumed PWA is the same never. Asking it to look is the
+      // same commitment as accepting a content update — `registerType:
+      // "autoUpdate"` reloads the page the moment the new worker activates
+      // — so it is gated on the same screen, and skipped in offline mode by
+      // the guard above (which otherwise deliberately doesn't cover the
+      // service worker at all).
+      if (onMyBooksRef.current) {
+        void navigator.serviceWorker?.getRegistration().then(
+          (registration) => registration?.update(),
+          () => undefined, // no service worker (dev, unsupported browser)
+        );
+      }
+      void contentInit.checkForUpdate().then((result) => {
+        handleFoundUpdate(result, onMyBooksRef.current);
+      });
+    }
+    document.addEventListener("visibilitychange", recheck);
+    return () => document.removeEventListener("visibilitychange", recheck);
+  }, [contentInit]);
   // Holds whatever handler the currently rendered screen would run on its
   // own back button (null at the root, where back should exit normally).
-  const backActionRef = useRef<(() => void) | null>(null);
   // Signed-in users get ✎ Edit buttons on the book/lesson/unit screens
   // (plan 0012). Which documents they actually maintain decides where those
   // buttons land: their own open in maintain mode, everything else in
@@ -914,6 +899,11 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   // sessionStorage rather than no-opping, and a throw out of the initializer
   // would render nothing at all — the very failure this batch fixed.
   const [started, setStarted] = useState(() => {
+    // `#/` is the cover; any other route implies it has been dismissed.
+    const fromUrl = viewFromUrl();
+    if (fromUrl !== null) {
+      return fromUrl.started;
+    }
     try {
       return sessionStorage.getItem(SKIP_COVER_KEY) !== null;
     } catch {
@@ -1277,7 +1267,6 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     if (sessionEdit !== null) {
       // Hardware back closes the sheet and leaves the session running,
       // rather than exiting the session underneath it.
-      backActionRef.current = close;
     }
     // The wrapper is unconditional, and so is the session's position inside
     // it: returning the bare session while no sheet is open would put a
@@ -1329,41 +1318,48 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     }
   }
 
-  // Mobile back button / edge-swipe fix: without any history.pushState calls
-  // the browser has nothing to pop, so a hardware/gesture back exits the app
-  // entirely instead of moving up a level. `backActionRef` always holds the
-  // same handler as the currently rendered screen's visible back (or
-  // done/cancel) button; a single trap entry, refilled after every pop,
-  // routes hardware back through it. At the root screen the ref is null, so
-  // the pop is left alone and back behaves like a normal exit.
+  // Hardware back / edge-swipe (`history-nav.ts`): the session history
+  // mirrors this view, so back is an ordinary traversal rather than
+  // something the app intercepts. `view` is everything a screen restore
+  // needs — the route, whether the cover has been dismissed, and the edit
+  // sheet that layers over a running session, which has its own back step.
+  //
+  // `sync` runs after **every** commit, and that timing is the fix: it lands
+  // inside the user-activation window of the tap that navigated, so Chrome
+  // treats the entry as real. An entry pushed without activation is marked
+  // skippable and a hardware back press skips it without firing `popstate`
+  // at all, which is the most likely reading of four builds' worth of device
+  // evidence (see `docs/STATUS.md`, 2026-08-21).
+  const view: View = { started, screen, sheet: sessionEdit !== null };
+  const navRef = useRef<HistoryNav | null>(null);
   useEffect(() => {
-    window.history.pushState({ backTrap: true }, "");
-    function onPopState() {
-      const goBack = backActionRef.current;
-      if (goBack !== null) {
-        goBack();
-        window.history.pushState({ backTrap: true }, "");
+    const nav = installHistoryNav(view, (restored) => {
+      setStarted(restored.started);
+      setScreen(restored.screen);
+      // Only ever closing: going forward into the sheet is a tap, and all a
+      // back press has to do is dismiss whatever is open.
+      if (!restored.sheet) {
+        setSessionEdit(null);
       }
-    }
-    window.addEventListener("popstate", onPopState);
-    return () => window.removeEventListener("popstate", onPopState);
+    });
+    navRef.current = nav;
+    return () => {
+      nav.dispose();
+      navRef.current = null;
+    };
+    // Mount only, and `view` is deliberately the first render's: it is the
+    // entry the history starts on. Every later view arrives through `sync`.
   }, []);
-
-  // Re-arms the trap after every commit, because the handler above doesn't
-  // refill the one pop it lets through: at the root the ref is null, so that
-  // pop consumes the trap entry and nothing replaces it. Navigating back into
-  // the app afterwards then left the app with nothing to pop, and the next
-  // hardware back walked off the app's own history entry — the reported
-  // "back lands on a blank page and you have to restart". Guarded on the ref
-  // so the root screen keeps its exit-the-app pop: no back action, no trap.
   useEffect(() => {
-    if (
-      backActionRef.current !== null &&
-      (window.history.state as { backTrap?: boolean } | null)?.backTrap !== true
-    ) {
-      window.history.pushState({ backTrap: true }, "");
-    }
+    navRef.current?.sync(view);
   });
+
+  // The last link in the boot chain the diary records (boot → content-ready →
+  // app-mounted): between them they say how far a launch got before it went
+  // dark, which a screenshot of a black screen cannot.
+  useEffect(() => {
+    recordNav("app-mounted");
+  }, []);
 
   useEffect(() => {
     if (!("source" in contentSourceResult)) {
@@ -1685,21 +1681,24 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   // right back on the cover, and a started user back on home.
   if (screen.screen === "impressum") {
     const onBack = () => setScreen({ screen: "books" });
-    backActionRef.current = onBack;
     return <ImpressumScreen onBack={onBack} />;
+  }
+  if (screen.screen === "about") {
+    const back = screen.back ?? { screen: "books" as const };
+    const onBack = () => setScreen(back);
+    return <AboutScreen onBack={onBack} />;
   }
   if (screen.screen === "privacy") {
     const back = screen.back ?? { screen: "books" as const };
     const onBack = () => setScreen(back);
-    backActionRef.current = onBack;
     return <PrivacyScreen onBack={onBack} />;
   }
 
   if (!started) {
-    backActionRef.current = null;
     return (
       <StartScreen
         onStart={() => setStarted(true)}
+        onAbout={() => setScreen({ screen: "about" })}
         onImpressum={() => setScreen({ screen: "impressum" })}
         onPrivacy={() => setScreen({ screen: "privacy" })}
       />
@@ -1708,7 +1707,6 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
 
   if (screen.screen === "author") {
     const onBack = () => setScreen({ screen: "books" });
-    backActionRef.current = onBack;
     return (
       <AuthorScreen
         // The naming sheet lives on the home screen (it is where the new
@@ -1790,25 +1788,29 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   }
   if (screen.screen === "settings") {
     const onBack = () => setScreen({ screen: "books" });
-    backActionRef.current = onBack;
     return (
       <SettingsScreen
         onBack={onBack}
+        onAbout={() =>
+          // Pinned back: About is a detour from Settings, so Back has to
+          // return here rather than to home (the footer-row entry points
+          // keep the default).
+          setScreen({ screen: "about", back: { screen: "settings" } })
+        }
         onSignIn={() => setScreen({ screen: "author" })}
         onImportBook={importDocuments}
         importPrivateBook={contentInit.importPrivateBook}
+        refreshContent={contentInit.refreshContent}
       />
     );
   }
 
   if (screen.screen === "stats") {
     const onBack = () => setScreen({ screen: "books" });
-    backActionRef.current = onBack;
     return <StatsScreen onBack={onBack} domains={domains} />;
   }
 
   if (screen.screen === "books") {
-    backActionRef.current = () => setStarted(false);
     const hasDownload = update !== null && update.changed.length > 0;
     return (
       <>
@@ -1887,6 +1889,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           onAuthor={() => setScreen({ screen: "author" })}
           onOpenStats={() => setScreen({ screen: "stats" })}
           onOpenSettings={() => setScreen({ screen: "settings" })}
+          onAbout={() => setScreen({ screen: "about" })}
           onImpressum={() => setScreen({ screen: "impressum" })}
           onPrivacy={() => setScreen({ screen: "privacy" })}
         />
@@ -1907,7 +1910,6 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
 
   if (screen.screen === "library") {
     const onBack = () => setScreen({ screen: "books" });
-    backActionRef.current = onBack;
     return (
       <LibraryScreen
         addBook={contentInit.addBook}
@@ -2039,7 +2041,6 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
 
     if (screen.screen === "book") {
       const onBack = () => setScreen({ screen: "books" });
-      backActionRef.current = onBack;
       return inSession(
         <BookScreen
           content={shown}
@@ -2087,7 +2088,6 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
 
     if (screen.screen === "lesson") {
       const onBack = () => goToBook(screen.bookId, screen.editing);
-      backActionRef.current = onBack;
       return inSession(
         <LessonScreen
           content={shown}
@@ -2137,7 +2137,6 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           lessonId: screen.lessonId,
           editing: screen.editing,
         });
-      backActionRef.current = onBack;
       return inSession(
         <UnitScreen
           content={shown}
@@ -2219,7 +2218,6 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           unitId: screen.unitId,
         });
       };
-      backActionRef.current = onDone;
       // Same exit as `onDone`, but lands on the trail's last content page —
       // the one the learner swiped forward from (owner request).
       const onSwipeBack = () => {
@@ -2322,7 +2320,6 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
 
     if (screen.screen === "lesson-summary") {
       const onBack = () => goToBook(screen.bookId);
-      backActionRef.current = onBack;
       return (
         <LessonSummaryScreen
           content={shown}
@@ -2358,7 +2355,6 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           lessonId: screen.lessonId,
           unitId: screen.unitId,
         });
-      backActionRef.current = onDone;
       return (
         <RecallSession
           store={shownStore}
@@ -2388,7 +2384,6 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
         unitId: screen.unitId,
       });
     };
-    backActionRef.current = onTaskDone;
     return withSessionEdit(
       <TaskSession
         store={shownStore}
@@ -2415,7 +2410,6 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
 
   if (screen.screen === "vocab") {
     const onBack = () => setScreen({ screen: "books" });
-    backActionRef.current = onBack;
     return (
       <VocabularyScreen
         booksContent={domainBooksContent}
@@ -2440,7 +2434,6 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     const bookId = domainBooksContent[0]?.topic.id ?? screen.domainId;
     const onDone = () =>
       setScreen({ screen: "vocab", domainId: screen.domainId });
-    backActionRef.current = onDone;
     return (
       <AdhocSession
         domainContent={domainContent}
@@ -2454,7 +2447,6 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   }
 
   const onReviewDone = () => setScreen({ screen: "books" });
-  backActionRef.current = onReviewDone;
   return withSessionEdit(
     <ReviewSession
       domainContent={domainContent}

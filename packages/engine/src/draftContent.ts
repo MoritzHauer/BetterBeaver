@@ -37,6 +37,21 @@ type ConceptPayload = Extract<Item, { kind: "concept" }>["payload"];
 type SentencePayload = Extract<Item, { kind: "sentence" }>["payload"];
 type PairPayload = Extract<Item, { kind: "pair" }>["payload"];
 
+/** The `components` breakdown, identical on both lexicon payloads (plan 0023
+ * §4) — a second copy would drift. */
+function draftComponents(
+  raw: unknown[],
+): NonNullable<LexemePayload["components"]> {
+  return raw.map((c) => {
+    const entryId = obj(c).entryId;
+    return {
+      text: str(obj(c).text),
+      gloss: str(obj(c).gloss),
+      ...(typeof entryId === "string" && entryId !== "" ? { entryId } : {}),
+    };
+  });
+}
+
 function draftLexemePayload(p: Record<string, unknown>): LexemePayload {
   return {
     script: str(p.script),
@@ -68,12 +83,13 @@ function draftLexemePayload(p: Record<string, unknown>): LexemePayload {
         }
       : {}),
     ...(Array.isArray(p.components)
-      ? {
-          components: p.components.map((c) => ({
-            script: str(obj(c).script),
-            gloss: str(obj(c).gloss),
-          })),
-        }
+      ? { components: draftComponents(p.components) }
+      : {}),
+    // An unrecognised `bound` string is dropped like every other malformed
+    // value here, rather than cast across as a lie the editor then renders.
+    ...(p.bound === "prefix" || p.bound === "suffix" ? { bound: p.bound } : {}),
+    ...(Array.isArray(p.variants)
+      ? { variants: p.variants.map((v) => str(v)) }
       : {}),
   };
 }
@@ -98,6 +114,9 @@ function draftConceptPayload(p: Record<string, unknown>): ConceptPayload {
             entryId: str(obj(l).entryId),
           })),
         }
+      : {}),
+    ...(Array.isArray(p.components)
+      ? { components: draftComponents(p.components) }
       : {}),
   };
 }

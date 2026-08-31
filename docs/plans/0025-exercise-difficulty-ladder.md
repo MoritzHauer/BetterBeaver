@@ -1,6 +1,6 @@
-# Plan 0024: Exercise difficulty ladder
+# Plan 0025: Exercise difficulty ladder
 
-Status: **drafted** · Owner: Moe · Date: 2026-08-17 · Origin: owner feature idea, 2026-08-17 — "there should be a schema in which exercise type order the content is learned, from easy to hard: recognise the foreign word and click the single-choice English word; recognise the English word; sentence building; gap text; writing the word"
+Status: **drafted** · Owner: Moe · Date: 2026-08-31 · Origin: owner feature idea, 2026-08-31 — "there should be a schema in which exercise type order the content is learned, from easy to hard: recognise the foreign word and click the single-choice English word; recognise the English word; sentence building; gap text; writing the word"
 
 ## Purpose
 
@@ -8,7 +8,7 @@ Eleven task types exist and **nothing in the codebase knows that one is harder t
 
 One difficulty judgement does exist, hard-coded: plan 0022 §6's `SENTENCE_REVIEW_TASK_TYPES` (`session.ts:644`) is a three-element list whose doc comment argues that build/scramble/dictation are *production* and therefore stronger than the recall card, while a sentence's recognize/listen/matching tasks are MCQ and therefore *weaker*. That comment is a difficulty table with one row and no name.
 
-This plan makes the ordering **explicit data** — a fourth exhaustive table beside `TASK_ALLOWED_ITEM_KINDS` / `TASK_REQUIRED_ASSET` / `TASK_NEEDS_DISTRACTORS` (`packages/schema/src/entities.ts:408–458`) — and then uses it twice: to order a unit's own session easy → hard, and to let a maturing card climb into harder exercises as its 0022 rung rises. 0022 §6 stops being an exception and becomes one row of the table.
+This plan makes the ordering **explicit data** — a fourth exhaustive table beside `TASK_ALLOWED_ITEM_KINDS` / `TASK_REQUIRED_ASSET` / `TASK_NEEDS_DISTRACTORS` (`packages/schema/src/entities.ts:461–511`) — and then uses it twice: to order a unit's own session easy → hard, and to let a maturing card climb into harder exercises as its 0022 rung rises. 0022 §6 stops being an exception and becomes one row of the table.
 
 Two of the five rungs the owner named do not exist today. Both turn out to be **derivable from already-published content**, so neither adds a task type, an authoring step, or a `CONTENT_SCHEMA_VERSION` bump — see §3.
 
@@ -19,7 +19,7 @@ Two of the five rungs the owner named do not exist today. Both turn out to be **
 - A due card is reviewed with a harder exercise as it matures, capped by what its unit actually authored, and never below the retrieval strength review already gives it today.
 - The owner's two missing steps — **pick the foreign word for an English prompt**, and **type the foreign word** — become playable on every Book that is already published, Kyrgyz included, with no content edit.
 - A learner with only a Russian keyboard can type ң, ө and ү — which today they cannot, in exercises that already ship (§9).
-- An author gets a first account of which exercises a unit can support and where the judgement calls are (§10) — the basis [plan 0025](0025-generated-exercises.md) builds generation on.
+- An author gets a first account of which exercises a unit can support and where the judgement calls are (§10) — the basis [plan 0026](0026-generated-exercises.md) builds generation on.
 
 ## Non-goals
 
@@ -42,9 +42,12 @@ An exercise's retrieval demand is set by two things, and the app currently model
 
 A third property, **modality** (read / listen), is *not* difficulty — it is a different skill. It gets a tag so that a Book with no audio simply has fewer steps rather than a broken ladder, and so a listening step is never treated as a substitute for the reading step at the same rank.
 
-Every existing helper needed for the direction axis is already in `entities.ts`: `recognizePrompt` (`:345`) yields the foreign side (`script` / `term` / stripped `text`) and `itemDisplayText` (`:331`) yields the meaning side (`gloss` / `definition` / `translation`). Today every MCQ in the app runs one way — `sampleMcq` (`session.ts:182`) builds choices with `itemDisplayText` — so `recognize`, `listen`, `picture` and `matching` are all comprehension-direction. **The production direction is not a presentation detail already covered**, as plan 0002 line 54 claims; it was never built.
+Every existing helper needed for the direction axis is already in `entities.ts`: `recognizePrompt` (`:398`) yields the foreign side (`script` / `term` / stripped `text`) and `itemDisplayText` (`:384`) yields the meaning side (`gloss` / `definition` / `translation`). Today every MCQ in the app runs one way — `sampleMcq` (`session.ts:182`) builds choices with `itemDisplayText` — so `recognize`, `listen`, `picture` and `matching` are all comprehension-direction. **The production direction is not a presentation detail already covered**, as plan 0002 line 54 claims; it was never built.
 
 ### 2. The ladder
+
+> **Overlaps [plan 0024](0024-focus-mode.md) (drafted 2026-08-24, read after this plan was first written).** Focus mode's drill already varies presentation across an item's repetitions — "recognize, then listen, then recall" — which is this table, chosen ad hoc. If both land, that sequence should read the rank table rather than keep its own list, the same way §5 replaces 0022 §6's hard-coded three. Focus mode is otherwise orthogonal: it owns *how often* an item comes back inside one sitting, this plan owns *which exercise* it comes back as. Its "no new question kinds" non-goal is satisfied by §3, since both new steps are derived presentations of `Question` kinds the engine already builds.
+
 
 Rank is an integer, low = easy. Ties are deliberate: two steps at the same rank are equally hard and differ only in modality.
 
@@ -87,7 +90,7 @@ Consequences worth stating plainly:
 - **It works on the live Kyrgyz Book as it stands**, and on private Books, which have no republish path at all (0017 decision 5).
 - The price is that an author cannot *choose* to include or exclude the derived steps for one unit. Given the non-goal above (rank is not authored) that price is the design, not a defect — but it is the thing to revisit first if the ladder ever feels wrong on real content.
 
-**Typing a script the learner's keyboard doesn't cover** — see §9. Owner call, 2026-08-17: strict script, no transliteration fallback, plus an app-provided extra-key row. That row is a prerequisite for rank 9 and a fix for exercises that already ship.
+**Typing a script the learner's keyboard doesn't cover** — see §9. Owner call, 2026-08-31: strict script, no transliteration fallback, plus an app-provided extra-key row. That row is a prerequisite for rank 9 and a fix for exercises that already ship.
 
 ### 4. Bands, not a sorted list — how a unit session uses the ladder
 
@@ -155,7 +158,7 @@ Deriving the list instead of authoring it was rejected: it needs a per-language 
 
 ### 10. Auto-generated exercises, and the wizard
 
-> **Superseded in large part by [plan 0025](0025-generated-exercises.md) (2026-08-17).** This section assumes authored tasks are the norm and generation is an assistant that keeps them in sync. 0025 inverts that — generation becomes the default and authored tasks the override — which dissolves most of the wizard: with nothing to keep in sync there is nothing to recommend, only a budget and per-item targets to tune. What survives here is the **mechanical/pedagogical split** below, which 0025 §1 and §3 both build on, and the cloze-blank suggester, which authors *item* markup rather than tasks and therefore outlives both plans. The section is kept in place rather than rewritten, because 0025's own argument starts from it.
+> **Superseded in large part by [plan 0026](0026-generated-exercises.md) (2026-08-31).** This section assumes authored tasks are the norm and generation is an assistant that keeps them in sync. 0026 inverts that — generation becomes the default and authored tasks the override — which dissolves most of the wizard: with nothing to keep in sync there is nothing to recommend, only a budget and per-item targets to tune. What survives here is the **mechanical/pedagogical split** below, which 0026 §1 and §3 both build on, and the cloze-blank suggester, which authors *item* markup rather than tasks and therefore outlives both plans. The section is kept in place rather than rewritten, because 0026's own argument starts from it.
 
 Authoring a unit today means adding tasks one at a time, from a list of types, with no guidance about which set is enough. The ladder gives the editor something to say — coverage — and most of the generation is mechanical. 0021 §9 already built the hard half: the Exercises page lists only the task types a unit can support, pre-filled with eligible items, because `TASK_ALLOWED_ITEM_KINDS` / `TASK_REQUIRED_ASSET` / `TASK_NEEDS_DISTRACTORS` and validator classes (e)/(f)/(o) make invalid tasks unreachable rather than explained after the fact.
 
@@ -193,10 +196,10 @@ Each is independently shippable, `pnpm check` green after every one.
 4. **Produce-direction MCQ** — `sampleMcq`/`buildTaskSession` gain a direction, validator class (h) widened to the prompt side, fixture per the new error. `SessionScreen` unchanged by construction; a browser pass confirms the reversed question renders and grades.
 5. **Typed production (`write`)** — derived from `recall` tasks, reusing the typed-input component and `checkTypedAnswer`; strict script, so it depends on slice 1.
 6. **Review climbs the ladder** — replace `SENTENCE_REVIEW_TASK_TYPES` with the §5 rule; tests for floor, ceiling-by-rung, availability fallback, and that every existing review case (lexeme, cloze blank, pair, note, sentence) is unchanged at rung 0.
-7. _(superseded)_ **Auto-generated exercises** (§10) — folded into [plan 0025](0025-generated-exercises.md), which takes this plan's ranks as its prerequisite. The cloze-blank suggester is the one piece neither plan owns; see 0025 open question 5.
+7. _(superseded)_ **Auto-generated exercises** (§10) — folded into [plan 0026](0026-generated-exercises.md), which takes this plan's ranks as its prerequisite. The cloze-blank suggester is the one piece neither plan owns; see 0026 open question 5.
 8. _(optional)_ **Band coverage line** — the read-only `Meet it ✓ · Assemble it ✓ · Produce it —` summary of §8, if slice 7 hasn't already put it on screen.
 
-Slice 1 is independent of the ladder entirely and is worth landing first on its own merits. Slices 4 and 5 each deliver one of the owner's missing steps and are usable before slice 6 exists (they appear in unit sessions via slice 3's bands); slice 6 is what turns the ladder into a progression over time. The authoring half left with plan 0025, which needs only slice 2 of this one.
+Slice 1 is independent of the ladder entirely and is worth landing first on its own merits. Slices 4 and 5 each deliver one of the owner's missing steps and are usable before slice 6 exists (they appear in unit sessions via slice 3's bands); slice 6 is what turns the ladder into a progression over time. The authoring half left with plan 0026, which needs only slice 2 of this one.
 
 ## Done-criteria
 

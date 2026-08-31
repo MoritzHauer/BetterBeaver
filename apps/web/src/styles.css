@@ -1009,6 +1009,35 @@ input[type="text"] {
   background: var(--card-bg);
 }
 
+/* The morpheme breakdown (plan 0023 §6) is a `.chips` row of ordinary chips,
+ * with two things a chip row does not give on its own: each part stacks its
+ * gloss under its text (a `.status` span is inline, so without this the two
+ * run together as "оку study"), and the middot between parts joins them
+ * rather than being one — it carries no chip border and sits on the text
+ * line, not centred against the taller two-line part. */
+.entry-breakdown .breakdown-part {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.1rem 0.6rem;
+  font-size: 0.8rem;
+}
+
+/* `button.plain` (border/background: none) outranks `.chip` on specificity,
+ * so without this the *tappable* part rendered flat while the inert ones
+ * beside it wore the pill — the affordance exactly backwards, and visible
+ * here in a way it never was for link chips, which are all buttons. */
+.entry-breakdown button.chip {
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+}
+
+.breakdown-join {
+  align-self: flex-start;
+  padding-top: 0.1rem;
+  opacity: 0.6;
+}
+
 button.speaker {
   font-size: 1.25rem;
   min-height: 2.75rem;
@@ -1589,6 +1618,37 @@ input[type="email"],
   flex-shrink: 0;
 }
 
+/* The chooser plan 0023 §8a puts under "Suggest breakdown" when the search
+ * finds more than one decomposition: a plain list of candidate splits, each
+ * one tap. No bullets and no indent — the rows are controls, not prose. */
+.split-choices {
+  list-style: none;
+  /* Its container is `.editor-add`, a wrapping flex row of controls; without
+   * a full-width basis the candidates get squeezed into a narrow column
+   * beside "Suggest breakdown" instead of sitting under it. */
+  flex: 1 0 100%;
+  margin: 0.1rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.split-choices button.chip {
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+}
+
+/* One breakdown part (plan 0023 §6) is three stacked fields plus its
+ * move/remove rail, so it can't be an `.editor-list li` flex row like the
+ * allomorph list beside it. The rule is only the separator: without it the
+ * sheet reads as nine unrelated fields rather than three parts. */
+.morphology-part {
+  border-bottom: 1px solid var(--card-border);
+  padding-bottom: 0.4rem;
+  margin-bottom: 0.4rem;
+}
+
 .editor-row-actions .plain {
   min-height: 44px; /* repo-wide tap-target norm (ui-review W3) */
   min-width: 44px; /* same norm, width axis — an icon-only button (spec
@@ -1847,18 +1907,53 @@ button.danger {
   margin-top: 2rem;
 }
 
-/* Impressum/Datenschutz row (LegalLinks): centred, muted, small — legally
- * required on every screen, but not part of the app's own navigation. */
-.legal-links {
+/* About/Impressum/Datenschutz row (FooterLinks): centred, muted, small — two
+ * of the three are legally required on every screen, but none of them are
+ * part of the app's own navigation. `flex-wrap` because three labels at the
+ * app's largest text size no longer fit one line on a narrow phone. */
+.footer-links {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
   gap: 1.25rem;
   margin-top: 1.5rem;
   font-size: 0.85rem;
 }
 
-.legal-links button {
+.footer-links button {
   color: var(--locked-fg);
+}
+
+/* About → Diagnostics: a fixed-width dump meant to be read and copied, not
+ * styled. Scrolls in both directions rather than wrapping — a wrapped log
+ * line is harder to read back than a scrolled one. */
+.diagnostics-log {
+  margin: 0.75rem 0;
+  padding: 0.5rem;
+  max-height: 14rem;
+  overflow: auto;
+  background: var(--bg);
+  border: 1px solid var(--card-border);
+  border-radius: 0.5rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  white-space: pre;
+}
+
+/* About: the mascot and the build stamp read as one block, centred. */
+.about-card {
+  text-align: center;
+}
+
+.about-mascot {
+  width: 120px;
+  max-width: 60%;
+  height: auto;
+}
+
+.about-version {
+  font-variant-numeric: tabular-nums;
 }
 
 /* Home top bar: title on the left, Stats/Settings icon buttons on the right. */

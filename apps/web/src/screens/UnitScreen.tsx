@@ -24,6 +24,7 @@ import {
   withOptionalKey,
 } from "./edit/inPlace";
 import { AssetRefPicker, EntityPicker, RowActions } from "./edit/fields";
+import { MorphologyFields } from "./edit/entryMorphology";
 import {
   type ExerciseOffer,
   exerciseLabel,
@@ -303,6 +304,10 @@ export function RowExtras({ item, edit }: { item: Item; edit: UnitEditOps }) {
         </>
       )}
       {item.kind === "concept" && prose("Example", ["example"])}
+      {/* Plan 0023 §6's `bound`/`variants`/`components`, in their own module
+          so this file does not grow further; it returns null for the kinds
+          whose payloads have no breakdown. */}
+      <MorphologyFields item={item} edit={edit} />
       {item.kind === "pair" ? (
         <>
           {/* The only mandatory slugs in the schema (§2c). */}

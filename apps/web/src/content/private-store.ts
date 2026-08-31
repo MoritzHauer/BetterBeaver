@@ -1,5 +1,6 @@
 import type { BookDocument, DomainDocument } from "@betterbeaver/schema";
 import { openContentDb, requestToPromise, PRIVATE_STORE } from "./idb";
+import { migratePrivateDocuments } from "./private-migrations";
 
 /**
  * One record per private Book (plan 0017 §3): its Book document, the Domain
@@ -24,7 +25,10 @@ export interface PrivateBookRecord {
   updatedAt: number;
 }
 
-/** All private Books; `[]` on any failure (mirrors `readCachedDocuments`). */
+/** All private Books; `[]` on any failure (mirrors `readCachedDocuments`).
+ * Every record goes through `migratePrivateDocuments` on the way out — a
+ * record written before a breaking schema change never gets republished, so
+ * read is the only place the fix can land (see that module's header). */
 export async function readPrivateBooks(): Promise<PrivateBookRecord[]> {
   try {
     const db = await openContentDb();
@@ -32,7 +36,10 @@ export async function readPrivateBooks(): Promise<PrivateBookRecord[]> {
       const store = db
         .transaction(PRIVATE_STORE, "readonly")
         .objectStore(PRIVATE_STORE);
-      return (await requestToPromise(store.getAll())) as PrivateBookRecord[];
+      const records = (await requestToPromise(
+        store.getAll(),
+      )) as PrivateBookRecord[];
+      return records.map(migratePrivateDocuments);
     } finally {
       db.close();
     }
@@ -51,8 +58,9 @@ export async function readPrivateBook(
       const store = db
         .transaction(PRIVATE_STORE, "readonly")
         .objectStore(PRIVATE_STORE);
-      return (await requestToPromise(store.get(id))) as
+      const record = (await requestToPromise(store.get(id))) as
         PrivateBookRecord | undefined;
+      return record !== undefined ? migratePrivateDocuments(record) : undefined;
     } finally {
       db.close();
     }

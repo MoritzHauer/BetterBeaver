@@ -76,13 +76,13 @@ export interface CachedDocument {
 
 This is the shape `PrivateBookRecord` already uses, and it is load-bearing for the whole lifecycle — **do not move the blobs into their own object store.** Every eviction path already deletes by document id, so each of these needs _no new code_:
 
-| Path                          | Behaviour, for free                                          |
-| ----------------------------- | ------------------------------------------------------------ |
-| `removeBook`                  | `deleteCachedDocuments` drops the record; assets go with it  |
-| `purgeUnmembered`             | same call, same effect                                       |
-| Settings → Refresh content    | `clearCachedDocuments` wipes and the next sync re-downloads  |
-| `archiveBook` / `restoreBook` | membership only — assets survive, matching documents         |
-| accept / add commit           | one `store.put` in one transaction: literally all-or-nothing |
+| Path                          | Behaviour, for free                                                                                                                                                                                                                                                                                                          |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `removeBook`                  | `deleteCachedDocuments` drops the record; assets go with it                                                                                                                                                                                                                                                                  |
+| `purgeUnmembered`             | same call, same effect                                                                                                                                                                                                                                                                                                       |
+| Settings → Refresh content    | re-downloads through `acceptUpdate`; the commit replaces both documents and assets (this row said `clearCachedDocuments` wipes and the next sync re-downloads — the wipe half was removed 2026-08-24: after plan 0015 scoped syncing to cached documents, the next sync planned nothing and the wiped Books never came back) |
+| `archiveBook` / `restoreBook` | membership only — assets survive, matching documents                                                                                                                                                                                                                                                                         |
+| accept / add commit           | one `store.put` in one transaction: literally all-or-nothing                                                                                                                                                                                                                                                                 |
 
 `DB_VERSION` stays at **2**. Adding a field to a record is not an IndexedDB schema change, and `assets === undefined` means "no remote assets", which is the correct reading of every pre-existing record.
 
