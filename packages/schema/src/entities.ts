@@ -74,6 +74,19 @@ export const domainSchema = z.object({
   glossLanguage: z.string().min(1),
   /** BCP-47 tag for reading entry script aloud via TTS (plan 0004's rules, moved here by plan 0006). */
   readAloudLang: z.string().min(1).optional(),
+  /**
+   * Characters this domain's script needs that a learner's keyboard cannot
+   * produce (plan 0025 §10), rendered as a key row over every typed-input
+   * exercise. Kyrgyz is the Russian layout plus exactly three letters, so
+   * `["ң", "ө", "ү"]`; Turkish would declare `ğ ı ş ç ö ü`, a maths domain
+   * `≤ ∈ ∀`. Absent means no row — the list is authored because isolating
+   * these needs a per-language model of what a keyboard already has, which
+   * is the domain-specific code plan 0023 §9 refuses to build.
+   *
+   * Additive and optional, so an older client drops it and parses the
+   * domain unchanged: no `CONTENT_SCHEMA_VERSION` bump.
+   */
+  extraChars: z.array(z.string().min(1)).max(12).optional(),
 });
 export type Domain = z.infer<typeof domainSchema>;
 

@@ -350,11 +350,19 @@ function HintReveal({ text }: { text: string }) {
  *
  * `hint` (cloze only, plan 0008 step 5): the target blank's English word,
  * behind a `HintReveal` shown only while unanswered — purely additive, the
- * post-answer reveal above is unchanged. Dictation never passes it. */
+ * post-answer reveal above is unchanged. Dictation never passes it.
+ *
+ * `extraChars` (plan 0025 §10): characters the domain declares its script
+ * needs and a learner's keyboard cannot produce — `ң ө ү` for Kyrgyz, whose
+ * learners type on a Russian layout. Without the row those answers are
+ * unanswerable, not merely awkward: grading is against the exact script and
+ * normalization deliberately never folds ң onto н. Absent or empty means no
+ * row, which is every domain until one declares the field. */
 function TypedInput({
   target,
   unitId,
   hint,
+  extraChars,
   revealedText,
   lookup,
   applyAuto,
@@ -363,14 +371,34 @@ function TypedInput({
   target: string;
   unitId: string;
   hint?: string;
+  extraChars?: readonly string[] | undefined;
   revealedText?: string;
   lookup?: TapLookup;
   applyAuto: (unitId: string, correct: boolean) => Promise<void>;
   advance: () => void;
 }) {
   const formId = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
   const [value, setValue] = useState("");
   const [result, setResult] = useState<Verdict | null>(null);
+
+  /** Inserts `char` at the caret and puts the caret after it, keeping focus
+   * on the input so the on-screen keyboard never dismisses mid-answer.
+   * Falls back to appending when the input has no selection (it is not
+   * focused yet, so `selectionStart` is null). */
+  function insertChar(char: string) {
+    const input = inputRef.current;
+    const start = input?.selectionStart ?? value.length;
+    const end = input?.selectionEnd ?? value.length;
+    setValue(value.slice(0, start) + char + value.slice(end));
+    const caret = start + char.length;
+    // The value lands on the DOM node in the commit after this handler, so
+    // the caret has to be set once React has written it.
+    requestAnimationFrame(() => {
+      input?.focus();
+      input?.setSelectionRange(caret, caret);
+    });
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -386,6 +414,7 @@ function TypedInput({
     <div>
       <form id={formId} onSubmit={handleSubmit}>
         <input
+          ref={inputRef}
           type="text"
           autoFocus
           value={value}
@@ -393,6 +422,22 @@ function TypedInput({
           onChange={(event) => setValue(event.target.value)}
         />
       </form>
+      {result === null && extraChars !== undefined && extraChars.length > 0 ? (
+        <div className="extra-keys">
+          {extraChars.map((char) => (
+            <button
+              key={char}
+              type="button"
+              // Keeps the input focused: mousedown would blur it first, and
+              // on a phone that closes the keyboard on every tap.
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => insertChar(char)}
+            >
+              {char}
+            </button>
+          ))}
+        </div>
+      ) : null}
       {result === null && hint !== undefined ? (
         <HintReveal text={hint} />
       ) : null}
@@ -769,6 +814,7 @@ function renderInteraction(
             target={question.target}
             unitId={question.unitId}
             hint={hint}
+            extraChars={lookup.domainContent.domain.extraChars}
             revealedText={question.prompt.replace("___", question.target)}
             lookup={lookup}
             applyAuto={applyAuto}
@@ -784,6 +830,7 @@ function renderInteraction(
           <TypedInput
             target={question.target}
             unitId={question.unitId}
+            extraChars={lookup.domainContent.domain.extraChars}
             applyAuto={applyAuto}
             advance={advance}
           />
