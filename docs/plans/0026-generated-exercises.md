@@ -1,6 +1,6 @@
 # Plan 0026: Generated exercises
 
-Status: **drafted** · Owner: Moe · Date: 2026-08-31 · Prerequisite: [plan 0025](0025-exercise-difficulty-ladder.md) (generation is only principled once exercises are ranked) · Origin: owner proposal, 2026-08-31 — "remove all standard exercise questions and just let them be generated based on the content; specific task creation should still be possible"
+Status: **drafted** · Owner: Moe · Date: 2026-08-31 · Prerequisite: [plan 0025](0025-progression-engine.md) (generation is only principled once exercises carry a level) · Origin: owner proposal, 2026-08-31 — "remove all standard exercise questions and just let them be generated based on the content; specific task creation should still be possible"
 
 ## Purpose
 
@@ -32,20 +32,20 @@ This plan derives the index from the item set and 0025's ladder, and keeps autho
 - **Not removing `tasks`.** The maximally non-additive version of this idea — deleting the field — would reject every published document on every older client and has no story for private Books, which have no republish path (0017 decision 5). Authored tasks stay first-class forever; generation fills what a unit did not author.
 - **No generated _content_.** Sentences, glosses, examples and cloze markup are authoring. This plan only decides which exercises to build over items that already exist. (Unchanged from 0025 §10.)
 - **No learner state in generation.** The generator is pure over content, like `buildUnitSession` — same content, same task set, on every device. Adaptation lives in 0025 §5's review climb, which reads the rung.
-- **No authored difficulty rank per item.** See §5: SRS discovers difficulty empirically and per learner; an authored number would be a second, stale source of truth.
+- **No authored difficulty level per item.** See §5: SRS discovers difficulty empirically and per learner; an authored number would be a second, stale source of truth.
 - No change to grading, to either scheduler, or to the outcome-list contract.
 
 ## Design
 
 ### 1. The generator
 
-Pure function over content: unit items (kinds, asset refs, cloze markup) + the domain lexicon + 0025's rank table + optional targets (§5) + a question budget → a task set. No `Rng`; shuffling stays where it is, in session building.
+Pure function over content: unit items (kinds, asset refs, cloze markup) + the domain lexicon + 0025's exercise level table + optional targets (§5) + a question budget → a task set. No `Rng`; shuffling stays where it is, in session building.
 
-Its objective is **per-item band coverage**, not per-type presence — the distinction that keeps it from maximising:
+Its objective is **per-item level coverage**, not per-type presence — the distinction that keeps it from maximising:
 
-- Every item is reached at band A and at band C, band B where its kind allows. An item covered twice at the same rank has gained nothing.
+- Every item is reachable across the level range, not clustered at one end: something at the recognition end, something at the production end, and the middle where its kind allows. Two exercises at the same level gain nothing, since 0025 §4 draws one of them anyway.
 - One task per type per unit, so the knob is which types, not how many.
-- Redundant ranks collapse: `recognize` and `picture` are both rank 2 read — one of them, not both.
+- Redundant levels collapse: two exercises sharing a level are interchangeable to the draw — generate one, not both.
 - The budget is counted in **questions** (`countUnitQuestions`), not tasks, because that is what the learner experiences. Plan 0011's review already named question-count inflation; the restraint that answered it lives today as a prose guideline in the `/ingest` skill, which a generator either encodes or industrialises.
 - Floors are **gates, not errors**: a unit with three same-kind items simply does not get an MCQ (§7).
 
@@ -69,12 +69,12 @@ Per-type rather than all-or-nothing on purpose: an author who wants one specific
 
 Today `isUnitComplete` is "every task id of the unit has been attempted", over a persisted set of attempted task ids (`progress.ts:12`). That set feeds unlock gates → `nextUnit()` → the Play button → lesson chaining → every progress bar. It is the navigation spine, and it is the one thing generated ids would destabilise.
 
-**New rule: a unit is complete when every one of its items has at least one scheduling unit carrying SRS state.** That state already exists, is already persisted, and is already exported — the first graded answer schedules the item — so this is derived, not stored, and needs no new key.
+**New rule: a unit is complete when every one of its items has at least one scheduling unit at word level ≥ 1** — answered *correctly* at least once (pinned by the 0025 grilling, 2026-08-31; the earlier form of this rule said "has SRS state", which a wrong answer also produces). The level is stored by 0025 anyway, so this is still derived from existing state and needs no new key.
 
 Three things to get right:
 
 - **It must be items, not scheduling units.** A unit's *notes* are scheduling units too (0008 §7) but are never asked in a unit session — only in review. "Every scheduling unit has state" would make a unit with a note permanently incomplete. Items only.
-- **It is stricter than today's rule, deliberately.** Answering one question of a five-item recall task currently marks that whole task attempted, so a unit can read complete with four of five words never shown. The item rule cannot do that. This is a fix, but it is learner-visible: units that read complete today can flip back to incomplete, re-locking gates and regressing bars.
+- **It is stricter than today's rule, twice over.** Answering one question of a five-item recall task currently marks that whole task attempted, so a unit can read complete with four of five words never shown — and an attempt counts even when the answer was wrong. The level rule fixes both. This is a fix, but it is learner-visible: units that read complete today can flip back to incomplete, re-locking gates and regressing bars.
 - **So the legacy set is grandfathered**, in the repo's existing presence-based, self-erasing shape (0006): complete = new rule **or** the old attempted-task rule; the old key is read, never written again, and ages out as content is re-studied. A learner mid-Book keeps every completion they earned; only new units cost the honest amount.
 
 Rejected alternative: keep writing attempted ids for generated tasks. It works, but it re-introduces the identity dependence this section exists to remove, and it preserves the one-of-five bug.
@@ -85,9 +85,9 @@ The owner's "content gets a rank for itself" splits into two readings, and only 
 
 **Rejected — how hard this item is.** SRS already discovers that, empirically and per learner, and writes it into the rung. An authored difficulty number is stale on arrival and duplicates state the app maintains better.
 
-**Adopted — how far up the ladder this item should be taken.** "Passive vocabulary" versus "active vocabulary" is a real teaching decision every course makes, and one no amount of learner data can infer, because it is about intent. It maps exactly onto 0025's bands: recognise-only / produce / master. Default is the full ladder for the item's kind, so most items never set it.
+**Adopted — how far up the ladder this item should be taken.** "Passive vocabulary" versus "active vocabulary" is a real teaching decision every course makes, and one no amount of learner data can infer, because it is about intent. It maps onto 0025's level scale as a ceiling: stop this word at level 2 (recognise-only), or take it to 9 (write it). Default is the full ladder for the item's kind, so most items never set it.
 
-**It hangs off the unit, not the item.** Lexemes and concepts are domain-owned and shared across Books (0006: one word, one SRS state), so a target on the entry would be global — and a word may legitimately be passive in unit 3 and active in unit 9. An optional `unit.itemTargets` map keyed by the unit's own item ids is additive and correctly scoped. A validator rule mirrors class (a): a target keyed by an id the unit does not own is a dangling reference.
+**It hangs off the unit, not the item.** Lexemes and concepts are domain-owned and shared across Books (0006: one word, one SRS state), so a target on the entry would be global — and a word may legitimately be passive in unit 3 and active in unit 9. An optional `unit.itemTargets` map keyed by the unit's own item ids, holding a maximum level is additive and correctly scoped. A validator rule mirrors class (a): a target keyed by an id the unit does not own is a dangling reference.
 
 ### 6. What is lost
 
@@ -104,12 +104,12 @@ Classes (e), (f), (o), (g)/(r), (p), (q) and (n) are all task-shaped. For an aut
 
 The cost is that a content problem goes quiet. Today "your unit has three items, so this MCQ is invalid" fails the build; generated, it is a silently missing exercise. Two compensating controls, and they are load-bearing rather than nice-to-have:
 
-1. **0025 §8's per-item band coverage is promoted to required.** An author has to be able to see that a unit tops out at band A, or the silence is the whole experience.
+1. **Per-item level coverage is promoted to required.** An author has to be able to see the highest level a unit's content can actually reach — and which words no exercise reaches at all — or the silence is the whole experience.
 2. **A new error class: a unit item that no exercise — generated or authored — reaches at all.** This is exactly the rot described in the Purpose, and generation is what finally makes it checkable: before, "in no task" was a legitimate authoring choice; now it means the item is unreachable.
 
 ### 8. Where the author sees it
 
-0021 §9's Exercises page stops being a list of things to add and becomes a **preview with overrides**: what will be generated, in ladder order, per band, with each item's coverage; and a control to pin an authored task where the generated one is not what you want. The wizard sketched in 0025 §10 largely dissolves here — with nothing to keep in sync, there is nothing to recommend, only budget and targets to tune.
+0021 §9's Exercises page stops being a list of things to add and becomes a **preview with overrides**: what will be generated, with the highest level each item can reach; and a control to pin an authored task where the generated one is not what you want. The wizard sketched in the ladder plan's first draft largely dissolves here — with nothing to keep in sync, there is nothing to recommend, only budget and targets to tune.
 
 Generated tasks appear in Preview but **not in Diff**: they are derived from content already in the diff, so showing them would double-count every item change as an exercise change too.
 
@@ -127,7 +127,7 @@ So the plan splits:
 ## Slices
 
 1. **The generator** (`packages/engine`, pure) + the coverage query. Nothing consumes it yet beyond tests: same content in, same task set out, floors respected, budget respected.
-2. **Supplement mode**, opt-in per Book — unit sessions become authored ∪ generated-for-missing-types, ordered by 0025's bands. The opt-in flag is what keeps this from silently lengthening every existing unit's session on the day it ships.
+2. **Supplement mode**, opt-in per Book — unit sessions become authored ∪ generated-for-missing-types, with 0025's ceiling draw choosing each question. The opt-in flag is what keeps this from silently lengthening every existing unit's session on the day it ships.
 3. **Completion moves to items** (§4) with the legacy grandfather. Independent of 1–2 and worth landing on its own: it fixes the one-of-five bug today.
 4. **Item targets** (§5) — the optional map, the validator rule, generation reading it.
 5. **Exercises page becomes preview + override** (§8), including the promoted coverage display and the new unreachable-item error (§7).
