@@ -102,21 +102,36 @@ The level indexes the interval. Difficulty climbs through the first four levels 
 
 **The honest cost:** a new word is now due on days 1, 2, 3 and 5 before spacing begins, where plan 0022 sent it to day 6 after a single correct answer. That is roughly three times the contact in the first week — which is the point for acquisition, and also a materially larger daily queue while a Book is being learned. Thorough and Light shift the whole row; the Progression preset shifts how fast the level climbs into it.
 
-### 4. Choosing the exercise: the level is a ceiling, not a target
+### 4. Choosing the exercise: one repetition, one stretch
 
-When a word comes up, the engine collects every exercise its content can actually produce at **level ≤ the word's level**, and draws one at random, weighted toward the top of that range.
+Each appearance of a word in a session fills one of two slots:
 
-This is what makes the same word come back as different exercises. It also solves three problems at once, which is why it is a ceiling rather than an exact match:
+- **Repetition, early** — drawn at random from `{level − 1, level}`, clamped to at least 1: a level the word has already passed.
+- **New attempt, later** — exactly `level + 1`. Getting this right is the only thing that advances the level.
 
-- **Content gaps stop mattering.** A Book with no audio has nothing at level 3 or 10; the draw simply picks from what exists. A word still climbs — which is what keeps 100% reachable on every Book that exists today, none of which have recordings.
-- **Occasional easy wins.** Drawing below the ceiling sometimes is not a bug; a run of nothing but the hardest available exercise is how a learner gets discouraged.
-- **No fixed order anywhere.** Session order stays shuffled, and the easy → hard shape comes from each word's own level rather than from sorting the session into blocks.
+<!-- prettier-ignore -->
+| Session | Level at start | Early slot | Later slot | Level after |
+| --- | --- | --- | --- | --- |
+| 1 | 0 — new word | — | 1, then 2, then 3 | 3 |
+| 2 | 3 | random of {2, 3} | 4 | 4 |
+| 3 | 4 | random of {3, 4} | 5 | 5 |
+
+This replaces the weighted draw over everything at or below a ceiling, and it is better on three counts. **Advancement becomes unambiguous** — the level rises if and only if the `level + 1` exercise was answered correctly, rather than depending on which exercise a draw happened to produce. **The learner gets a win before the stretch**, which weighting only approximated. And the repetitions stop being arbitrary: one consolidates, one advances. Variety survives, because the early slot is random within its window and levels 3 and 4 each hold two exercises.
+
+Four rules complete it:
+
+- **A brand-new word runs the bottom levels in its first session** — 1, then 2, then 3 — rather than taking three sessions to become recognisable. This is why the day guard starts where it does (§5).
+- **A missing level is skipped, not waited for.** If `level + 1` has no exercise the content can build — level 3 is `listen`, and no Book has recordings — the new attempt goes to the next level that does. This is what keeps every level reachable, and 100% attainable, on content with gaps.
+- **A failed repetition cancels the stretch.** The later slot becomes a second repetition instead. Pushing a learner who has just shown they are shaky is how a session goes bad.
+- **Daily Review has one slot, so it draws from `{level, level + 1}`** — sometimes consolidation, sometimes progression, and it keeps its variety without becoming a drill.
 
 ### 5. Advancing, and falling back
 
-**Up, at most one level per UTC day.** The first correct answer of a new day at the word's current level advances it; `levelDay` records the day, and every later correct answer that day practises without advancing.
+**Up, at most one level per UTC day — from level 4 onwards.** A correct answer at the new-attempt slot advances the level; `levelDay` records the day, and a second advance that day is refused.
 
-This guard is the whole reason the model is honest. A word climbing 1 → 4 in one sitting measures short-term memory — the learner can produce it because they saw it ninety seconds ago. The codebase has met this twice already and answered it the same way both times: plan 0022's practice-only rule advances a rung at most once per day, and plan 0024's graduation counts three separate *days* "because the thing being tested is overnight retention". Inside a session difficulty still rises freely (§6) — it is only the *stored* level that waits for tomorrow.
+**Levels 1–3 are exempt, and the exemption is the point.** They are `matching`, `recognize` and `listen` — every one of them recognition, with the answer on screen. Recognising a word met a minute ago is a legitimate outcome of meeting it, so a new word climbs to level 3 in its first sitting (§4). The guard exists to stop a word reaching *production* on the strength of short-term memory, and production starts at level 4 — pick the foreign word — so that is where the guard starts.
+
+Above that the codebase has met this problem twice and answered it the same way both times: plan 0022's practice-only rule advances a rung at most once per day, and plan 0024's graduation counts three separate *days* "because the thing being tested is overnight retention".
 
 **Down, two levels, floored at 0.** A wrong answer costs two levels. More than Hard's one step, far less than a reset — and the word's interval drops with it, so a failure at level 8 comes back in 8 days at level 6 rather than in 30.
 
@@ -130,7 +145,7 @@ Plan 0024's `drill.ts` becomes the shared session engine rather than a Focus-mod
 
 **The remaining counter decrements only on a correct answer.** A wrong answer re-queues the word at an expanding gap (2, then 5, then 10 cards — plan 0024's rule, which exists so the learner is not re-asked a card whose answer is still on screen) and comes back **one level lower**, so they get a win before being pushed again. The count stalls rather than growing: "10 to go" always means ten correct answers to go, and a struggling session never reads as getting longer.
 
-**Difficulty rises inside the session.** Each repetition draws afresh (§4) against a session-local level that moves with the answers, so a word met at `matching` is asked `recognize` next. Only the first correct of the day writes a level back (§5).
+**Difficulty rises inside the session** by construction: the early slot sits at or just below the word's level and the later slot one above it (§4). A new word therefore climbs `matching` → `recognize` → `listen` in one sitting, and an established word gets one consolidation and one stretch.
 
 **A cap ends a session that will not finish**: 8 × word count, after which the summary names the words that did not get there.
 
@@ -220,9 +235,9 @@ Still one `bb.learning` key, still global by force — design.md pins "one word 
 ## Done-criteria
 
 - A word's level is one stored number, and the unit bar reads the mean of it as a percentage that reaches 100% on a Book with no audio.
-- A word cannot gain more than one level in a day (two on Fast with a streak), however many times it is answered.
+- A new word reaches level 3 in its first session; a word at level 4 or above cannot gain more than one level in a day (two on Fast with a streak), however many times it is answered.
 - A wrong answer at level 8 leaves the word at level 6, due in 8 days — never at level 0.
-- The same word, asked twice at the same level, can produce two different exercises.
+- The same word, appearing twice in a session, is asked one exercise at or below its level and one above it, and the first of those varies between sessions.
 - Session length is shown before the session starts and never grows during it.
 - On the live Kyrgyz Book, with no content edit: an English prompt with Kyrgyz options is playable, and typing a word from its English prompt is playable and auto-graded.
 - A Kyrgyz cloze blank containing ң/ө/ү can be answered correctly on a device with only a Russian keyboard, and ң typed as н is still wrong.
