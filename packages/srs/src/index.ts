@@ -3,15 +3,18 @@ export type {
   Quality,
   SelfGrade,
   ReviewPace,
-  SchedulerKind,
   SchedulingConfig,
-} from "./sm2.js";
+} from "./scheduler.js";
 export {
   recognizeQuality,
   recallQuality,
   schedule,
   isDue,
   dueAfter,
+  utcDay,
+  wordLevel,
+  MAX_WORD_LEVEL,
+  PRODUCTION_LEVEL,
   REVIEW_PACES,
   DEFAULT_SCHEDULING,
-} from "./sm2.js";
+} from "./scheduler.js";

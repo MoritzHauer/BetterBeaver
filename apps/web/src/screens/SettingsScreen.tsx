@@ -23,11 +23,7 @@ import {
   type LearningSettings,
   type SkipLength,
 } from "../learning";
-import {
-  REVIEW_PACES,
-  type ReviewPace,
-  type SchedulerKind,
-} from "@betterbeaver/srs";
+import { REVIEW_PACES, type ReviewPace } from "@betterbeaver/srs";
 
 const THEME_OPTIONS: { pref: ThemePref; label: string }[] = [
   { pref: "system", label: "System" },
@@ -42,11 +38,6 @@ const PACE_OPTIONS: { pace: ReviewPace; label: string }[] = [
   { pace: "thorough", label: "Thorough" },
   { pace: "balanced", label: "Balanced" },
   { pace: "light", label: "Light" },
-];
-
-const SCHEDULER_OPTIONS: { scheduler: SchedulerKind; label: string }[] = [
-  { scheduler: "ladder", label: "Ladder" },
-  { scheduler: "sm2", label: "Classic SM-2" },
 ];
 
 const SKIP_OPTIONS: { skip: SkipLength; label: string }[] = [
@@ -337,36 +328,18 @@ export function SettingsScreen({
           >
             {PACE_OPTIONS.map(({ pace, label }) => (
               <option key={pace} value={pace}>
-                {label} — {REVIEW_PACES[pace].join(", ")} days
+                {label} — {REVIEW_PACES[pace].slice(1).join(", ")} days
               </option>
             ))}
           </select>
         </label>
         <p className="status">
-          How fast a word you keep getting right moves out of your way. Cards
-          you already have keep their current due dates.
-        </p>
-        <label className="field">
-          Scheduler
-          <select
-            value={learning.scheduler}
-            onChange={(event) =>
-              updateLearning({
-                scheduler: event.target.value as SchedulerKind,
-              })
-            }
-          >
-            {SCHEDULER_OPTIONS.map(({ scheduler, label }) => (
-              <option key={scheduler} value={scheduler}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <p className="status">
-          Ladder: Good moves one step up the pace above, Hard steps back one and
-          asks again tomorrow, Again starts the word over. Classic SM-2 is the
-          older interval maths. You can switch back and forth freely.
+          How fast a word you keep getting right moves out of your way. Every
+          word has a level: getting it right moves it one level up, at most one
+          level a day once it is being asked to produce the word, and the level
+          says both how hard the next question is and how long until you see it
+          again. Getting it wrong steps back two levels, never back to the
+          start. Cards you already have keep their current due dates.
         </p>
         <label className="field">
           Skip for

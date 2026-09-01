@@ -1,6 +1,12 @@
 import type { Content, Lesson, Unit } from "@betterbeaver/schema";
 import type { Quality, SchedulingConfig, SrsState } from "@betterbeaver/srs";
-import { isDue, schedule } from "@betterbeaver/srs";
+import {
+  DEFAULT_SCHEDULING,
+  isDue,
+  PRODUCTION_LEVEL,
+  schedule,
+  wordLevel,
+} from "@betterbeaver/srs";
 import type { SchedulingUnit } from "./units.js";
 import { itemIdFromUnitId } from "./units.js";
 
@@ -201,19 +207,33 @@ export function dueCountsByLesson(
 /**
  * Advances SRS state for a grading result. An item enters scheduling on
  * its first result (`previous === null`). A result advances state only if
- * the item has no state yet or is due; otherwise it is practice-only and
- * `null` is returned so the caller persists nothing.
+ * the item has no state yet, is due, or is still below the production level;
+ * otherwise it is practice-only and `null` is returned so the caller
+ * persists nothing.
  *
- * `config` picks the scheduler (plan 0022); omitting it takes the shipped
- * default, which is the ladder on Balanced.
+ * The third case is plan 0025 §5's exemption, and without it the exemption
+ * could never fire: a word answered right once is due tomorrow, so the
+ * practice-only rule alone would refuse its second and third answers of the
+ * session and no new word could reach level 3 in its first sitting. Below
+ * the production level a word is due daily anyway, so "not due" there only
+ * ever means "already answered today" — which is exactly the case §4 wants
+ * to keep counting. At and above it the rule stands unchanged, and the day
+ * guard in `packages/srs` takes over.
+ *
+ * `config` picks the review pace; omitting it takes the shipped default,
+ * Balanced.
  */
 export function applyGrade(
   previous: SrsState | null,
   quality: Quality,
   gradedAt: Date,
-  config?: SchedulingConfig,
+  config: SchedulingConfig = DEFAULT_SCHEDULING,
 ): SrsState | null {
-  if (previous === null || isDue(previous, gradedAt)) {
+  if (
+    previous === null ||
+    isDue(previous, gradedAt) ||
+    wordLevel(previous, config.pace) < PRODUCTION_LEVEL
+  ) {
     return schedule(previous, quality, gradedAt, config);
   }
   return null;

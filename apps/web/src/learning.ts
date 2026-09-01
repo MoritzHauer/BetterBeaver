@@ -1,5 +1,7 @@
 /**
- * Learning settings (plan 0022 §8): review pace, scheduler, skip length.
+ * Learning settings (plan 0022 §8): review pace, skip length, and the typed
+ * key row. The scheduler row is gone — plan 0025 §11 removed classic SM-2,
+ * so there is nothing left to choose between.
  *
  * One `bb.learning` key holding one JSON object, which is what makes this
  * free of migration and export work — `progress/backup.ts` sweeps every
@@ -9,14 +11,13 @@
  *
  * Global by force, not by choice: design.md pins "one word = one SRS state
  * across topics" and `bb.item.*` is keyed by item id with no Book scope, so
- * a per-Book ladder would have two schedulers writing contradictory
- * intervals into one lexeme's single state.
+ * a per-Book pace would have two schedulers writing contradictory intervals
+ * into one lexeme's single state.
  */
 import {
   DEFAULT_SCHEDULING,
   REVIEW_PACES,
   type ReviewPace,
-  type SchedulerKind,
   type SchedulingConfig,
 } from "@betterbeaver/srs";
 import { readJson } from "./progress/local-storage";
@@ -52,10 +53,6 @@ function isPace(value: unknown): value is ReviewPace {
   return typeof value === "string" && value in REVIEW_PACES;
 }
 
-function isScheduler(value: unknown): value is SchedulerKind {
-  return value === "ladder" || value === "sm2";
-}
-
 function isSkip(value: unknown): value is SkipLength {
   return value === "week" || value === "month" || value === "year";
 }
@@ -66,9 +63,6 @@ export function getLearning(): LearningSettings {
   const stored = readJson<Partial<LearningSettings>>(LEARNING_KEY);
   return {
     pace: isPace(stored?.pace) ? stored.pace : DEFAULT_LEARNING.pace,
-    scheduler: isScheduler(stored?.scheduler)
-      ? stored.scheduler
-      : DEFAULT_LEARNING.scheduler,
     skip: isSkip(stored?.skip) ? stored.skip : DEFAULT_LEARNING.skip,
     extraKeys:
       typeof stored?.extraKeys === "boolean"
@@ -94,6 +88,6 @@ export function setLearning(patch: Partial<LearningSettings>): void {
  * rather than cached, so a change in Settings applies to the next answer
  * without any invalidation path. */
 export function schedulingConfig(): SchedulingConfig {
-  const { pace, scheduler } = getLearning();
-  return { pace, scheduler };
+  const { pace } = getLearning();
+  return { pace };
 }

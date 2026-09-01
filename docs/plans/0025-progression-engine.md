@@ -264,6 +264,21 @@ Every note in a unit is a scheduling unit today (plan 0008 §7), so a unit's the
 - Every existing card keeps its due date across the migration.
 - `pnpm check` green; no `CONTENT_SCHEMA_VERSION` change; one new `SrsState` field, covered by the existing `bb.*` backup sweep.
 
+## Implementation notes
+
+### Slices 1-3 (2026-09-01)
+
+Slice 1 landed the key row, slice 2 the exercise level table, slice 3 the word level. `corepack pnpm check` green after each. Six things the design did not pin, decided while building:
+
+1. **`write` is in the ladder but in no task type's list.** §2 ranks exercises and §9 derives `write` from lexeme/concept items, so the constant is two tables pointing in opposite directions: `EXERCISE_LEVEL` over exercises (the ladder, `shadowing` unranked), `TASK_EXERCISES` over `TaskType` (what content can author, exhaustive so a new type cannot compile without a level). `write` appears only in the first, which is the honest encoding of "no published Book could have authored one".
+2. **The MCQ sampler deduplicates by rendered text.** `picture` flipping to the production direction (§2) makes §9's duplicate-prompt hazard reachable immediately, not only at level 4: class (h) guarantees distinct display texts, not distinct scripts, so a produce-direction board can be handed a homograph and show two identical buttons of which only one is the correct index. The clash is dropped for a shorter board, which is what a unit short of siblings already gets. This is the runtime gate §9 asks for, arriving with the first exercise that needs it rather than in slice 6.
+3. **The practice-only rule is relaxed below the production level**, or §5's levels 1-3 exemption could never fire: a word answered right once is due tomorrow, so plan 0022's "advance only if due" would refuse the second and third answers of its first session and no new word could reach level 3 in one sitting (§4, and a done-criterion). Below level 4 a word is due daily anyway, so "not due" there only ever means "already answered today". At and above it the rule is unchanged and the day guard takes over.
+4. **The day guard bites on *arrival*, not departure.** "From level 4 onwards" (§5) has to mean the advance that would *reach* 4, not one taken *from* 4 — otherwise a new word could climb 3 → 4 in its first sitting, contradicting §4's table. Every advance stamps `levelDay`, including the unguarded climb through 1-3, which is also what makes the migration marker work: a card cannot reach a level above 0 under this scheduler without a stamp, so an absent stamp on a card whose stored number is above zero means that number is plan 0022's rung or SM-2's repetition count. Migration is therefore lazy and needs no pass over storage.
+5. **Hard reads its interval off the level like everything else.** Plan 0022 had Hard step back one rung *and* re-ask tomorrow; the step back survives (so Hard today plus Good tomorrow is not a promotion shortcut) but the forced 1-day interval does not, because §1 makes the level the single source of both difficulty and timing and a branch that pins a card to tomorrow independently of its level would break that. A Hard at level 8 now returns in 15 days rather than tomorrow.
+6. **Two things deliberately deferred to slice 4**, where their consumer lands: the **Progression speed preset** (§12) — a Settings row for repetitions per session is a dead control until the session engine reads it, and its two-levels-a-day variant is open question 1 — and **Again's same-session requeue** (§11), which slice 3 was to remove. Removing it before §6's expanding-gap requeue exists would regress Daily Review for exactly one slice, and §11's own wording is that the drill's requeue *supersedes* it, so the two change hands together.
+
+The pace rows for Thorough and Light were invented here; only Balanced is published in §3. Both keep §3's shape — the first four levels daily, spacing from level 5 — and shift the spaced half the way plan 0022's ladders did: Thorough `1, 3, 6, 10, 20, 45, 180`, Light `3, 7, 12, 25, 60, 150, 365` at levels 4-10.
+
 ## Open questions
 
 1. **Does the Fast preset's two-level streak jump need a floor on evidence?** Two levels a day means a word can reach `write` in five days. That may be right for a learner who is genuinely fast and wrong for one who is guessing well on four-option MCQs.

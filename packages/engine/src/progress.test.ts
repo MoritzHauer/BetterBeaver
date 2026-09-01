@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { Content, Item, Lesson, Unit } from "@betterbeaver/schema";
-import type { SchedulingConfig, SrsState } from "@betterbeaver/srs";
+import type { SrsState } from "@betterbeaver/srs";
+import { REVIEW_PACES } from "@betterbeaver/srs";
 import {
   dueCountsByLesson,
   dueCountsByUnit,
@@ -14,11 +15,18 @@ import {
 } from "./progress.js";
 import type { SchedulingUnit } from "./units.js";
 
-/** The interval oracles below pin plan 0001's SM-2 arithmetic, which plan
- * 0022 made the non-default scheduler — so they ask for it by name. The
- * ladder's own transitions are covered in `packages/srs`, and the
- * default-scheduler path is exercised at the bottom of this file. */
-const SM2: SchedulingConfig = { scheduler: "sm2", pace: "balanced" };
+/** A card written by the level scheduler, at `level` on Balanced. The
+ * level's own transitions are covered in `packages/srs`; what these tests
+ * pin is how `applyGrade` and `reviewQueue` behave around them. */
+function atLevel(level: number, due: string): SrsState {
+  return {
+    due,
+    intervalDays: REVIEW_PACES.balanced[level]!,
+    ease: 2.5,
+    reps: level,
+    levelDay: "2026-07-01",
+  };
+}
 
 function makeUnit(overrides: Partial<Unit> & Pick<Unit, "id">): Unit {
   return {
@@ -436,48 +444,59 @@ describe("reviewQueue / applyGrade repair: unparseable due", () => {
   it("applyGrade repairs a corrupted due state by advancing it", () => {
     const corrupted: SrsState = {
       due: "not-a-date",
-      intervalDays: 1,
+      intervalDays: 30,
       ease: 2.5,
-      reps: 1,
+      reps: 8,
+      levelDay: "2026-07-01",
     };
-    const result = applyGrade(
-      corrupted,
-      4,
-      new Date("2026-07-06T00:00:00Z"),
-      SM2,
-    );
+    const result = applyGrade(corrupted, 4, new Date("2026-07-06T00:00:00Z"));
     expect(result).not.toBeNull();
-    expect(result!.due).toBe("2026-07-12T00:00:00.000Z");
+    expect(result!.reps).toBe(9);
+    expect(result!.due).toBe("2026-10-04T00:00:00.000Z");
   });
 });
 
 describe("clock-injected review cycle", () => {
   it("first grading schedules the item, review queue reflects due, re-grading while not due is practice-only, grading when due advances", () => {
-    const firstGrade = new Date("2026-07-04T10:00:00Z");
-    const state1 = applyGrade(null, 4, firstGrade, SM2);
-    expect(state1).not.toBeNull();
-    expect(state1!.due).toBe("2026-07-05T00:00:00.000Z");
+    // Staged at the production level, where the practice-only rule applies:
+    // below it a word is due daily and answering it again the same day is
+    // the point (plan 0025 §5), which the test below this one pins.
+    const state1 = atLevel(6, "2026-07-04T00:00:00.000Z");
 
-    const states = new Map<string, SrsState>([[item1.id, state1!]]);
+    const states = new Map<string, SrsState>([[item1.id, state1]]);
     expect(
-      reviewQueue([unit1], states, new Date("2026-07-04T12:00:00Z")),
+      reviewQueue([unit1], states, new Date("2026-07-03T12:00:00Z")),
     ).toEqual([]);
     expect(
-      reviewQueue([unit1], states, new Date("2026-07-05T01:00:00Z")),
+      reviewQueue([unit1], states, new Date("2026-07-04T01:00:00Z")),
     ).toEqual([unit1]);
 
-    // Not due yet at 2026-07-04T12:00:00Z: practice-only, nothing to persist.
-    expect(
-      applyGrade(state1, 4, new Date("2026-07-04T12:00:00Z"), SM2),
-    ).toBeNull();
-
-    // Due by 2026-07-05T01:00:00Z: grading advances state.
-    const secondGrade = new Date("2026-07-05T01:00:00Z");
-    const state2 = applyGrade(state1, 4, secondGrade, SM2);
+    // Due by 2026-07-04T01:00:00Z: grading advances state.
+    const state2 = applyGrade(state1, 4, new Date("2026-07-04T01:00:00Z"));
     expect(state2).not.toBeNull();
-    expect(state2!.reps).toBe(2);
-    expect(state2!.intervalDays).toBe(6);
-    expect(state2!.due).toBe("2026-07-11T00:00:00.000Z");
+    expect(state2!.reps).toBe(7);
+    expect(state2!.intervalDays).toBe(15);
+    expect(state2!.due).toBe("2026-07-19T00:00:00.000Z");
+
+    // Not due until then: practice-only, nothing to persist.
+    expect(applyGrade(state2, 4, new Date("2026-07-05T12:00:00Z"))).toBeNull();
+  });
+
+  it("keeps counting answers to a word that has not reached production yet", () => {
+    // The other half of §5: a word answered right once is due tomorrow, so
+    // the practice-only rule alone would refuse the rest of its first
+    // session and it could never reach level 3 in one sitting.
+    const morning = new Date("2026-07-04T09:00:00Z");
+    const evening = new Date("2026-07-04T21:00:00Z");
+    const first = applyGrade(null, 4, morning);
+    expect(first!.reps).toBe(1);
+    const second = applyGrade(first, 4, morning);
+    expect(second!.reps).toBe(2);
+    const third = applyGrade(second, 4, evening);
+    expect(third!.reps).toBe(3);
+    // And there it stops for the day: the fourth win would arrive at
+    // production, which the day guard refuses.
+    expect(applyGrade(third, 4, evening)!.reps).toBe(3);
   });
 });
 
@@ -500,38 +519,39 @@ describe("cloze blanks schedule independently (plan 0002 done-criterion)", () =>
       blankNumber: 2,
     };
 
+    // Both blanks start at level 7 — 15 days on Balanced — because that is
+    // where one right answer and one wrong one part company. Under the
+    // level scheduler the first four levels are all daily (plan 0025 §3),
+    // so a brand-new pair of blanks would be due together whatever they
+    // scored, and the independence would be invisible rather than absent.
     const day0 = new Date("2026-07-04T00:00:00Z");
+    const seeded = atLevel(7, "2026-07-04T00:00:00.000Z");
     const states = new Map<string, SrsState>();
-    states.set(blank1.id, applyGrade(null, 4, day0, SM2)!);
-    states.set(blank2.id, applyGrade(null, 4, day0, SM2)!);
-    // First SM-2 grade always yields a 1-day interval, so both blanks are
-    // due at day 1 regardless of quality.
-    expect(states.get(blank1.id)!.due).toBe("2026-07-05T00:00:00.000Z");
-    expect(states.get(blank2.id)!.due).toBe("2026-07-05T00:00:00.000Z");
-
-    const day1 = new Date("2026-07-05T00:00:00Z");
-    expect(reviewQueue([blank1, blank2], states, day1)).toEqual([
+    states.set(blank1.id, seeded);
+    states.set(blank2.id, seeded);
+    expect(reviewQueue([blank1, blank2], states, day0)).toEqual([
       blank1,
       blank2,
     ]);
-    states.set(blank1.id, applyGrade(states.get(blank1.id)!, 4, day1, SM2)!);
-    states.set(blank2.id, applyGrade(states.get(blank2.id)!, 2, day1, SM2)!);
 
-    const day2 = new Date("2026-07-06T00:00:00Z");
-    expect(reviewQueue([blank1, blank2], states, day2)).toEqual([blank2]);
+    states.set(blank1.id, applyGrade(states.get(blank1.id)!, 4, day0)!);
+    states.set(blank2.id, applyGrade(states.get(blank2.id)!, 2, day0)!);
+    // Right: level 8, 30 days. Wrong: two levels back to 5, 5 days — the
+    // §5 fall-back, not a reset to the start.
+    expect(states.get(blank1.id)!.reps).toBe(8);
+    expect(states.get(blank2.id)!.reps).toBe(5);
 
-    // Blank 1 (graded "correct") returns further out (~day 7+); blank 2
-    // (graded "wrong") is due again the very next day.
+    const day5 = new Date("2026-07-09T00:00:00Z");
+    expect(reviewQueue([blank1, blank2], states, day5)).toEqual([blank2]);
+
     const blank1Due = new Date(states.get(blank1.id)!.due).getTime();
-    const day2Time = day2.getTime();
-    expect(blank1Due).toBeGreaterThan(day2Time);
-    expect(blank1Due - day2Time).toBeGreaterThanOrEqual(
-      4 * 24 * 60 * 60 * 1000,
+    expect(blank1Due - day5.getTime()).toBeGreaterThanOrEqual(
+      20 * 24 * 60 * 60 * 1000,
     );
   });
 });
 
-describe("applyGrade under the default (ladder) scheduler", () => {
+describe("applyGrade under the default pace", () => {
   const sentence: Item = {
     id: "t-item-ladder-sentence",
     kind: "sentence",
@@ -549,32 +569,33 @@ describe("applyGrade under the default (ladder) scheduler", () => {
     blankNumber: 2,
   };
 
-  it("cloze blanks still schedule independently, on ladder intervals", () => {
+  it("walks a new blank up the daily levels, one day at a time after that", () => {
     const day0 = new Date("2026-08-05T00:00:00Z");
     const states = new Map<string, SrsState>();
     states.set(blank1.id, applyGrade(null, 4, day0)!);
     states.set(blank2.id, applyGrade(null, 4, day0)!);
-    // A first Good under the ladder is rung 1 — 5 days, not SM-2's 1.
-    expect(states.get(blank1.id)!.due).toBe("2026-08-10T00:00:00.000Z");
+    // A first Good is level 1 — due tomorrow, because difficulty is what
+    // climbs through the first four levels, not spacing.
+    expect(states.get(blank1.id)!.due).toBe("2026-08-06T00:00:00.000Z");
 
-    const day5 = new Date("2026-08-10T00:00:00Z");
-    expect(reviewQueue([blank1, blank2], states, day5)).toEqual([
+    const day1 = new Date("2026-08-06T00:00:00Z");
+    expect(reviewQueue([blank1, blank2], states, day1)).toEqual([
       blank1,
       blank2,
     ]);
-    states.set(blank1.id, applyGrade(states.get(blank1.id)!, 4, day5)!);
-    states.set(blank2.id, applyGrade(states.get(blank2.id)!, 2, day5)!);
-
-    const day6 = new Date("2026-08-11T00:00:00Z");
-    expect(reviewQueue([blank1, blank2], states, day6)).toEqual([blank2]);
-    expect(states.get(blank1.id)!.intervalDays).toBe(15);
-    expect(states.get(blank2.id)!.intervalDays).toBe(1);
+    states.set(blank1.id, applyGrade(states.get(blank1.id)!, 4, day1)!);
+    states.set(blank2.id, applyGrade(states.get(blank2.id)!, 2, day1)!);
+    expect(states.get(blank1.id)!.reps).toBe(2);
+    // Two levels back from 1 floors at 0 — the bottom, not a punishment.
+    expect(states.get(blank2.id)!.reps).toBe(0);
   });
 
-  it("still refuses to advance a not-due card", () => {
-    const day0 = new Date("2026-08-05T00:00:00Z");
-    const state = applyGrade(null, 4, day0)!;
-    expect(applyGrade(state, 4, new Date("2026-08-06T00:00:00Z"))).toBeNull();
+  it("still refuses to advance a not-due card at the production levels", () => {
+    const state = atLevel(6, "2026-08-05T00:00:00.000Z");
+    const advanced = applyGrade(state, 4, new Date("2026-08-05T00:00:00Z"))!;
+    expect(
+      applyGrade(advanced, 4, new Date("2026-08-06T00:00:00Z")),
+    ).toBeNull();
   });
 });
 
