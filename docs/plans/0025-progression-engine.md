@@ -301,6 +301,18 @@ The bar, the completion rule and the locks, landed ahead of slices 4-6 for the s
 
 Browser-verified on the demo Book: three of Beaver basics' five words at level 5 reads 30% on the unit and 10% on the lesson; all five at level 10 reads 100% with the completion tick. Settings shows the widened pace rows and no Scheduler row.
 
+### Slice 9 (2026-09-01)
+
+The keyboard setup card, the Settings toggle, and the card's offer of the row as fallback. Inert until a domain declares `extraChars` — which is still open question 3.
+
+- **The card renders in the session, above the typed answer**, not on the Book screen. That is where a learner discovers they cannot type ң, the domain's `extraChars` is already threaded there (slice 1), and the alternative needed a new prop path to a screen that has no reason to know about typing. It shows once per learner until dismissed, never after an answer is in, and Settings re-opens it.
+- **One dismissal flag, not one per domain.** `bb.learning.keyboardHelpDismissed` — the card teaches a device-wide skill, and a learner who has added one layout knows where the setting lives.
+- **Dismissing the card leaves the row it turned on.** A learner who cannot add a layout has just switched on the only thing that makes those blanks answerable; taking it away with the walkthrough would undo their own decision.
+- **The Settings copy for the row leads with the layout too**, so the two surfaces cannot drift into contradicting each other about which fix is the real one.
+- Steps are named menu paths rather than screenshots: a path a learner can follow survives an OS update, and an image of one Android skin does not describe the next. iOS's honestly says the layout may not exist and names the App Store fallback and its "Allow Full Access" prompt.
+
+Browser-verified by declaring `extraChars` on the demo domain temporarily: Settings' "How to add the keyboard" opens the card with the desktop steps and the fallback toggle. The content edit was reverted.
+
 ## Open questions
 
 1. **Does the Fast preset's two-level streak jump need a floor on evidence?** Two levels a day means a word can reach `write` in five days. That may be right for a learner who is genuinely fast and wrong for one who is guessing well on four-option MCQs.

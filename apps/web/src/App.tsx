@@ -1826,6 +1826,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
         onImportBook={importDocuments}
         importPrivateBook={contentInit.importPrivateBook}
         refreshContent={contentInit.refreshContent}
+        extraChars={domainContent?.domain.extraChars}
       />
     );
   }

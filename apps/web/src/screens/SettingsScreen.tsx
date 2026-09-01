@@ -24,6 +24,10 @@ import {
   type SkipLength,
 } from "../learning";
 import { REVIEW_PACES, type ReviewPace } from "@betterbeaver/srs";
+import {
+  KeyboardSetupCard,
+  keyboardPlatform,
+} from "../components/KeyboardSetupCard";
 
 const THEME_OPTIONS: { pref: ThemePref; label: string }[] = [
   { pref: "system", label: "System" },
@@ -53,8 +57,13 @@ export function SettingsScreen({
   onImportBook,
   importPrivateBook,
   refreshContent,
+  extraChars,
 }: {
   onBack: () => void;
+  /** The current domain's `extraChars` (plan 0025 §10). The keyboard rows
+   * below render only when a domain declares some: a learner whose script
+   * has no missing characters has nothing to set up and no row to want. */
+  extraChars?: readonly string[] | undefined;
   onAbout: () => void;
   onSignIn: () => void;
   /** Re-downloads every member Book's documents and assets, then reloads
@@ -86,6 +95,9 @@ export function SettingsScreen({
   );
   const [offlineOn, setOfflineOn] = useState(isOffline);
   const [learning, setLearningState] = useState<LearningSettings>(getLearning);
+  // The setup walkthrough, re-openable here after it was dismissed in a
+  // session (plan 0025 §10).
+  const [keyboardHelpOpen, setKeyboardHelpOpen] = useState(false);
   const [user, setUser] = useState<User | null | "loading">(
     getSupabase() === null ? null : "loading",
   );
@@ -341,6 +353,38 @@ export function SettingsScreen({
           again. Getting it wrong steps back two levels, never back to the
           start. Cards you already have keep their current due dates.
         </p>
+        {extraChars !== undefined && extraChars.length > 0 && (
+          <>
+            <label className="field">
+              <input
+                type="checkbox"
+                checked={learning.extraKeys}
+                onChange={(event) =>
+                  updateLearning({ extraKeys: event.target.checked })
+                }
+              />{" "}
+              Show {extraChars.join(" ")} under typed answers
+            </label>
+            <p className="status">
+              Off by default: adding the language&rsquo;s own keyboard layout
+              works everywhere on your phone, not just here. These keys are the
+              fallback if you cannot.
+            </p>
+            <button onClick={() => setKeyboardHelpOpen((open) => !open)}>
+              {keyboardHelpOpen ? "Hide" : "How to add the keyboard"}
+            </button>
+            {keyboardHelpOpen && (
+              <KeyboardSetupCard
+                chars={extraChars}
+                platform={keyboardPlatform(navigator.userAgent)}
+                extraKeys={learning.extraKeys}
+                onToggleExtraKeys={(next) =>
+                  updateLearning({ extraKeys: next })
+                }
+              />
+            )}
+          </>
+        )}
         <label className="field">
           Skip for
           <select

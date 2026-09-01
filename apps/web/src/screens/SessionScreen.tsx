@@ -30,7 +30,16 @@ import { noteStorageUnwritable } from "../storage-health";
 import { FeedbackWidget } from "../components/FeedbackWidget";
 import { BookWatermark } from "../components/BookWatermark";
 import { Sheet } from "../components/Sheet";
-import { SKIP_DAYS, getLearning, type SkipLength } from "../learning";
+import {
+  SKIP_DAYS,
+  getLearning,
+  setLearning as setLearningSetting,
+  type SkipLength,
+} from "../learning";
+import {
+  KeyboardSetupCard,
+  keyboardPlatform,
+} from "../components/KeyboardSetupCard";
 import { SWIPE_THRESHOLD } from "./UnitScreen";
 
 /** Tally of results across a session; only the fields for the task type(s)
@@ -383,9 +392,19 @@ function TypedInput({
 }) {
   const formId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
-  const showExtraKeys = getLearning().extraKeys;
+  // State, not a bare read: the setup card below can turn the row on, and
+  // dismissing the card has to take it off screen without a navigation.
+  const [learning, setLearning] = useState(() => getLearning());
+  const showExtraKeys = learning.extraKeys;
   const [value, setValue] = useState("");
   const [result, setResult] = useState<Verdict | null>(null);
+  const declared = extraChars ?? [];
+  // The card is the first thing a learner sees on a typed answer whose
+  // script needs characters their keyboard may not have (plan 0025 §10) —
+  // once, until they dismiss it. Not shown after answering: by then the
+  // question is moot for this card.
+  const showSetupCard =
+    result === null && declared.length > 0 && !learning.keyboardHelpDismissed;
 
   /** Inserts `char` at the caret and puts the caret after it, keeping focus
    * on the input so the on-screen keyboard never dismisses mid-answer.
@@ -417,6 +436,21 @@ function TypedInput({
 
   return (
     <div>
+      {showSetupCard && (
+        <KeyboardSetupCard
+          chars={declared}
+          platform={keyboardPlatform(navigator.userAgent)}
+          extraKeys={showExtraKeys}
+          onToggleExtraKeys={(next) => {
+            setLearningSetting({ extraKeys: next });
+            setLearning(getLearning());
+          }}
+          onDismiss={() => {
+            setLearningSetting({ keyboardHelpDismissed: true });
+            setLearning(getLearning());
+          }}
+        />
+      )}
       <form id={formId} onSubmit={handleSubmit}>
         <input
           ref={inputRef}
@@ -427,12 +461,9 @@ function TypedInput({
           onChange={(event) => setValue(event.target.value)}
         />
       </form>
-      {result === null &&
-      showExtraKeys &&
-      extraChars !== undefined &&
-      extraChars.length > 0 ? (
+      {result === null && showExtraKeys && declared.length > 0 ? (
         <div className="extra-keys">
-          {extraChars.map((char) => (
+          {declared.map((char) => (
             <button
               key={char}
               type="button"

@@ -17,6 +17,7 @@ describe("learning settings", () => {
       pace: "balanced",
       skip: "week",
       extraKeys: false,
+      keyboardHelpDismissed: false,
     });
     expect(getLearning()).toEqual(DEFAULT_LEARNING);
   });
@@ -28,6 +29,7 @@ describe("learning settings", () => {
       pace: "light",
       skip: "year",
       extraKeys: false,
+      keyboardHelpDismissed: false,
     });
   });
 
@@ -43,6 +45,7 @@ describe("learning settings", () => {
       pace: "balanced",
       skip: "week",
       extraKeys: false,
+      keyboardHelpDismissed: false,
     });
   });
 

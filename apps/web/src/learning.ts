@@ -41,12 +41,17 @@ export interface LearningSettings extends SchedulingConfig {
    * layout, and three keys under every answer are clutter for a learner who
    * installed one. The setup card offers this to anyone who cannot. */
   extraKeys: boolean;
+  /** Whether the keyboard setup card has been dismissed (plan 0025 §10).
+   * One flag, not one per domain: the card teaches a device-wide skill, and
+   * a learner who has added one layout knows where the setting lives. */
+  keyboardHelpDismissed: boolean;
 }
 
 export const DEFAULT_LEARNING: LearningSettings = {
   ...DEFAULT_SCHEDULING,
   skip: "week",
   extraKeys: false,
+  keyboardHelpDismissed: false,
 };
 
 function isPace(value: unknown): value is ReviewPace {
@@ -68,6 +73,10 @@ export function getLearning(): LearningSettings {
       typeof stored?.extraKeys === "boolean"
         ? stored.extraKeys
         : DEFAULT_LEARNING.extraKeys,
+    keyboardHelpDismissed:
+      typeof stored?.keyboardHelpDismissed === "boolean"
+        ? stored.keyboardHelpDismissed
+        : DEFAULT_LEARNING.keyboardHelpDismissed,
   };
 }
 
