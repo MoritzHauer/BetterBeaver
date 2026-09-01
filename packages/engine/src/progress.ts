@@ -113,6 +113,16 @@ export function nextUnit(
  * corrupted state for repair. `pinnedUnitIds` (plan 0008) sorts its members
  * ahead of the rest, ordering only — due-ascending still applies within each
  * group.
+ *
+ * **A note enters only when it is pinned** (plan 0025 §13). Every note in a
+ * unit is a scheduling unit (plan 0008 §7), so a unit's theory used to come
+ * back here as a self-graded flashcard forever — and theory is reference
+ * material, read when it is needed, not a card to be drilled. For notes,
+ * `pinnedUnitIds` therefore widens from "show me this first" to "include
+ * this at all", which is the mechanism already: pinning a note grades it
+ * `again` so that it becomes due immediately. Nothing migrates — existing
+ * note state stays where it is and is simply no longer read for queueing,
+ * and a learner who wants a note back pins it.
  */
 export function reviewQueue(
   units: SchedulingUnit[],
@@ -122,6 +132,9 @@ export function reviewQueue(
 ): SchedulingUnit[] {
   const due: { unit: SchedulingUnit; dueMs: number }[] = [];
   for (const unit of units) {
+    if (unit.note !== undefined && !pinnedUnitIds.has(unit.id)) {
+      continue;
+    }
     const state = states.get(unit.id);
     if (state === undefined || !isDue(state, now)) {
       continue;

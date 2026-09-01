@@ -392,6 +392,47 @@ describe("reviewQueue pinning (plan 0008)", () => {
   });
 });
 
+describe("notes leave the review queue (plan 0025 §13)", () => {
+  const note: SchedulingUnit = {
+    id: "note:t-note-1",
+    note: { id: "t-note-1", stem: "n1" },
+  };
+  const dueYesterday: SrsState = {
+    due: "2026-07-04T00:00:00.000Z",
+    intervalDays: 1,
+    ease: 2.5,
+    reps: 1,
+    levelDay: "2026-07-03",
+  };
+  const now = new Date("2026-07-05T00:00:00Z");
+  const states = new Map<string, SrsState>([
+    [note.id, dueYesterday],
+    [item1.id, dueYesterday],
+  ]);
+
+  it("leaves a due note out entirely", () => {
+    // Theory is reference material, read when it is needed. It used to come
+    // back as a self-graded flashcard forever, because every note in a unit
+    // is a scheduling unit.
+    expect(reviewQueue([note, unit1], states, now)).toEqual([unit1]);
+  });
+
+  it("puts it back the moment it is pinned", () => {
+    // Pin already grades a note `again` so that it becomes due; for notes
+    // only, it now also means "include this at all".
+    expect(reviewQueue([note, unit1], states, now, new Set([note.id]))).toEqual(
+      [note, unit1],
+    );
+  });
+
+  it("does not touch stored note state", () => {
+    // Nothing to migrate: the state stays where it is and simply is not
+    // read for queueing.
+    reviewQueue([note], states, now);
+    expect(states.get(note.id)).toEqual(dueYesterday);
+  });
+});
+
 describe("reviewQueue / applyGrade boundary: due exactly equal to now", () => {
   it("a unit due exactly at `now` is included in reviewQueue", () => {
     const states = new Map<string, SrsState>([

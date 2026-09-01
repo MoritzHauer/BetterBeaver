@@ -279,6 +279,16 @@ Slice 1 landed the key row, slice 2 the exercise level table, slice 3 the word l
 
 The pace rows for Thorough and Light were invented here; only Balanced is published in §3. Both keep §3's shape — the first four levels daily, spacing from level 5 — and shift the spaced half the way plan 0022's ladders did: Thorough `1, 3, 6, 10, 20, 45, 180`, Light `3, 7, 12, 25, 60, 150, 365` at levels 4-10.
 
+### Slice 10 (2026-09-01)
+
+Landed ahead of slices 4-9, which it is independent of. One line in `reviewQueue`: a scheduling unit carrying a `note` enters only when `pinnedUnitIds` holds it. `dueCountsByUnit` reads the already-filtered queue, so the Book and Lesson screens' due badges follow with no change of their own, and nothing migrates.
+
+**Slices 4 and 5 are one piece of work, and slice 4's premise is stale.** Recorded here rather than discovered twice:
+
+- §6 opens "plan 0024's `drill.ts` becomes the shared session engine", but plan 0024 is *drafted*, not implemented — `packages/engine/src/drill.ts` does not exist. Slice 4 is therefore "write the session engine", not "generalise one", and slice 8 (re-point Focus mode) has nothing to re-point until 0024 lands.
+- The two slices interlock. §6's requeue brings a word back "one level lower", and §6's rising difficulty inside a session *is* §4's two slots — both of which are slice 5's draw. A slice 4 without it can only re-ask the identical question, which is the thing plan 0022 §4 already does.
+- **`matching` needs a decision the design does not make.** It is the level-1 exercise, so it is the first thing a brand-new word is asked (§4), but a board grades up to five scheduling units at once while §6's queue owes a fixed number of correct answers *per word*. Either an answered board credits every word it graded (and the queue drops those words' later planned visits, keeping "N to go" honest), or `matching` is drawn only when a session can build a board around the target. The first is the better answer — it is what actually happened on screen — and it is what the engine should implement, but it is a design decision rather than a transcription of the plan.
+
 ## Open questions
 
 1. **Does the Fast preset's two-level streak jump need a floor on evidence?** Two levels a day means a word can reach `write` in five days. That may be right for a learner who is genuinely fast and wrong for one who is guessing well on four-option MCQs.
