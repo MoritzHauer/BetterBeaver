@@ -487,8 +487,8 @@ export function checkReferences(parsed: ParsedSet): string[] {
     // class (g)/(r): an MCQ-presentation task's owning unit must have
     // enough items of the task's kind to sample RECOGNIZE_DISTRACTOR_COUNT
     // distractors plus the correct answer (listen/picture reuse the
-    // recognize distractor sampler over display texts, so the requirement
-    // is identical).
+    // recognize distractor sampler, so the requirement is identical — the
+    // direction each renders its choices in does not change the count).
     if (TASK_NEEDS_DISTRACTORS[task.type]) {
       const requiredCount = RECOGNIZE_DISTRACTOR_COUNT + 1;
       const sameKindCount = owningUnit.itemIds.filter(

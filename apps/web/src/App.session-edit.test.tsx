@@ -162,10 +162,12 @@ describe("session Edit button", () => {
 
     screen.getByRole("button", { name: /Edit/ }).click();
     const sheet = await screen.findByRole("dialog");
-    // The card's Definition, which is what this question kind puts on screen
-    // as its answer choices — the Term above it renders only into the prompt.
+    // The card's Term, which is what this question kind puts on screen as
+    // its answer choices — a `picture` question prompts with the image and
+    // answers in the target language (plan 0025 §2), so the Definition in
+    // the textarea below never reaches the board.
     const field = await waitFor(() => {
-      const found = sheet.querySelector<HTMLTextAreaElement>("textarea");
+      const found = sheet.querySelector<HTMLInputElement>('input[type="text"]');
       expect(found).not.toBeNull();
       return found!;
     });

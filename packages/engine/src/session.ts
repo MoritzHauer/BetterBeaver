@@ -93,7 +93,10 @@ export interface MinimalPairQuestion {
   correctIndex: number;
 }
 
-/** MCQ over same-kind display texts, prompted by an image. Auto-graded like `RecognizeQuestion`. */
+/** MCQ over same-kind foreign forms, prompted by an image. Auto-graded like
+ * `RecognizeQuestion`. Production direction (plan 0025 §2): an image over a
+ * list of English glosses puts no foreign form on the screen at all, so it
+ * tests nothing about the language. */
 export interface PictureQuestion {
   kind: "picture";
   unitId: string;
@@ -175,25 +178,54 @@ export function shuffle<T>(items: T[], rng: Rng): T[] {
 
 /**
  * Samples `RECOGNIZE_DISTRACTOR_COUNT` same-kind distractors from
- * `unitItems` for `item` and splices its own display text in at a
- * shuffle-scripted index. Shared by `recognize`, `listen`, and `picture`
+ * `unitItems` for `item` and splices `item`'s own choice in at a
+ * shuffle-scripted index. Shared by `recognize`, `listen` and `picture`
  * (the pinned shuffle-and-insert algorithm).
+ *
+ * `choiceText` is the direction (plan 0025 §2): `itemDisplayText` renders
+ * the meaning side, so the learner comprehends; `recognizePrompt` renders
+ * the foreign side, so the learner produces. Distractors are rendered the
+ * same way as the answer, or they would give themselves away.
+ *
+ * Choices are deduplicated *by rendered text*. The validator's class (h)
+ * only guarantees distinct display texts, so a produce-direction board can
+ * be handed two items that share a script — an unanswerable question, since
+ * only one of the two identical buttons is the correct index. Dropping the
+ * clash yields a shorter board instead, exactly as a unit short of siblings
+ * does. Filtering happens before the shuffle so content without a clash
+ * consumes the rng identically.
  */
 function sampleMcq(
   item: Item,
   unitItems: Item[],
   rng: Rng,
+  choiceText: (candidate: Item) => string,
 ): { choices: string[]; correctIndex: number } {
+  const answer = choiceText(item);
   const candidates = unitItems.filter(
     (c) => c.id !== item.id && c.kind === item.kind,
   );
-  const distractors = shuffle(candidates, rng).slice(
-    0,
-    RECOGNIZE_DISTRACTOR_COUNT,
+  const seen = new Set([answer]);
+  const distractors: string[] = [];
+  for (const candidate of shuffle(candidates, rng)) {
+    if (distractors.length === RECOGNIZE_DISTRACTOR_COUNT) {
+      break;
+    }
+    const text = choiceText(candidate);
+    if (seen.has(text)) {
+      continue;
+    }
+    seen.add(text);
+    distractors.push(text);
+  }
+  // Clamped, because a board short of distractors would otherwise report a
+  // correct index past its own end (splice silently appends).
+  const correctIndex = Math.min(
+    Math.floor(rng() * (RECOGNIZE_DISTRACTOR_COUNT + 1)),
+    distractors.length,
   );
-  const correctIndex = Math.floor(rng() * (RECOGNIZE_DISTRACTOR_COUNT + 1));
-  const choices = distractors.map((candidate) => itemDisplayText(candidate));
-  choices.splice(correctIndex, 0, itemDisplayText(item));
+  const choices = [...distractors];
+  choices.splice(correctIndex, 0, answer);
   return { choices, correctIndex };
 }
 
@@ -389,7 +421,12 @@ export function buildTaskSession(
 
       return task.itemIds.map((itemId): Question => {
         const item = itemById.get(itemId)!;
-        const { choices, correctIndex } = sampleMcq(item, unitItems, rng);
+        const { choices, correctIndex } = sampleMcq(
+          item,
+          unitItems,
+          rng,
+          itemDisplayText,
+        );
         return {
           kind: "recognize",
           unitId: itemId,
@@ -449,7 +486,12 @@ export function buildTaskSession(
       const unitItems = owningUnitItems();
       return task.itemIds.map((itemId): Question => {
         const item = itemById.get(itemId)!;
-        const { choices, correctIndex } = sampleMcq(item, unitItems, rng);
+        const { choices, correctIndex } = sampleMcq(
+          item,
+          unitItems,
+          rng,
+          itemDisplayText,
+        );
         return {
           kind: "listen",
           unitId: itemId,
@@ -498,7 +540,12 @@ export function buildTaskSession(
       const unitItems = owningUnitItems();
       return task.itemIds.map((itemId): Question => {
         const item = itemById.get(itemId)!;
-        const { choices, correctIndex } = sampleMcq(item, unitItems, rng);
+        const { choices, correctIndex } = sampleMcq(
+          item,
+          unitItems,
+          rng,
+          recognizePrompt,
+        );
         return {
           kind: "picture",
           unitId: itemId,
