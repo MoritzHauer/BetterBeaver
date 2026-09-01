@@ -1,4 +1,11 @@
-import type { Content, Item, Task, Unit } from "@betterbeaver/schema";
+import type {
+  Content,
+  Exercise,
+  Item,
+  Task,
+  TaskType,
+  Unit,
+} from "@betterbeaver/schema";
 import {
   gapClozeMarkup,
   itemDisplayText,
@@ -9,6 +16,7 @@ import {
   sentenceTokens,
   stripClozeMarkup,
   RECOGNIZE_DISTRACTOR_COUNT,
+  TASK_EXERCISES,
 } from "@betterbeaver/schema";
 import type { Quality } from "@betterbeaver/srs";
 import { blankUnitId, type SchedulingUnit } from "./units.js";
@@ -69,6 +77,23 @@ export interface ListenQuestion {
 }
 
 /** Hear the audio, type what was said. Auto-graded via `checkTypedAnswer`. */
+/**
+ * Type the foreign form from its meaning (plan 0025 §9, level 9): prompt is
+ * the item's display text, target its `recognizePrompt`. Auto-graded via
+ * `checkTypedAnswer`, the same check cloze and dictation use.
+ *
+ * Derived, not authored — no task type builds this, which is what makes the
+ * top of the ladder reachable on Books published before the plan existed.
+ * Lexemes and concepts only: typing a whole sentence from its translation is
+ * dictation without the audio, and belongs at level 10 if anywhere.
+ */
+export interface WriteQuestion {
+  kind: "write";
+  unitId: string;
+  prompt: string;
+  target: string;
+}
+
 export interface DictationQuestion {
   kind: "dictation";
   unitId: string;
@@ -130,6 +155,7 @@ export interface NoteQuestion {
 }
 
 export type Question =
+  | WriteQuestion
   | RecognizeQuestion
   | RecallQuestion
   | ClozeQuestion
@@ -608,6 +634,106 @@ export function buildTaskSession(
  * `taskId` at construction time is the only reliable way to carry it
  * forward.
  */
+/**
+ * The task type that presents `exercise`, or `null` for the two this plan
+ * derives from content that authored no task for them (plan 0025 §9).
+ *
+ * The reverse of `TASK_EXERCISES`, computed rather than written out so the
+ * two cannot drift: adding an exercise to a task type's list is enough.
+ */
+function taskTypeFor(exercise: Exercise): TaskType | null {
+  for (const [type, exercises] of Object.entries(TASK_EXERCISES)) {
+    if (exercises.includes(exercise) && exercise !== "recognize-produce") {
+      return type as TaskType;
+    }
+  }
+  return null;
+}
+
+/**
+ * The question that asks `unit` as `exercise` (plan 0025 §4 picks the
+ * exercise; this builds it). `null` when the content cannot produce one —
+ * a caller with no question moves on rather than showing a broken card.
+ *
+ * Exercises backed by an authored task delegate to `buildTaskSession` over a
+ * **synthetic single-item copy** of the real task, which is plan 0022 §6's
+ * trick generalised: every builder — distractor sampling, token banks,
+ * asset stems, the cloze fan-out — is reused untouched, and the synthetic
+ * task keeps the real task's id so `owningUnitOf` still finds the pool.
+ *
+ * The two derived exercises are built here directly, because no task exists
+ * to copy.
+ */
+export function buildExerciseQuestion(
+  unit: SchedulingUnit,
+  exercise: Exercise,
+  content: Content,
+  rng: Rng,
+): Question | null {
+  const item = unit.item;
+  if (item === undefined) {
+    return null;
+  }
+
+  if (exercise === "write") {
+    if (item.kind !== "lexeme" && item.kind !== "concept") {
+      return null;
+    }
+    return {
+      kind: "write",
+      unitId: unit.id,
+      prompt: itemDisplayText(item),
+      target: recognizePrompt(item),
+    };
+  }
+
+  if (exercise === "recognize-produce") {
+    if (item.kind === "pair") {
+      return null;
+    }
+    const owner = content.units.find((u) => u.itemIds.includes(item.id));
+    const unitItems = (owner?.itemIds ?? [])
+      .map((id) => content.items.find((i) => i.id === id))
+      .filter((i): i is Item => i !== undefined);
+    const { choices, correctIndex } = sampleMcq(
+      item,
+      unitItems,
+      rng,
+      recognizePrompt,
+    );
+    return {
+      kind: "recognize",
+      unitId: unit.id,
+      prompt: itemDisplayText(item),
+      choices,
+      correctIndex,
+    };
+  }
+
+  const type = taskTypeFor(exercise);
+  if (type === null) {
+    return null;
+  }
+  const task = content.tasks.find(
+    (candidate) =>
+      candidate.type === type && candidate.itemIds.includes(item.id),
+  );
+  if (task === undefined) {
+    return null;
+  }
+  const built = buildTaskSession({ ...task, itemIds: [item.id] }, content, rng);
+  // A cloze task fans out one question per blank; this scheduling unit is
+  // one of them, so pick the blank it names rather than the first.
+  if (unit.blankNumber !== undefined) {
+    // A matching board has no `unitId` — and cannot be a cloze question
+    // anyway, so narrowing it away here is exhaustive rather than defensive.
+    return (
+      built.find((q) => q.kind !== "matching" && q.unitId === unit.id) ?? null
+    );
+  }
+  return built[0] ?? null;
+}
+
 export function buildUnitSession(
   unit: Unit,
   content: Content,

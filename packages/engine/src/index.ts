@@ -4,6 +4,8 @@ export * from "./documentDiff.js";
 export * from "./documentEdit.js";
 export * from "./documentProblems.js";
 export * from "./documentSource.js";
+export * from "./draw.js";
+export * from "./drill.js";
 export * from "./domain.js";
 export * from "./draftContent.js";
 export * from "./interfaces.js";

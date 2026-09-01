@@ -973,6 +973,22 @@ function renderInteraction(
           advance={advance}
         />
       );
+    case "write":
+      // Level 9 (plan 0025 §9): the meaning is the prompt, the foreign form
+      // is typed. Same interaction as cloze and dictation, so the same form
+      // — including the key row, for a script the keyboard cannot reach.
+      return (
+        <>
+          <p className="prompt">{question.prompt}</p>
+          <TypedInput
+            target={question.target}
+            unitId={question.unitId}
+            extraChars={lookup.domainContent.domain.extraChars}
+            applyAuto={applyAuto}
+            advance={advance}
+          />
+        </>
+      );
     default:
       question satisfies never;
       throw new Error(`unknown question kind: ${(question as Question).kind}`);
