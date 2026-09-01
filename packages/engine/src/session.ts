@@ -20,7 +20,13 @@ import {
 } from "@betterbeaver/schema";
 import type { Quality } from "@betterbeaver/srs";
 import { blankUnitId, type SchedulingUnit } from "./units.js";
+import { availableExercises, drawExercise } from "./draw.js";
+import { plannedVisits, startDrill } from "./drill.js";
 import { normalizeTypedInput } from "./normalize.js";
+import { shuffle, type Rng } from "./rng.js";
+
+// Re-exported so every existing importer of `shuffle`/`Rng` keeps working.
+export { shuffle, type Rng };
 
 export interface RecognizeQuestion {
   kind: "recognize";
@@ -172,9 +178,6 @@ export type Question =
 /** One `(schedulingUnitId, quality)` grading outcome (the outcome-list contract, plan 0002). */
 export type QuestionOutcome = [unitId: string, quality: Quality];
 
-/** Uniform random number in [0, 1), injected so sessions are reproducible in tests. */
-export type Rng = () => number;
-
 /** Builds the recall-presentation question for one item. */
 function recallQuestion(item: Item): RecallQuestion {
   return {
@@ -183,23 +186,6 @@ function recallQuestion(item: Item): RecallQuestion {
     prompt: recallPrompt(item),
     reveal: recallReveal(item),
   };
-}
-
-/**
- * Fisher-Yates shuffle of a copy of `items`, using `rng` for the swap index
- * at each step. Pinned algorithm: iterate `i` from `length - 1` down to 1,
- * `j = Math.floor(rng() * (i + 1))`, swap `i` and `j`. Exported for the
- * ad-hoc session builder (plan 0004) — the one shuffle everywhere.
- */
-export function shuffle<T>(items: T[], rng: Rng): T[] {
-  const result = [...items];
-  for (let i = result.length - 1; i >= 1; i--) {
-    const j = Math.floor(rng() * (i + 1));
-    const temp = result[i]!;
-    result[i] = result[j]!;
-    result[j] = temp;
-  }
-  return result;
 }
 
 /**
@@ -721,7 +707,14 @@ export function buildExerciseQuestion(
   if (task === undefined) {
     return null;
   }
-  const built = buildTaskSession({ ...task, itemIds: [item.id] }, content, rng);
+  // Matching keeps the task's whole item list: a board is a board, and a
+  // one-pair one "is not a question at all" (plan 0022 §6's words). Every
+  // other exercise narrows to this item, so the session asks about the word
+  // whose turn it is rather than its whole task.
+  const built =
+    exercise === "matching"
+      ? buildTaskSession(task, content, rng)
+      : buildTaskSession({ ...task, itemIds: [item.id] }, content, rng);
   // A cloze task fans out one question per blank; this scheduling unit is
   // one of them, so pick the blank it names rather than the first.
   if (unit.blankNumber !== undefined) {
@@ -789,6 +782,90 @@ function countTaskQuestions(task: Task, itemById: Map<string, Item>): number {
       task.type satisfies never;
       throw new Error(`unknown task type: ${task.type as string}`);
   }
+}
+
+/**
+ * A unit's practice session, planned by the progression engine (plan 0025
+ * §4, §6): every word gets `repetitions` appearances — the first its new
+ * attempt at one level above where it sits, the rest repetitions drawn from
+ * the level below or its own — and each appearance is built as whichever
+ * exercise the draw chose.
+ *
+ * Replaces `buildUnitSession`'s pooled shuffle over authored tasks. The shape
+ * is unchanged (`{ question, taskId }` pairs, in order) so every caller,
+ * pin control and edit route keeps working; what changed is that the session
+ * is now per *word* rather than per authored task, and its difficulty is the
+ * learner's rather than the author's.
+ *
+ * `levelOf` is the only thing here that knows about the learner — the caller
+ * reads it from the progress store, so this stays pure and testable.
+ *
+ * A word whose content can build nothing at all is skipped rather than
+ * shown as a blank card; that is only reachable from a draft, where a unit
+ * can hold an item no task references yet.
+ */
+export function buildDrillSession(
+  unit: Unit,
+  content: Content,
+  levelOf: (schedulingUnitId: string) => number,
+  repetitions: number,
+  rng: Rng,
+): { question: Question; taskId: string }[] {
+  const itemById = new Map(content.items.map((item) => [item.id, item]));
+  const taskById = new Map(content.tasks.map((task) => [task.id, task]));
+  const state = startDrill(shuffle([...unit.itemIds], rng), repetitions);
+
+  const built: { question: Question; taskId: string }[] = [];
+  const coveredByBoard = new Set<string>();
+  for (const visit of plannedVisits(state)) {
+    const item = itemById.get(visit.unitId);
+    if (item === undefined) {
+      continue;
+    }
+    // A matching board answers for every word on it, so a word already
+    // covered by one built earlier in this session must not summon another
+    // — four new words would otherwise open with four identical boards.
+    let available = availableExercises(item, content);
+    if (coveredByBoard.has(visit.unitId)) {
+      available = available.filter((exercise) => exercise !== "matching");
+    }
+    const exercise = drawExercise(
+      levelOf(visit.unitId),
+      visit.slot,
+      available,
+      rng,
+    );
+    if (exercise === null) {
+      continue;
+    }
+    const question = buildExerciseQuestion(
+      { id: item.id, item },
+      exercise,
+      content,
+      rng,
+    );
+    if (question === null) {
+      continue;
+    }
+    if (question.kind === "matching") {
+      for (const prompt of question.prompts) {
+        coveredByBoard.add(prompt.unitId);
+      }
+    }
+    // The task this exercise came from, for the pin control and the edit
+    // route. A derived exercise has no authored task, so it borrows the
+    // unit's first task that references the item — which is what both of
+    // those surfaces actually want: somewhere in this unit to act on.
+    const taskId =
+      unit.taskIds.find((id) => {
+        const task = taskById.get(id);
+        return task !== undefined && task.itemIds.includes(item.id);
+      }) ??
+      unit.taskIds[0] ??
+      unit.id;
+    built.push({ question, taskId });
+  }
+  return built;
 }
 
 export function countUnitQuestions(unit: Unit, content: Content): number {

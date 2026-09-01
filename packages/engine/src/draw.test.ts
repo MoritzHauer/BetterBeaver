@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { Content, Exercise, Item, Task, Unit } from "@betterbeaver/schema";
 import { availableExercises, drawExercise } from "./draw.js";
-import { buildExerciseQuestion, type Rng } from "./session.js";
+import { buildDrillSession, buildExerciseQuestion } from "./session.js";
+import type { Rng } from "./rng.js";
 
 /** Deterministic Rng: always picks the first element of a shuffle. */
 const first: Rng = () => 0;
@@ -203,5 +204,63 @@ describe("buildExerciseQuestion", () => {
     expect(
       buildExerciseQuestion(unitOf(concept(1)), "matching", content, first),
     ).toBeNull();
+  });
+});
+
+describe("buildDrillSession", () => {
+  const levelZero = () => 0;
+
+  it("gives every word its repetitions, so the length is known up front", () => {
+    const content = contentWith([recognizeTask, matchingTask]);
+    const unit = content.units[0]!;
+    const built = buildDrillSession(unit, content, levelZero, 2, first);
+    expect(built).toHaveLength(8); // 4 words x 2
+  });
+
+  it("builds one board for the words it covers, not one per word", () => {
+    // Level 1 is `matching`, so four new words all draw it. One board
+    // answers for all four; four identical boards would be the session.
+    const content = contentWith([recognizeTask, matchingTask]);
+    const unit = content.units[0]!;
+    const built = buildDrillSession(unit, content, levelZero, 1, first);
+    expect(built.filter((b) => b.question.kind === "matching")).toHaveLength(1);
+  });
+
+  it("climbs a covered word instead of repeating the board", () => {
+    // The words the board also answered for still get their own visit, at
+    // the next exercise up rather than a second identical board.
+    const content = contentWith([recognizeTask, matchingTask]);
+    const unit = content.units[0]!;
+    const built = buildDrillSession(unit, content, levelZero, 1, first);
+    expect(built.length).toBeGreaterThan(1);
+    expect(built.some((b) => b.question.kind === "recognize")).toBe(true);
+  });
+
+  it("asks a word at level 8 to write it — the derived level 9", () => {
+    const content = contentWith([recognizeTask]);
+    const unit = content.units[0]!;
+    const built = buildDrillSession(unit, content, () => 8, 1, first);
+    expect(built.some((b) => b.question.kind === "write")).toBe(true);
+  });
+
+  it("tags every question with a task from the unit, for pinning and edit", () => {
+    const content = contentWith([recognizeTask]);
+    const unit = content.units[0]!;
+    const built = buildDrillSession(unit, content, () => 8, 1, first);
+    // Every question here is `write`, which no task authored — the tag still
+    // has to point somewhere real in the unit.
+    expect(built.every((b) => unit.taskIds.includes(b.taskId))).toBe(true);
+  });
+
+  it("skips a word whose content can build nothing rather than showing a blank", () => {
+    const orphan: Item = {
+      id: "t-item-s9",
+      kind: "sentence",
+      payload: { text: "Nothing references this.", translation: "..." },
+      sourceRef: "t-resource-1",
+    };
+    const content = contentWith([], [orphan]);
+    const unit = content.units[0]!;
+    expect(buildDrillSession(unit, content, levelZero, 2, first)).toEqual([]);
   });
 });

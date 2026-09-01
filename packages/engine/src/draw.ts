@@ -13,8 +13,7 @@ import {
   TASK_EXERCISES,
   recognizePrompt,
 } from "@betterbeaver/schema";
-import type { Rng } from "./session.js";
-import { shuffle } from "./session.js";
+import { shuffle, type Rng } from "./rng.js";
 
 /**
  * The two slots an appearance fills (plan 0025 §4). A `repetition` draws

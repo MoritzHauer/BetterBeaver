@@ -165,6 +165,19 @@ export function advanceDrill(
   };
 }
 
+/**
+ * The whole planned session, in order, as `startDrill` lays it out (§6).
+ *
+ * A session with no misses is fully determined before it starts — fixed
+ * repetitions, known slots, levels read once — so the plan can be built up
+ * front and handed to a caller that expects an array. `advanceDrill` is what
+ * adapts it when an answer goes wrong; a caller using this instead gets
+ * everything except that adaptation.
+ */
+export function plannedVisits(state: DrillState): readonly PlannedVisit[] {
+  return state.queue;
+}
+
 /** Scheduling units that never met their repetitions before the cap (§6). */
 export function unfinished(state: DrillState): string[] {
   return [...new Set(state.queue.map((visit) => visit.unitId))];
