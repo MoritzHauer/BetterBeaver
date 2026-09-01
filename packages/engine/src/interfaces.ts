@@ -48,16 +48,16 @@ export interface ContentSource {
 
 /**
  * Store of learner progress. Unit completion is not stored here: it is
- * derived by the engine from the attempted-task-id set (every task id of
- * the unit is a member). The streak is per-domain (plan 0006): item state
- * and attempted tasks stay global (item ids are unique across the whole
- * bundle), but "showed up today" is tracked separately per domain.
+ * derived by the engine from the word levels this store already holds —
+ * every word of the unit answered correctly at least once (plan 0025 §8),
+ * which is why the attempted-task set it used to read is gone. The streak
+ * is per-domain (plan 0006): item state stays global (item ids are unique
+ * across the whole bundle), but "showed up today" is tracked separately per
+ * domain.
  */
 export interface ProgressStore {
   getItemState(itemId: string): Promise<SrsState | null>;
   setItemState(itemId: string, state: SrsState): Promise<void>;
-  getAttemptedTaskIds(): Promise<string[]>;
-  markTaskAttempted(taskId: string): Promise<void>;
   getStreak(domainId: string): Promise<Streak | null>;
   setStreak(domainId: string, streak: Streak): Promise<void>;
   /** Bumps the lifetime graded-answer count by one (plan: Stats rep counter). */

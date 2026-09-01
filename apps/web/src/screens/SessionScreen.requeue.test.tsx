@@ -132,7 +132,6 @@ describe("Daily Review requeue", () => {
   });
 
   it("leaves unit practice alone — no prop, no requeue", async () => {
-    const onAllAnswered = vi.fn();
     render(
       <SessionScreen
         title="Unit A"
@@ -140,7 +139,6 @@ describe("Daily Review requeue", () => {
         bookId="t-topic"
         lookup={lookup}
         onGrade={() => Promise.resolve()}
-        onAllAnswered={onAllAnswered}
         onFinished={() => {}}
         onExit={() => {}}
       />,
@@ -148,8 +146,9 @@ describe("Daily Review requeue", () => {
 
     expect(await answer("Again")).toBe("a");
     expect(await answer("Again")).toBe("b");
+    // Reaching Done after exactly two answers is the assertion: neither
+    // failure came back.
     await screen.findByRole("button", { name: "Done" });
-    expect(onAllAnswered).toHaveBeenCalledTimes(1);
   });
 
   it("counts a requeued answer in the summary — it is one", async () => {

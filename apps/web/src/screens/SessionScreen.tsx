@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import type {
   BuildQuestion,
@@ -1061,14 +1061,12 @@ function SummaryPanel({
  *
  * Every question resolves to a list of `(unitId, quality)` outcomes (the
  * outcome-list contract, plan 0002): single-unit questions apply one, a
- * cleared matching board applies N. `onGrade` is applied once per outcome;
- * `onAllAnswered` (optional) fires once, at grade time of the last
- * question, for callers that record task attempts — so exiting after the
- * final answer still counts as a completed attempt. `onTaskAnswered` (plan
- * 0010, optional, only meaningful with `taskIds`) fires once per task, as
- * soon as that task's own questions are all answered — granular, unlike
- * `onAllAnswered`, so a pooled multi-task session credits each task as it
- * finishes rather than only at session-end.
+ * cleared matching board applies N, and `onGrade` is applied once per
+ * outcome. That is the whole of what a session reports now: the
+ * task-attempt callbacks it used to fire went with the attempted-task set
+ * plan 0025 §8 replaced, and completion is read from the levels those
+ * grades write. `taskIds` stays, because Pin and Edit still need to know
+ * which task produced a question.
  */
 export function SessionScreen({
   title,
@@ -1082,8 +1080,6 @@ export function SessionScreen({
   onSkip,
   onEdit,
   onGrade,
-  onAllAnswered,
-  onTaskAnswered,
   onFinished,
   nextAction,
   onExit,
@@ -1123,12 +1119,6 @@ export function SessionScreen({
    * not just pooled unit sessions. */
   onEdit?: (index: number) => void;
   onGrade: (unitId: string, quality: Quality) => Promise<void>;
-  onAllAnswered?: () => void;
-  /** Fires once per task, the moment every question tagged with that task's
-   * id has been answered (plan 0010) — distinct from `onAllAnswered`, which
-   * only fires once the whole session is done. Only meaningful when
-   * `taskIds` is passed. */
-  onTaskAnswered?: (taskId: string) => void;
   onFinished: (summary: SessionSummary) => void;
   /** Plan 0020 §4: an optional forward step shown as the summary's primary
    * button. Only the pooled unit-practice session passes this — every other
@@ -1158,7 +1148,6 @@ export function SessionScreen({
   const [summary, setSummary] = useState<SessionSummary>(emptySummary);
   const [done, setDone] = useState(false);
   const [skipSheetOpen, setSkipSheetOpen] = useState(false);
-  const answeredCount = useRef(0);
   const touchStartX = useRef<number | null>(null);
 
   /**
@@ -1207,20 +1196,6 @@ export function SessionScreen({
     });
   }, [questions.length]);
 
-  // Per-task question totals (plan 0010), recomputed only when `taskIds`
-  // changes: how many questions belong to each distinct task id, so
-  // `noteAnswered` can tell when a given task's questions are all answered.
-  const taskTotals = useMemo(() => {
-    const totals = new Map<string, number>();
-    for (const taskId of taskIds ?? []) {
-      if (taskId !== undefined) {
-        totals.set(taskId, (totals.get(taskId) ?? 0) + 1);
-      }
-    }
-    return totals;
-  }, [taskIds]);
-  const taskAnsweredCount = useRef(new Map<string, number>());
-
   // Clamped, not a bare `queue[index]`: the questions now re-derive from
   // the draft while the scoped `✎` sheet is open, and the sheet's exercise
   // card can drop an item — shrinking the list under a session already past
@@ -1241,30 +1216,6 @@ export function SessionScreen({
     }
   }
 
-  /** Called once per question, when its outcome(s) are applied (each
-   * interaction component guards against re-entry, so exactly once). Reads
-   * the current question's task id via `source` — called before `advance()`
-   * shifts `index`, so it still points at the just-answered question.
-   *
-   * Both counters are strict equalities against the *original* question
-   * count, so a requeued answer (Daily Review only, where neither callback
-   * is passed) pushes past them rather than firing them twice. */
-  function noteAnswered() {
-    answeredCount.current += 1;
-    if (answeredCount.current === questions.length) {
-      onAllAnswered?.();
-    }
-    const taskId = source === undefined ? undefined : taskIds?.[source];
-    if (taskId !== undefined) {
-      const counts = taskAnsweredCount.current;
-      const nextCount = (counts.get(taskId) ?? 0) + 1;
-      counts.set(taskId, nextCount);
-      if (nextCount === taskTotals.get(taskId)) {
-        onTaskAnswered?.(taskId);
-      }
-    }
-  }
-
   function tallyAuto(corrects: boolean[]) {
     setSummary((s) => ({
       ...s,
@@ -1277,15 +1228,14 @@ export function SessionScreen({
   // of these three (spec 0019 §3b) — wrapping here, once, covers all nine
   // `pick`/`grade`/`handleSubmit`/`submit`/`resolvePair` call sites at once.
   // The guard wraps the ENTIRE body, not just the `onGrade` await: a
-  // blocked-storage throw out of `noteAnswered` -> `onTaskAnswered`/
-  // `onAllAnswered` -> `markTaskAttempted`, or out of `playCorrect`/
-  // `playWrong` (both synchronous `localStorage` reads), would otherwise
-  // escape before `onGrade` ever runs and trap the learner exactly like an
-  // unguarded `onGrade` rejection would (owner decision 4: the learner is
-  // never trapped). Swallowing here, rather than in the two `grade`
-  // functions that call `advance()` after, means every caller — including
-  // the five `pick`/`handleSubmit`/`submit`/`resolvePair` sites that never
-  // call `advance()` themselves — still runs its own follow-up.
+  // blocked-storage throw out of `playCorrect`/`playWrong` (both synchronous
+  // `localStorage` reads) would otherwise escape before `onGrade` ever runs
+  // and trap the learner exactly like an unguarded `onGrade` rejection would
+  // (owner decision 4: the learner is never trapped). Swallowing here,
+  // rather than in the two `grade` functions that call `advance()` after,
+  // means every caller — including the five
+  // `pick`/`handleSubmit`/`submit`/`resolvePair` sites that never call
+  // `advance()` themselves — still runs its own follow-up.
   /**
    * Re-inserts the current card three cards later (plan 0022 §4):
    * `min(index + 4, queue.length)` is one expression with no branch — with
@@ -1313,7 +1263,6 @@ export function SessionScreen({
 
   async function applyAuto(unitId: string, correct: boolean) {
     try {
-      noteAnswered();
       tallyAuto([correct]);
       if (correct) {
         playCorrect();
@@ -1329,7 +1278,6 @@ export function SessionScreen({
 
   async function applySelf(unitId: string, grade: SelfGrade) {
     try {
-      noteAnswered();
       if (grade === "again") {
         requeueCurrent();
       }
@@ -1348,7 +1296,6 @@ export function SessionScreen({
 
   async function applyMatchingOutcomes(outcomes: QuestionOutcome[]) {
     try {
-      noteAnswered();
       tallyAuto(
         outcomes.map(([, quality]) => quality === recognizeQuality(true)),
       );

@@ -289,6 +289,18 @@ Landed ahead of slices 4-9, which it is independent of. One line in `reviewQueue
 - The two slices interlock. §6's requeue brings a word back "one level lower", and §6's rising difficulty inside a session *is* §4's two slots — both of which are slice 5's draw. A slice 4 without it can only re-ask the identical question, which is the thing plan 0022 §4 already does.
 - **`matching` needs a decision the design does not make.** It is the level-1 exercise, so it is the first thing a brand-new word is asked (§4), but a board grades up to five scheduling units at once while §6's queue owes a fixed number of correct answers *per word*. Either an answered board credits every word it graded (and the queue drops those words' later planned visits, keeping "N to go" honest), or `matching` is drawn only when a session can build a board around the target. The first is the better answer — it is what actually happened on screen — and it is what the engine should implement, but it is a design decision rather than a transcription of the plan.
 
+### Slice 7 (2026-09-01)
+
+The bar, the completion rule and the locks, landed ahead of slices 4-6 for the same reason slice 10 was: it depends only on the word level, which slice 3 shipped.
+
+- **The threaded set changed meaning, not shape.** `attemptedTaskIds: ReadonlySet<string>` became `unitProgress: ReadonlyMap<string, UnitProgress>` — the same prop threaded to the same functions (`isUnitComplete`, `isUnitUnlocked`, `isLessonComplete`, `isLessonUnlocked`, `nextUnit`, `lessonPracticeTargets`), so the navigation spine kept its shape while the fact underneath it changed. `unitProgressByBook` computes every unit's bar and completion in one sweep, because the Lesson and Book screens render a bar per row and `schedulingUnits` walks the whole Book each time it is asked.
+- **The content pass §8 asks for was already done.** No shipped Book authors `unlocksAfterUnitId` or `unlocksAfterLessonId` — the chain the plan describes dropping does not exist. The mechanism stays for a maintainer who genuinely needs a prerequisite.
+- **No grandfathering, and none needed.** Plan 0026 §4 proposed keeping the legacy attempted-task set as a read-only OR-input. It is unnecessary here: completion now reads the SRS state a learner already has, so a unit they actually studied reads complete on the first run of the new code. `bb.attempted` is left in storage — it rides the `bb.*` backup sweep, so old exports stay importable — but nothing reads or writes it, and `ProgressStore` loses both its methods.
+- **`SessionScreen` lost `onAllAnswered` and `onTaskAnswered`** along with them. Their only consumer was `markTaskAttempted`; `taskIds` stays, because Pin and Edit still need to know which task produced a question.
+- **The lesson-complete label on the unit summary is more optimistic than it was.** It assumes the unit just played is complete, which under the old rule was near-certain and under this one needs every word answered *correctly*. `onNext`'s fresh read corrects it, and its existing "never send the learner back into the unit they just finished" branch is what the disagreement lands on.
+
+Browser-verified on the demo Book: three of Beaver basics' five words at level 5 reads 30% on the unit and 10% on the lesson; all five at level 10 reads 100% with the completion tick. Settings shows the widened pace rows and no Scheduler row.
+
 ## Open questions
 
 1. **Does the Fast preset's two-level streak jump need a floor on evidence?** Two levels a day means a word can reach `write` in five days. That may be right for a learner who is genuinely fast and wrong for one who is guessing well on four-option MCQs.

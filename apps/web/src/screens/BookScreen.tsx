@@ -1,13 +1,12 @@
 import { Fragment, useEffect, useState } from "react";
 import type { Content, Lesson } from "@betterbeaver/schema";
-import type { ProgressStore, Streak } from "@betterbeaver/engine";
+import type { ProgressStore, Streak, UnitProgress } from "@betterbeaver/engine";
 import {
   dueCountsByLesson,
   dueCountsByUnit,
   dueUnits,
   isLessonComplete,
   isLessonUnlocked,
-  isUnitComplete,
   isUnitUnlocked,
   nextUnit,
 } from "@betterbeaver/engine";
@@ -45,14 +44,14 @@ export interface PracticeTarget {
 export function lessonPracticeTargets(
   lesson: Lesson,
   content: Content,
-  attemptedTaskIds: ReadonlySet<string>,
+  unitProgress: ReadonlyMap<string, UnitProgress>,
 ): PracticeTarget[] {
   const units = lesson.unitIds.flatMap((id) => {
     const unit = content.units.find((u) => u.id === id);
     return unit !== undefined ? [unit] : [];
   });
   return units
-    .filter((unit) => isUnitUnlocked(unit, units, attemptedTaskIds))
+    .filter((unit) => isUnitUnlocked(unit, units, unitProgress))
     .flatMap((unit) =>
       unit.taskIds.map((taskId) => ({
         lessonId: lesson.id,
@@ -64,7 +63,7 @@ export function lessonPracticeTargets(
 
 export function BookScreen({
   content,
-  attemptedTaskIds,
+  unitProgress,
   store,
   epoch,
   onSelectLesson,
@@ -78,7 +77,7 @@ export function BookScreen({
   atSettings = false,
 }: {
   content: Content;
-  attemptedTaskIds: ReadonlySet<string>;
+  unitProgress: ReadonlyMap<string, UnitProgress>;
   store: ProgressStore;
   /** This Book has authored work that has not left the device (spec 0021-5
    * §3). Shown to everyone who can see it, because only an author ever has
@@ -177,8 +176,8 @@ export function BookScreen({
 
   // Play card state (plan 0020 §2, table in spec 0020-1 §4): resolved here
   // rather than threaded down as a prop — BookScreen already has `content`
-  // and `attemptedTaskIds`, so this is the fewer-props option.
-  const nextUp = nextUnit(content, attemptedTaskIds);
+  // and `unitProgress`, so this is the fewer-props option.
+  const nextUp = nextUnit(content, unitProgress);
   const bookComplete = dueCount === 0 && nextUp === null;
   const playDisabled = dueCount === null || bookComplete;
 
@@ -186,16 +185,9 @@ export function BookScreen({
   // (plan 0008, pinned scope).
   const practicePool = content.lessons
     .filter((lesson) =>
-      isLessonUnlocked(
-        lesson,
-        content.lessons,
-        content.units,
-        attemptedTaskIds,
-      ),
+      isLessonUnlocked(lesson, content.lessons, content.units, unitProgress),
     )
-    .flatMap((lesson) =>
-      lessonPracticeTargets(lesson, content, attemptedTaskIds),
-    );
+    .flatMap((lesson) => lessonPracticeTargets(lesson, content, unitProgress));
 
   // The lesson awaiting a skip-ahead confirmation, and the one gating it. A
   // pending lesson always has a gate — `isLessonUnlocked` returns true when
@@ -425,17 +417,27 @@ export function BookScreen({
             lesson,
             content.lessons,
             content.units,
-            attemptedTaskIds,
+            unitProgress,
           );
           const complete = isLessonComplete(
             lesson,
             content.units,
-            attemptedTaskIds,
+            unitProgress,
           );
-          const completeCount = lesson.unitIds.filter((id) => {
-            const unit = content.units.find((u) => u.id === id);
-            return unit !== undefined && isUnitComplete(unit, attemptedTaskIds);
-          }).length;
+          // The lesson's bar is the mean of its units' bars (plan 0025 §8),
+          // so it moves for the same reason theirs do — where the old
+          // "2 of 5 units complete" only ever moved five times.
+          const unitPercents = lesson.unitIds.flatMap((id) => {
+            const progress = unitProgress.get(id);
+            return progress === undefined ? [] : [progress.percent];
+          });
+          const percent =
+            unitPercents.length === 0
+              ? 0
+              : Math.round(
+                  unitPercents.reduce((sum, value) => sum + value, 0) /
+                    unitPercents.length,
+                );
           if (edit !== null) {
             const raw = edit.rawLesson(lesson.id) ?? { id: lesson.id };
             // The card can't stay one big <button> once it holds inputs, so
@@ -478,11 +480,7 @@ export function BookScreen({
                   problems={edit.fieldProblems(lesson.id, "goal")}
                 />
                 <ProblemMarker problems={edit.entityProblems(lesson.id)} />
-                <LockableProgress
-                  unlocked={unlocked}
-                  value={completeCount}
-                  max={lesson.unitIds.length}
-                />
+                <LockableProgress unlocked={unlocked} percent={percent} />
                 <RowActions
                   onUp={() => edit.moveLesson(lesson.id, -1)}
                   onDown={() => edit.moveLesson(lesson.id, 1)}
@@ -541,8 +539,7 @@ export function BookScreen({
                 <p>{lesson.goal}</p>
                 <LockableProgress
                   unlocked={unlocked}
-                  value={completeCount}
-                  max={lesson.unitIds.length}
+                  percent={percent}
                   due={dueByLesson.get(lesson.id)}
                 />
               </button>

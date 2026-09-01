@@ -19,16 +19,22 @@ export function ProgressBar({ value, max }: { value: number; max: number }) {
 /** `ProgressBar` + compact caption when unlocked, "locked" text otherwise
  * (plan 0010): the row-progress shape shared by `LessonScreen`'s units and
  * `BookScreen`'s lessons — both gate progress display behind the same
- * unlock check. */
+ * unlock check.
+ *
+ * The bar is a **percentage** (plan 0025 §8): the mean word level times ten,
+ * for a unit, and the mean of those for a lesson. It replaces "3 of 5 tasks
+ * attempted", which jumped in fifths and stopped moving the moment a unit
+ * was walked through once. This one moves from the first session and keeps
+ * moving for weeks, and 100% is attainable on any content because §4 makes
+ * every level reachable. */
 export function LockableProgress({
   unlocked,
-  value,
-  max,
+  percent,
   due,
 }: {
   unlocked: boolean;
-  value: number;
-  max: number;
+  /** 0-100. */
+  percent: number;
   /** Cards of this row's own scheduling units that are due right now (plan
    * 0022 §7), appended to the caption as `· 8 due`. Passive: it answers
    * "which unit am I forgetting" at a glance, where a start-of-session
@@ -41,10 +47,9 @@ export function LockableProgress({
   }
   return (
     <>
-      <ProgressBar value={value} max={max} />
+      <ProgressBar value={percent} max={100} />
       <p className="status">
-        {value}/{max}
-        {due !== undefined && due > 0 ? ` · ${due} due` : ""}
+        {percent}%{due !== undefined && due > 0 ? ` · ${due} due` : ""}
       </p>
     </>
   );

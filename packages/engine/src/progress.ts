@@ -1,5 +1,10 @@
 import type { Content, Lesson, Unit } from "@betterbeaver/schema";
-import type { Quality, SchedulingConfig, SrsState } from "@betterbeaver/srs";
+import type {
+  Quality,
+  ReviewPace,
+  SchedulingConfig,
+  SrsState,
+} from "@betterbeaver/srs";
 import {
   DEFAULT_SCHEDULING,
   isDue,
@@ -8,14 +13,99 @@ import {
   wordLevel,
 } from "@betterbeaver/srs";
 import type { SchedulingUnit } from "./units.js";
-import { itemIdFromUnitId } from "./units.js";
+import { itemIdFromUnitId, schedulingUnits } from "./units.js";
 
-/** True when every task id of `unit` has been attempted at least once. */
+/**
+ * How far a learner has taken one unit (plan 0025 §8) — three facts the
+ * old attempted-task set blurred into one.
+ */
+export interface UnitProgress {
+  /** The bar: the mean word level times ten, 0-100, rounded. It moves from
+   * the first session and keeps moving for weeks, and because §4 makes every
+   * level reachable on any content, 100% is always attainable. */
+  percent: number;
+  /** Words answered correctly at least once — level 1 or above. */
+  started: number;
+  /** Words in the unit. A word here is a scheduling unit that carries a
+   * level: an item, or one cloze blank. Never a note (§13). */
+  total: number;
+  /** "You have been through this unit": every word at level >= 1. Stricter
+   * than the rule it replaces, which counted a *wrong* answer as an attempt
+   * and marked a whole five-item task attempted after a single question. */
+  complete: boolean;
+}
+
+const EMPTY_PROGRESS: UnitProgress = {
+  percent: 0,
+  started: 0,
+  total: 0,
+  complete: false,
+};
+
+/**
+ * Every unit's progress, in one sweep over the Book (plan 0025 §8).
+ *
+ * One function rather than a per-unit call, because the Lesson and Book
+ * screens render a bar per row and `schedulingUnits` walks the whole content
+ * each time it is asked.
+ *
+ * A unit with no words at all reads **complete**: `schedulingUnits` only
+ * emits a unit for an item some task references, so "no words" means "no
+ * exercises", and the alternative is a unit nothing can ever finish sitting
+ * across the navigation spine. That is the same vacuous truth the
+ * every-task-attempted rule had.
+ */
+export function unitProgressByBook(
+  content: Content,
+  states: ReadonlyMap<string, SrsState>,
+  pace?: ReviewPace,
+): Map<string, UnitProgress> {
+  const wordsByItemId = new Map<string, SchedulingUnit[]>();
+  for (const schedulingUnit of schedulingUnits(content)) {
+    if (schedulingUnit.note !== undefined) {
+      continue;
+    }
+    const itemId = itemIdFromUnitId(schedulingUnit.id);
+    const words = wordsByItemId.get(itemId);
+    if (words === undefined) {
+      wordsByItemId.set(itemId, [schedulingUnit]);
+    } else {
+      words.push(schedulingUnit);
+    }
+  }
+
+  const progress = new Map<string, UnitProgress>();
+  for (const unit of content.units) {
+    let total = 0;
+    let started = 0;
+    let levelSum = 0;
+    for (const itemId of unit.itemIds) {
+      for (const word of wordsByItemId.get(itemId) ?? []) {
+        const level = wordLevel(states.get(word.id) ?? null, pace);
+        total += 1;
+        levelSum += level;
+        if (level >= 1) {
+          started += 1;
+        }
+      }
+    }
+    progress.set(unit.id, {
+      percent: total === 0 ? 0 : Math.round((levelSum / total) * 10),
+      started,
+      total,
+      complete: started === total,
+    });
+  }
+  return progress;
+}
+
+/** True when every word of `unit` has been answered correctly at least once
+ * (plan 0025 §8). Reads the sweep above rather than recomputing. */
 export function isUnitComplete(
   unit: Unit,
-  attemptedTaskIds: ReadonlySet<string>,
+  progress: ReadonlyMap<string, UnitProgress>,
 ): boolean {
-  return unit.taskIds.every((id) => attemptedTaskIds.has(id));
+  return (progress.get(unit.id) ?? EMPTY_PROGRESS).complete;
 }
 
 /**
@@ -27,7 +117,7 @@ export function isUnitComplete(
 export function isUnitUnlocked(
   unit: Unit,
   units: Unit[],
-  attemptedTaskIds: ReadonlySet<string>,
+  progress: ReadonlyMap<string, UnitProgress>,
 ): boolean {
   if (unit.unlocksAfterUnitId === undefined) {
     return true;
@@ -36,18 +126,18 @@ export function isUnitUnlocked(
   if (gate === undefined) {
     return true;
   }
-  return isUnitComplete(gate, attemptedTaskIds);
+  return isUnitComplete(gate, progress);
 }
 
 /** True when every unit of `lesson` is complete (plan 0008: a lesson rolls up its units). A dangling unit id (which valid content never has) counts as complete, defensively. */
 export function isLessonComplete(
   lesson: Lesson,
   units: Unit[],
-  attemptedTaskIds: ReadonlySet<string>,
+  progress: ReadonlyMap<string, UnitProgress>,
 ): boolean {
   return lesson.unitIds.every((id) => {
     const unit = units.find((u) => u.id === id);
-    return unit === undefined || isUnitComplete(unit, attemptedTaskIds);
+    return unit === undefined || isUnitComplete(unit, progress);
   });
 }
 
@@ -61,7 +151,7 @@ export function isLessonUnlocked(
   lesson: Lesson,
   lessons: Lesson[],
   units: Unit[],
-  attemptedTaskIds: ReadonlySet<string>,
+  progress: ReadonlyMap<string, UnitProgress>,
 ): boolean {
   if (lesson.unlocksAfterLessonId === undefined) {
     return true;
@@ -70,7 +160,7 @@ export function isLessonUnlocked(
   if (gate === undefined) {
     return true;
   }
-  return isLessonComplete(gate, units, attemptedTaskIds);
+  return isLessonComplete(gate, units, progress);
 }
 
 /** The unit the learner should continue with: the first unit, in reading
@@ -86,7 +176,7 @@ export function isLessonUnlocked(
  * incomplete unit is unlocked anyway, since every earlier unit is complete. */
 export function nextUnit(
   content: Content,
-  attemptedTaskIds: ReadonlySet<string>,
+  progress: ReadonlyMap<string, UnitProgress>,
 ): { lessonId: string; unitId: string } | null {
   for (const lessonId of content.topic.lessonIds) {
     const lesson = content.lessons.find((l) => l.id === lessonId);
@@ -98,7 +188,7 @@ export function nextUnit(
       if (unit === undefined) {
         continue;
       }
-      if (!isUnitComplete(unit, attemptedTaskIds)) {
+      if (!isUnitComplete(unit, progress)) {
         return { lessonId, unitId };
       }
     }

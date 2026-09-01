@@ -9,6 +9,7 @@ import {
   type ProgressStore,
   type SchedulingUnit,
   type Streak,
+  type UnitProgress,
 } from "@betterbeaver/engine";
 
 /** The scheduling units that belong to `lesson`'s own units (plan 0020 §5):
@@ -101,14 +102,14 @@ async function gatherLessonTiles(
 export function LessonSummaryScreen({
   content,
   lessonId,
-  attemptedTaskIds,
+  unitProgress,
   store,
   onNext,
   onBack,
 }: {
   content: Content;
   lessonId: string;
-  attemptedTaskIds: ReadonlySet<string>;
+  unitProgress: ReadonlyMap<string, UnitProgress>;
   store: ProgressStore;
   onNext: (target: { lessonId: string; unitId: string }) => void;
   onBack: () => void;
@@ -142,7 +143,7 @@ export function LessonSummaryScreen({
     );
   }
 
-  const next = nextUnit(content, attemptedTaskIds);
+  const next = nextUnit(content, unitProgress);
 
   return (
     <main>

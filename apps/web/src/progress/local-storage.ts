@@ -6,7 +6,6 @@ import type { ProgressStore, Streak } from "@betterbeaver/engine";
 // through `ProgressStore` (which has no delete method — items normally only
 // ever get created or updated, never removed).
 export const ITEM_STATE_PREFIX = "bb.item.";
-const ATTEMPTED_KEY = "bb.attempted";
 const STREAK_PREFIX = "bb.streak.";
 export const REPS_KEY = "bb.reps";
 
@@ -23,10 +22,14 @@ export function readJson<T>(key: string): T | null {
 }
 
 /**
- * Creates a `ProgressStore` backed by `localStorage`. Per-item SM-2 state
- * is stored under `bb.item.<itemId>`; the set of attempted task ids is
- * stored under `bb.attempted` as a JSON string array; the streak is
- * per-domain (plan 0006), under `bb.streak.<domainId>`.
+ * Creates a `ProgressStore` backed by `localStorage`. Per-scheduling-unit
+ * state is stored under `bb.item.<itemId>`; the streak is per-domain (plan
+ * 0006), under `bb.streak.<domainId>`.
+ *
+ * `bb.attempted` is no longer written or read: plan 0025 §8 derives
+ * completion from the word levels instead. The key is deliberately not
+ * deleted — it rides the `bb.*` backup sweep, so an existing export stays
+ * importable, and nothing is lost by leaving it where it is.
  */
 export function createLocalStorageProgressStore(): ProgressStore {
   return {
@@ -40,15 +43,6 @@ export function createLocalStorageProgressStore(): ProgressStore {
         `${ITEM_STATE_PREFIX}${itemId}`,
         JSON.stringify(state),
       );
-      return Promise.resolve();
-    },
-    getAttemptedTaskIds(): Promise<string[]> {
-      return Promise.resolve(readJson<string[]>(ATTEMPTED_KEY) ?? []);
-    },
-    markTaskAttempted(taskId: string): Promise<void> {
-      const attempted = new Set(readJson<string[]>(ATTEMPTED_KEY) ?? []);
-      attempted.add(taskId);
-      localStorage.setItem(ATTEMPTED_KEY, JSON.stringify([...attempted]));
       return Promise.resolve();
     },
     getStreak(domainId: string): Promise<Streak | null> {

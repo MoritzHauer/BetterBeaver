@@ -7,6 +7,8 @@ import {
   dueCountsByUnit,
   isUnitComplete,
   isUnitUnlocked,
+  unitProgressByBook,
+  type UnitProgress,
   isLessonComplete,
   isLessonUnlocked,
   nextUnit,
@@ -73,16 +75,196 @@ function makeContent(args: {
   };
 }
 
-describe("isUnitComplete", () => {
-  it("is false until every task of the unit has been attempted", () => {
-    const unit = makeUnit({
-      id: "t-unit-a",
-      taskIds: ["t-task-1", "t-task-2"],
-    });
+/** A progress map in which exactly the named units are complete; every
+ * other unit reads incomplete, which is what an absent entry means. */
+function completed(...unitIds: string[]): Map<string, UnitProgress> {
+  return new Map(
+    unitIds.map((id) => [
+      id,
+      { percent: 100, started: 1, total: 1, complete: true },
+    ]),
+  );
+}
 
-    expect(isUnitComplete(unit, new Set())).toBe(false);
-    expect(isUnitComplete(unit, new Set(["t-task-1"]))).toBe(false);
-    expect(isUnitComplete(unit, new Set(["t-task-1", "t-task-2"]))).toBe(true);
+describe("isUnitComplete", () => {
+  it("reads the unit's own entry in the sweep", () => {
+    const unit = makeUnit({ id: "t-unit-a" });
+    expect(isUnitComplete(unit, completed())).toBe(false);
+    expect(isUnitComplete(unit, completed("t-unit-b"))).toBe(false);
+    expect(isUnitComplete(unit, completed("t-unit-a"))).toBe(true);
+  });
+});
+
+describe("unitProgressByBook (plan 0025 §8)", () => {
+  const water: Item = {
+    id: "t-item-water",
+    kind: "lexeme",
+    payload: { script: "суу", transliteration: "suu", gloss: "water" },
+    sourceRef: "t-resource-1",
+  };
+  const bread: Item = {
+    id: "t-item-bread",
+    kind: "lexeme",
+    payload: { script: "нан", transliteration: "nan", gloss: "bread" },
+    sourceRef: "t-resource-1",
+  };
+  const unit = makeUnit({
+    id: "t-unit-a",
+    itemIds: [water.id, bread.id],
+    taskIds: ["t-task-1"],
+    noteIds: ["t-note-1"],
+  });
+  const content: Content = {
+    ...makeContent({
+      lessonIds: ["t-lesson-a"],
+      lessons: [makeLesson({ id: "t-lesson-a", unitIds: [unit.id] })],
+      units: [unit],
+    }),
+    items: [water, bread],
+    tasks: [{ id: "t-task-1", type: "recall", itemIds: [water.id, bread.id] }],
+    notes: [{ id: "t-note-1", stem: "n1" }],
+  };
+
+  function at(level: number): SrsState {
+    return {
+      due: "2026-07-05T00:00:00.000Z",
+      intervalDays: 1,
+      ease: 2.5,
+      reps: level,
+      levelDay: "2026-07-04",
+    };
+  }
+
+  it("is the mean word level times ten, as a percentage", () => {
+    const states = new Map([
+      [water.id, at(3)],
+      [bread.id, at(7)],
+    ]);
+    expect(unitProgressByBook(content, states).get(unit.id)).toEqual({
+      percent: 50,
+      started: 2,
+      total: 2,
+      complete: true,
+    });
+  });
+
+  it("moves from the first session, and reaches 100 only at the top", () => {
+    expect(unitProgressByBook(content, new Map()).get(unit.id)?.percent).toBe(
+      0,
+    );
+    expect(
+      unitProgressByBook(
+        content,
+        new Map([
+          [water.id, at(1)],
+          [bread.id, at(0)],
+        ]),
+      ).get(unit.id)?.percent,
+    ).toBe(5);
+    expect(
+      unitProgressByBook(
+        content,
+        new Map([
+          [water.id, at(10)],
+          [bread.id, at(10)],
+        ]),
+      ).get(unit.id)?.percent,
+    ).toBe(100);
+  });
+
+  it("is complete when every word has been right once, not when it is mastered", () => {
+    // "You have been through this unit" and "you are done with this unit"
+    // are different facts. A unit read as complete at 10% is telling the
+    // truth twice.
+    const progress = unitProgressByBook(
+      content,
+      new Map([
+        [water.id, at(1)],
+        [bread.id, at(1)],
+      ]),
+    ).get(unit.id);
+    expect(progress).toEqual({
+      percent: 10,
+      started: 2,
+      total: 2,
+      complete: true,
+    });
+  });
+
+  it("is not complete while one word has never been right", () => {
+    // Stricter than the rule it replaces: a wrong answer counted as an
+    // attempt, and one answer marked a whole five-item task attempted.
+    const progress = unitProgressByBook(
+      content,
+      new Map([
+        [water.id, at(6)],
+        [bread.id, at(0)],
+      ]),
+    ).get(unit.id);
+    expect(progress?.started).toBe(1);
+    expect(progress?.complete).toBe(false);
+  });
+
+  it("does not count the unit's notes", () => {
+    // A note is not a word and never reaches a level, so weighting the bar
+    // with one would cap it below 100 forever (plan 0025 §13).
+    const states = new Map([
+      [water.id, at(10)],
+      [bread.id, at(10)],
+      ["note:t-note-1", at(0)],
+    ]);
+    expect(unitProgressByBook(content, states).get(unit.id)).toEqual({
+      percent: 100,
+      started: 2,
+      total: 2,
+      complete: true,
+    });
+  });
+
+  it("counts each cloze blank as its own word", () => {
+    const sentence: Item = {
+      id: "t-item-sentence",
+      kind: "sentence",
+      payload: { text: "{{c1::a}} {{c2::b}}", translation: "t" },
+      sourceRef: "t-resource-1",
+    };
+    const clozeUnit = makeUnit({
+      id: "t-unit-cloze",
+      itemIds: [sentence.id],
+      taskIds: ["t-task-cloze"],
+    });
+    const clozeContent: Content = {
+      ...content,
+      units: [clozeUnit],
+      items: [sentence],
+      tasks: [{ id: "t-task-cloze", type: "cloze", itemIds: [sentence.id] }],
+      notes: [],
+    };
+    const progress = unitProgressByBook(
+      clozeContent,
+      new Map([[`${sentence.id}::c1`, at(4)]]),
+    ).get(clozeUnit.id);
+    expect(progress?.total).toBe(2);
+    expect(progress?.started).toBe(1);
+    expect(progress?.percent).toBe(20);
+  });
+
+  it("reads a unit with no words as complete rather than unfinishable", () => {
+    // A scheduling unit exists only for an item some task references, so
+    // "no words" means "no exercises" — and a unit nothing could ever
+    // finish would sit across the navigation spine forever.
+    const empty = makeUnit({ id: "t-unit-empty" });
+    const emptyContent = makeContent({
+      lessonIds: ["t-lesson-a"],
+      lessons: [makeLesson({ id: "t-lesson-a", unitIds: [empty.id] })],
+      units: [empty],
+    });
+    expect(unitProgressByBook(emptyContent, new Map()).get(empty.id)).toEqual({
+      percent: 0,
+      started: 0,
+      total: 0,
+      complete: true,
+    });
   });
 });
 
@@ -96,18 +278,16 @@ describe("isUnitUnlocked", () => {
   const units = [unitA, unitB];
 
   it("a unit without unlocksAfterUnitId is always unlocked", () => {
-    expect(isUnitUnlocked(unitA, units, new Set())).toBe(true);
+    expect(isUnitUnlocked(unitA, units, completed())).toBe(true);
   });
 
-  it("is locked when the gating unit's tasks are not all attempted", () => {
-    expect(isUnitUnlocked(unitB, units, new Set())).toBe(false);
-    expect(isUnitUnlocked(unitB, units, new Set(["t-task-1"]))).toBe(false);
+  it("is locked while the gating unit still has a word at level 0", () => {
+    expect(isUnitUnlocked(unitB, units, completed())).toBe(false);
+    expect(isUnitUnlocked(unitB, units, completed("t-unit-b"))).toBe(false);
   });
 
-  it("is unlocked once every task of the gating unit is attempted", () => {
-    expect(
-      isUnitUnlocked(unitB, units, new Set(["t-task-1", "t-task-2"])),
-    ).toBe(true);
+  it("is unlocked once every word of the gating unit has been right once", () => {
+    expect(isUnitUnlocked(unitB, units, completed("t-unit-a"))).toBe(true);
   });
 
   it("defensively treats a missing gate unit as unlocked", () => {
@@ -115,7 +295,7 @@ describe("isUnitUnlocked", () => {
       id: "t-unit-c",
       unlocksAfterUnitId: "t-unit-missing",
     });
-    expect(isUnitUnlocked(orphan, units, new Set())).toBe(true);
+    expect(isUnitUnlocked(orphan, units, completed())).toBe(true);
   });
 });
 
@@ -129,10 +309,10 @@ describe("isLessonComplete", () => {
     });
     const units = [unitA, unitB];
 
-    expect(isLessonComplete(lesson, units, new Set())).toBe(false);
-    expect(isLessonComplete(lesson, units, new Set(["t-task-1"]))).toBe(false);
+    expect(isLessonComplete(lesson, units, completed())).toBe(false);
+    expect(isLessonComplete(lesson, units, completed("t-unit-a"))).toBe(false);
     expect(
-      isLessonComplete(lesson, units, new Set(["t-task-1", "t-task-2"])),
+      isLessonComplete(lesson, units, completed("t-unit-a", "t-unit-b")),
     ).toBe(true);
   });
 });
@@ -152,16 +332,16 @@ describe("isLessonUnlocked", () => {
   const units = [lessonUnitA];
 
   it("a lesson without unlocksAfterLessonId is always unlocked", () => {
-    expect(isLessonUnlocked(lessonA, lessons, units, new Set())).toBe(true);
+    expect(isLessonUnlocked(lessonA, lessons, units, completed())).toBe(true);
   });
 
   it("is locked when the gating lesson's units are not all complete", () => {
-    expect(isLessonUnlocked(lessonB, lessons, units, new Set())).toBe(false);
+    expect(isLessonUnlocked(lessonB, lessons, units, completed())).toBe(false);
   });
 
   it("is unlocked once every unit of the gating lesson is complete", () => {
     expect(
-      isLessonUnlocked(lessonB, lessons, units, new Set(["t-task-1"])),
+      isLessonUnlocked(lessonB, lessons, units, completed("t-unit-a")),
     ).toBe(true);
   });
 
@@ -170,7 +350,7 @@ describe("isLessonUnlocked", () => {
       id: "t-lesson-c",
       unlocksAfterLessonId: "t-lesson-missing",
     });
-    expect(isLessonUnlocked(orphan, lessons, units, new Set())).toBe(true);
+    expect(isLessonUnlocked(orphan, lessons, units, completed())).toBe(true);
   });
 });
 
@@ -190,25 +370,22 @@ describe("nextUnit", () => {
     units: [unitA1, unitA2, unitB1],
   });
 
-  it("nothing attempted -> the first unit of the first lesson", () => {
-    expect(nextUnit(content, new Set())).toEqual({
+  it("nothing answered -> the first unit of the first lesson", () => {
+    expect(nextUnit(content, completed())).toEqual({
       lessonId: lessonA.id,
       unitId: unitA1.id,
     });
   });
 
   it("first unit complete -> the second unit", () => {
-    expect(nextUnit(content, new Set(["t-task-a1"]))).toEqual({
+    expect(nextUnit(content, completed("t-unit-a1"))).toEqual({
       lessonId: lessonA.id,
       unitId: unitA2.id,
     });
   });
 
-  it("half-attempted unit (some but not all taskIds) -> that same unit, not the next one", () => {
-    const half = makeUnit({
-      id: "t-unit-half",
-      taskIds: ["t-task-h1", "t-task-h2"],
-    });
+  it("half-answered unit (some but not all words) -> that same unit, not the next one", () => {
+    const half = makeUnit({ id: "t-unit-half" });
     const lessonHalf = makeLesson({
       id: "t-lesson-half",
       unitIds: [half.id, unitA1.id],
@@ -218,21 +395,21 @@ describe("nextUnit", () => {
       lessons: [lessonHalf],
       units: [half, unitA1],
     });
-    expect(nextUnit(halfContent, new Set(["t-task-h1"]))).toEqual({
+    expect(nextUnit(halfContent, completed())).toEqual({
       lessonId: lessonHalf.id,
       unitId: half.id,
     });
   });
 
   it("last unit of lesson 1 complete -> the first unit of lesson 2 (crosses the boundary)", () => {
-    expect(nextUnit(content, new Set(["t-task-a1", "t-task-a2"]))).toEqual({
+    expect(nextUnit(content, completed("t-unit-a1", "t-unit-a2"))).toEqual({
       lessonId: lessonB.id,
       unitId: unitB1.id,
     });
   });
 
   it("skip-ahead shape: lesson 1 incomplete, lesson 2 fully complete -> points back into lesson 1", () => {
-    expect(nextUnit(content, new Set(["t-task-b1"]))).toEqual({
+    expect(nextUnit(content, completed("t-unit-b1"))).toEqual({
       lessonId: lessonA.id,
       unitId: unitA1.id,
     });
@@ -240,7 +417,7 @@ describe("nextUnit", () => {
 
   it("every unit complete -> null", () => {
     expect(
-      nextUnit(content, new Set(["t-task-a1", "t-task-a2", "t-task-b1"])),
+      nextUnit(content, completed("t-unit-a1", "t-unit-a2", "t-unit-b1")),
     ).toBeNull();
   });
 
@@ -254,7 +431,7 @@ describe("nextUnit", () => {
       lessons: [danglingLesson],
       units: [unitB1],
     });
-    expect(nextUnit(danglingContent, new Set())).toEqual({
+    expect(nextUnit(danglingContent, completed())).toEqual({
       lessonId: danglingLesson.id,
       unitId: unitB1.id,
     });
@@ -268,7 +445,7 @@ describe("nextUnit", () => {
       lessons: [lessonB, lessonA],
       units: [unitB1, unitA2, unitA1],
     });
-    expect(nextUnit(reorderedContent, new Set())).toEqual({
+    expect(nextUnit(reorderedContent, completed())).toEqual({
       lessonId: lessonA.id,
       unitId: unitA1.id,
     });

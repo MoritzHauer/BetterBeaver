@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { BookDocument, DomainDocument } from "@betterbeaver/schema";
-import type { ProgressStore } from "@betterbeaver/engine";
+import type { ProgressStore, UnitProgress } from "@betterbeaver/engine";
 import {
   createDocumentContentSource,
   diffContent,
@@ -107,7 +107,6 @@ const build = (book: BookDocument) =>
 const store = {
   getStreak: async () => null,
   getItemState: async () => null,
-  getAttemptedTaskIds: async () => [],
 } as unknown as ProgressStore;
 
 const clone = (doc: BookDocument): BookDocument =>
@@ -144,16 +143,27 @@ function makeSession(
   };
 }
 
+/** Units read complete (plan 0025 §8) — the shape Preview passes to open
+ * everything, and what a fully-studied Book looks like. */
+function completed(...unitIds: string[]): ReadonlyMap<string, UnitProgress> {
+  return new Map(
+    unitIds.map((id) => [
+      id,
+      { percent: 100, started: 0, total: 0, complete: true },
+    ]),
+  );
+}
+
 function renderBook(
   session: EditSessionValue | null,
-  attempted: ReadonlySet<string> = new Set(),
+  progress: ReadonlyMap<string, UnitProgress> = new Map(),
   content = build(BOOK),
   onSelectLesson: (id: string) => void = () => {},
 ) {
   const tree = (
     <BookScreen
       content={content}
-      attemptedTaskIds={attempted}
+      unitProgress={progress}
       store={store}
       epoch={0}
       onSelectLesson={onSelectLesson}
@@ -177,10 +187,10 @@ describe("Preview", () => {
   afterEach(cleanup);
 
   it("hides Play and Daily Review and keeps Practice", () => {
-    // Required, not tidy (§1b): with a full attempted set `nextUnit` returns
+    // Required, not tidy (§1b): with every unit complete `nextUnit` returns
     // null and `dueUnits` nothing, so Play would show the "Book complete"
     // trophy and Daily Review would be permanently disabled.
-    renderBook(makeSession({ view: "preview" }), new Set(["bk-t1"]));
+    renderBook(makeSession({ view: "preview" }), completed("bk-u1", "bk-u2"));
     expect(screen.queryByText("Continue learning")).toBeNull();
     expect(screen.queryByText("Book complete")).toBeNull();
     expect(screen.queryByText("Daily Review")).toBeNull();
@@ -188,12 +198,12 @@ describe("Preview", () => {
   });
 
   it("reaches a gated lesson in one tap", () => {
-    // Preview passes the full task set, so nothing is locked: inspecting
+    // Preview reads every unit complete, so nothing is locked: inspecting
     // unit 12 must not cost eleven skip-ahead confirms.
     const opened: string[] = [];
     renderBook(
       makeSession({ view: "preview" }),
-      new Set(["bk-t1"]),
+      completed("bk-u1", "bk-u2"),
       build(BOOK),
       (id) => opened.push(id),
     );
@@ -278,7 +288,7 @@ describe("Diff", () => {
     const diff = diffContent(BOOK, draft, DOMAIN, DOMAIN);
     renderBook(
       makeSession({ book: draft, view: "diff", diff }),
-      new Set(),
+      new Map(),
       diff.content,
     );
 
@@ -317,7 +327,7 @@ describe("Diff", () => {
     expect(diff.status.get("topic")).toBe("changed");
     renderBook(
       makeSession({ book: draft, view: "diff", diff }),
-      new Set(),
+      new Map(),
       diff.content,
     );
 
@@ -340,7 +350,7 @@ describe("Diff", () => {
     const diff = diffContent(BOOK, draft, DOMAIN, DOMAIN);
     renderBook(
       makeSession({ book: draft, view: "diff", diff }),
-      new Set(),
+      new Map(),
       diff.content,
     );
 
@@ -354,7 +364,7 @@ describe("Diff", () => {
     const diff = diffContent(BOOK, draft, DOMAIN, DOMAIN);
     renderBook(
       makeSession({ book: draft, view: "diff", diff }),
-      new Set(),
+      new Map(),
       diff.content,
     );
     expect(screen.queryAllByRole("textbox")).toEqual([]);

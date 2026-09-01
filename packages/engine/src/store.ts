@@ -1,8 +1,18 @@
 import type { Content, Item } from "@betterbeaver/schema";
-import type { Quality, SchedulingConfig, SrsState } from "@betterbeaver/srs";
+import type {
+  Quality,
+  ReviewPace,
+  SchedulingConfig,
+  SrsState,
+} from "@betterbeaver/srs";
 import { dueAfter } from "@betterbeaver/srs";
 import type { ProgressStore } from "./interfaces.js";
-import { applyGrade, reviewQueue } from "./progress.js";
+import {
+  applyGrade,
+  reviewQueue,
+  unitProgressByBook,
+  type UnitProgress,
+} from "./progress.js";
 import { advanceStreak } from "./streak.js";
 import {
   domainSchedulingUnits,
@@ -52,6 +62,42 @@ export async function dueUnits(
     store,
   );
   return reviewQueue(units, states, now, pinnedUnitIds ?? new Set());
+}
+
+/**
+ * Every unit's progress across `contents` (plan 0025 §8), in one pass over
+ * the store: the bar's percentage, the started count, and whether the unit
+ * is complete.
+ *
+ * Takes a list of Books rather than one, because the caller that needs this
+ * — the app's navigation spine — needs all of them at once, and a Book's
+ * scheduling units are shared with the domain's other Books, so fetching
+ * them once is both fewer reads and one consistent snapshot. Unit ids are
+ * unique across Books, so the merged map has no collisions.
+ */
+export async function collectUnitProgress(
+  contents: Content[],
+  store: ProgressStore,
+  pace?: ReviewPace,
+): Promise<Map<string, UnitProgress>> {
+  const unitIds = new Set<string>();
+  for (const content of contents) {
+    for (const unit of schedulingUnits(content)) {
+      unitIds.add(unit.id);
+    }
+  }
+  const states = await collectItemStates([...unitIds], store);
+  const progress = new Map<string, UnitProgress>();
+  for (const content of contents) {
+    for (const [unitId, unitProgress] of unitProgressByBook(
+      content,
+      states,
+      pace,
+    )) {
+      progress.set(unitId, unitProgress);
+    }
+  }
+  return progress;
 }
 
 /**
