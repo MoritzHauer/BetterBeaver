@@ -35,11 +35,17 @@ export const SKIP_DAYS: Record<SkipLength, number> = {
 
 export interface LearningSettings extends SchedulingConfig {
   skip: SkipLength;
+  /** Whether typed exercises show the key row for a domain's `extraChars`
+   * (plan 0025 §10). **Default off**: the real fix is the platform keyboard
+   * layout, and three keys under every answer are clutter for a learner who
+   * installed one. The setup card offers this to anyone who cannot. */
+  extraKeys: boolean;
 }
 
 export const DEFAULT_LEARNING: LearningSettings = {
   ...DEFAULT_SCHEDULING,
   skip: "week",
+  extraKeys: false,
 };
 
 function isPace(value: unknown): value is ReviewPace {
@@ -64,6 +70,10 @@ export function getLearning(): LearningSettings {
       ? stored.scheduler
       : DEFAULT_LEARNING.scheduler,
     skip: isSkip(stored?.skip) ? stored.skip : DEFAULT_LEARNING.skip,
+    extraKeys:
+      typeof stored?.extraKeys === "boolean"
+        ? stored.extraKeys
+        : DEFAULT_LEARNING.extraKeys,
   };
 }
 

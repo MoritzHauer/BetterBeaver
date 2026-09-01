@@ -17,6 +17,7 @@ describe("learning settings", () => {
       scheduler: "ladder",
       pace: "balanced",
       skip: "week",
+      extraKeys: false,
     });
     expect(getLearning()).toEqual(DEFAULT_LEARNING);
   });
@@ -28,6 +29,7 @@ describe("learning settings", () => {
       scheduler: "ladder",
       pace: "light",
       skip: "year",
+      extraKeys: false,
     });
   });
 
@@ -40,6 +42,7 @@ describe("learning settings", () => {
       scheduler: "sm2",
       pace: "balanced",
       skip: "week",
+      extraKeys: false,
     });
   });
 

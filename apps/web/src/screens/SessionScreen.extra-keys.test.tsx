@@ -1,9 +1,10 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { DomainContent, Question } from "@betterbeaver/engine";
 import type { Quality } from "@betterbeaver/srs";
 import type { TapLookup } from "../components/TappableText";
 import { SessionScreen } from "./SessionScreen";
+import { setLearning } from "../learning";
 
 /**
  * The extra-key row (plan 0025 §10). Kyrgyz is the Russian layout plus
@@ -104,9 +105,22 @@ function answerInput(): HTMLInputElement {
   return el;
 }
 
+// The row is off by default (plan 0025 §10) — the platform keyboard is the
+// real fix and this is the fallback — so every test that expects keys has to
+// opt in, and the default itself is asserted below.
+beforeEach(() => {
+  localStorage.clear();
+  setLearning({ extraKeys: true });
+});
 afterEach(cleanup);
 
 describe("extra-key row", () => {
+  it("stays hidden by default, even where the domain declares extraChars", () => {
+    localStorage.clear();
+    renderSession(["ң", "ө", "ү"]);
+    expect(screen.queryByRole("button", { name: "ң" })).toBeNull();
+  });
+
   it("renders no row when the domain declares no extraChars", () => {
     renderSession();
     expect(screen.queryByRole("button", { name: "ң" })).toBeNull();

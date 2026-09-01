@@ -356,8 +356,12 @@ function HintReveal({ text }: { text: string }) {
  * needs and a learner's keyboard cannot produce — `ң ө ү` for Kyrgyz, whose
  * learners type on a Russian layout. Without the row those answers are
  * unanswerable, not merely awkward: grading is against the exact script and
- * normalization deliberately never folds ң onto н. Absent or empty means no
- * row, which is every domain until one declares the field. */
+ * normalization deliberately never folds ң onto н.
+ *
+ * Gated on the `extraKeys` setting, **off by default**: the real fix is the
+ * platform keyboard layout, which the setup card walks the learner through,
+ * and this row is the fallback for anyone who cannot install one. Absent or
+ * empty `extraChars` means no row either way. */
 function TypedInput({
   target,
   unitId,
@@ -379,6 +383,7 @@ function TypedInput({
 }) {
   const formId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
+  const showExtraKeys = getLearning().extraKeys;
   const [value, setValue] = useState("");
   const [result, setResult] = useState<Verdict | null>(null);
 
@@ -422,7 +427,10 @@ function TypedInput({
           onChange={(event) => setValue(event.target.value)}
         />
       </form>
-      {result === null && extraChars !== undefined && extraChars.length > 0 ? (
+      {result === null &&
+      showExtraKeys &&
+      extraChars !== undefined &&
+      extraChars.length > 0 ? (
         <div className="extra-keys">
           {extraChars.map((char) => (
             <button

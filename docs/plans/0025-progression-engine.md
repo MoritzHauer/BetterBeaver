@@ -193,6 +193,12 @@ Plan 0002 left this open — "whether Kyrgyz cloze/dictation needs an input-meth
 
 `domainSchema` gains an **optional `extraChars: string[]`** — additive, dropped by non-strict parsing on older clients, so no schema-version bump. Where set, the shared typed-input component renders those characters as ≥44px keys above the field, inserting at the caret without dismissing the keyboard. Absent, no row. Turkish would declare `ğ ı ş ç ö ü`, German `ä ö ü ß`, a maths domain `≤ ∈ ∀`. Deriving the list was rejected: it needs a per-language model of what a keyboard already produces, and frequency cannot isolate the three (ө and ү are everywhere in Kyrgyz — vowel harmony), which is the tier-3 domain-specific code plan 0023 §9 refuses. The list is tier 1 content; the key row is tier 2 capability.
 
+**The platform keyboard is the real fix, so the row defaults to off.** Gboard supports Kyrgyz and ships on every Play-certified Android device; iOS is unconfirmed and may need a third-party keyboard (Gboard or Keyman), which is a bigger ask because of Apple's "Allow Full Access" prompt. A learner who adds the layout needs no row at all, and three keys under every typed answer is clutter for them. So the app ships a **keyboard setup card** — shown when the domain declares `extraChars`, per-platform steps from the user agent, dismissible, re-openable from Settings — and the key row becomes a **Settings toggle, default off**, offered by that card as the fallback for anyone who cannot or will not install a layout.
+
+The fallback stays because the walkthrough can fail invisibly: nothing lets the app detect whether a layout was actually added, iOS may not offer one natively, and managed or Play-less devices (Huawei post-2019, work phones, some regional ROMs) can block the whole path. The card is data-driven rather than Kyrgyz-specific for the same reason the list is: `extraChars` already means "this script needs characters your keyboard may not have".
+
+**Not authored as content.** The walkthrough cannot be a note: every note in a unit is a scheduling unit, so it would come back in Daily Review as a flashcard forever — and a note-only unit fails validator class (i) anyway. See §13, which removes the first half of that problem for every note.
+
 **No folding, ever.** `normalizeTypedInput` must never map ң → н or ө → о: they are distinct letters and the distinction is what is being taught. All three are precomposed codepoints (U+04A3, U+04E9, U+04AF), so NFC does not decompose them and today's normalization is already correct — the rule is written down so a future "this is too hard to type" report is not fixed by adding a fold. The right answer to a near-miss is presentational: highlight the differing characters in the reveal.
 
 ### 11. What this supersedes, and how cards migrate
@@ -221,6 +227,16 @@ The Learning section keeps its shape and swaps one row:
 
 Still one `bb.learning` key, still global by force — design.md pins "one word = one SRS state across topics", so a per-Book progression would write contradictory levels into one lexeme's single state.
 
+### 13. Notes leave the review queue
+
+Every note in a unit is a scheduling unit today (plan 0008 §7), so a unit's theory comes back in Daily Review as a self-graded flashcard forever. That is wrong for the same reason the keyboard walkthrough must not be a note: theory is reference material, read when it is needed, not a card to be drilled.
+
+**Notes stop entering the due queue.** A note reaches review only when the learner **pins** it — which is already the mechanism, since pinning a note grades it `again` so that it becomes due immediately (`App.tsx:2173`). Pin's meaning widens for notes only, from "show me this first" to "include this at all".
+
+- **Nothing to migrate.** Existing note SRS state stays where it is and is simply no longer read for queueing; a learner who wants a note back pins it.
+- **This closes open question 3.** Notes are not part of progression, so they do not weight the unit's percentage bar either — §8's bar is the mean level of a unit's *words*.
+- **Completion is unaffected** — §8 already counts items, not notes.
+
 ## Slices
 
 1. **Extra-key row** (§10) — optional `domain.extraChars`, the key row on the shared typed input, a test pinning that ң ≠ н. Independent of everything else here and fixes shipped content; land it first. Inert until a domain sets the field.
@@ -231,6 +247,8 @@ Still one `bb.learning` key, still global by force — design.md pins "one word 
 6. **The two derived exercises** (§9) — produce-direction MCQ and `write`, with the duplicate-prompt runtime gate. Depends on slice 1 for `write`.
 7. **Progress, completion and locks** (§8) — the percentage bar, completion at level ≥ 1, and the content pass that drops the authored unlock chain.
 8. **Re-point Focus mode** (plan 0024 §2) — delete its rotation table, call the draw.
+9. **Keyboard setup card + row off by default** (§10) — the per-platform card gated on `extraChars`, the Settings toggle, and the card's offer of the row as fallback. Depends on slice 1 only.
+10. **Notes leave the review queue** (§13) — pin becomes the opt-in; notes drop out of the bar. Independent of everything else here.
 
 ## Done-criteria
 
@@ -241,6 +259,8 @@ Still one `bb.learning` key, still global by force — design.md pins "one word 
 - Session length is shown before the session starts and never grows during it.
 - On the live Kyrgyz Book, with no content edit: an English prompt with Kyrgyz options is playable, and typing a word from its English prompt is playable and auto-graded.
 - A Kyrgyz cloze blank containing ң/ө/ү can be answered correctly on a device with only a Russian keyboard, and ң typed as н is still wrong.
+- The key row is absent until the learner turns it on, and the setup card appears only for a domain that declares `extraChars`.
+- A unit's notes never appear in Daily Review unless pinned.
 - Every existing card keeps its due date across the migration.
 - `pnpm check` green; no `CONTENT_SCHEMA_VERSION` change; one new `SrsState` field, covered by the existing `bb.*` backup sweep.
 
@@ -248,6 +268,5 @@ Still one `bb.learning` key, still global by force — design.md pins "one word 
 
 1. **Does the Fast preset's two-level streak jump need a floor on evidence?** Two levels a day means a word can reach `write` in five days. That may be right for a learner who is genuinely fast and wrong for one who is guessing well on four-option MCQs.
 2. **What replaces the unit card's question count when a unit's words are at wildly different levels?** The count is computable, but "10 questions" over words at levels 1 and 9 describes two very different sittings.
-3. **Should the progress bar weight notes?** Notes are scheduling units with levels, but they are theory, not vocabulary, and a unit with six notes and four words would read mostly as note progress.
-4. **Who sets `extraChars` on the live Kyrgyz domain, and when?** It rides plan 0023's suffix-table content pass, which has not started.
-5. **Does `minimal-pair` at level 3 make sense for a word that also has a `pair` item?** The pair is its own scheduling unit with its own level, so a word and its minimal pair climb independently — probably right, but untested against real content.
+3. **Who sets `extraChars` on the live Kyrgyz domain, and when?** It rides plan 0023's suffix-table content pass, which has not started.
+4. **Does `minimal-pair` at level 3 make sense for a word that also has a `pair` item?** The pair is its own scheduling unit with its own level, so a word and its minimal pair climb independently — probably right, but untested against real content.
