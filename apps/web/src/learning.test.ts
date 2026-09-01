@@ -18,6 +18,7 @@ describe("learning settings", () => {
       skip: "week",
       extraKeys: false,
       keyboardHelpDismissed: false,
+      progression: "normal",
     });
     expect(getLearning()).toEqual(DEFAULT_LEARNING);
   });
@@ -30,6 +31,7 @@ describe("learning settings", () => {
       skip: "year",
       extraKeys: false,
       keyboardHelpDismissed: false,
+      progression: "normal",
     });
   });
 
@@ -46,6 +48,7 @@ describe("learning settings", () => {
       skip: "week",
       extraKeys: false,
       keyboardHelpDismissed: false,
+      progression: "normal",
     });
   });
 

@@ -78,6 +78,39 @@ vi.mock("./backend/publishCheck", () => ({
 }));
 
 /** The trail's Practice button starts the pooled unit session (plan 0020). */
+/**
+ * Puts every word of the demo Book's first unit well up the ladder (plan
+ * 0025 §4), so the session opens on an exercise that maps to one item.
+ *
+ * Level 1, so the new attempt lands on `recognize` — whose prompt is the
+ * word's own Term, which is the field these tests type into.
+ *
+ * At level 0 every word draws `matching`, and a board's Edit button
+ * deliberately targets the owning *task* rather than an item — it has no
+ * single word to name. These tests are about an edit reaching the question
+ * underneath, so they need a question with a word behind it.
+ */
+function seedLevels(): void {
+  for (const id of [
+    "dx-con-dam",
+    "dx-con-lodge",
+    "dx-con-incisors",
+    "dx-con-kit",
+    "dx-con-scent-mound",
+  ]) {
+    localStorage.setItem(
+      `bb.item.${id}`,
+      JSON.stringify({
+        due: "2999-01-01T00:00:00.000Z",
+        intervalDays: 1,
+        ease: 2.5,
+        reps: 1,
+        levelDay: "2020-01-01",
+      }),
+    );
+  }
+}
+
 async function startUnitSession(): Promise<void> {
   await screen.findByText("Get Started");
   screen.getByText("Get Started").click();
@@ -93,6 +126,7 @@ describe("session Edit button", () => {
   // each test would otherwise query a body holding the previous test's app.
   beforeEach(() => {
     localStorage.clear();
+    seedLevels();
   });
   afterEach(async () => {
     cleanup();

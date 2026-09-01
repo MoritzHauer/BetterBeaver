@@ -34,6 +34,19 @@ export const SKIP_DAYS: Record<SkipLength, number> = {
   year: 365,
 };
 
+/**
+ * How fast a word climbs the ladder (plan 0025 §3, §12): how many correct
+ * answers it is owed per session. One is pure progression — every
+ * appearance a stretch; three surrounds each stretch with consolidation.
+ */
+export type Progression = "careful" | "normal" | "fast";
+
+export const REPETITIONS_PER_WORD: Record<Progression, number> = {
+  careful: 3,
+  normal: 2,
+  fast: 1,
+};
+
 export interface LearningSettings extends SchedulingConfig {
   skip: SkipLength;
   /** Whether typed exercises show the key row for a domain's `extraChars`
@@ -45,6 +58,7 @@ export interface LearningSettings extends SchedulingConfig {
    * One flag, not one per domain: the card teaches a device-wide skill, and
    * a learner who has added one layout knows where the setting lives. */
   keyboardHelpDismissed: boolean;
+  progression: Progression;
 }
 
 export const DEFAULT_LEARNING: LearningSettings = {
@@ -52,10 +66,15 @@ export const DEFAULT_LEARNING: LearningSettings = {
   skip: "week",
   extraKeys: false,
   keyboardHelpDismissed: false,
+  progression: "normal",
 };
 
 function isPace(value: unknown): value is ReviewPace {
   return typeof value === "string" && value in REVIEW_PACES;
+}
+
+function isProgression(value: unknown): value is Progression {
+  return value === "careful" || value === "normal" || value === "fast";
 }
 
 function isSkip(value: unknown): value is SkipLength {
@@ -77,6 +96,9 @@ export function getLearning(): LearningSettings {
       typeof stored?.keyboardHelpDismissed === "boolean"
         ? stored.keyboardHelpDismissed
         : DEFAULT_LEARNING.keyboardHelpDismissed,
+    progression: isProgression(stored?.progression)
+      ? stored.progression
+      : DEFAULT_LEARNING.progression,
   };
 }
 
@@ -99,4 +121,9 @@ export function setLearning(patch: Partial<LearningSettings>): void {
 export function schedulingConfig(): SchedulingConfig {
   const { pace } = getLearning();
   return { pace };
+}
+
+/** Correct answers a word is owed per session, from the Progression preset. */
+export function repetitionsPerWord(): number {
+  return REPETITIONS_PER_WORD[getLearning().progression];
 }

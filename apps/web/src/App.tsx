@@ -22,7 +22,7 @@ import {
   buildRecallSession,
   buildReviewSession,
   buildTaskSession,
-  buildUnitSession,
+  buildDrillSession,
   collectUnitProgress,
   dueDomainUnits,
   dueUnits,
@@ -36,7 +36,7 @@ import {
 } from "@betterbeaver/engine";
 import type { Question, UnitProgress } from "@betterbeaver/engine";
 import type { Quality } from "@betterbeaver/srs";
-import { recallQuality } from "@betterbeaver/srs";
+import { recallQuality, wordLevel } from "@betterbeaver/srs";
 import type { TapLookup } from "./components/TappableText";
 import { NewBookSheet } from "./components/Sheet";
 import type { ContentInit, ContentUpdate } from "./content/source";
@@ -52,7 +52,7 @@ import { createLocalStorageVocabListStore } from "./progress/vocab-lists";
 import { createLocalStorageUserEntryStore } from "./progress/user-entries";
 import { getPinnedUnitIds, togglePinnedUnits } from "./progress/pinned-tasks";
 import { AUTO_UPDATE_KEY, RECHECK_INTERVAL_MS } from "./autoUpdate";
-import { schedulingConfig } from "./learning";
+import { repetitionsPerWord, schedulingConfig } from "./learning";
 import { isOffline } from "./offline";
 import { useStorageUnwritable } from "./storage-health";
 import { MyBooksScreen } from "./screens/MyBooksScreen";
@@ -321,10 +321,59 @@ function UnitSession({
   nextAction?: { label: string; onClick: () => void };
 }) {
   const domainId = content.topic.domainId;
+
+  /**
+   * Every word's level, read once (plan 0025 §4). The session is planned
+   * from these, so it cannot be built until they arrive — a session planned
+   * against level 0 would open every word at `matching` regardless of how
+   * well the learner already knows it.
+   *
+   * `null` while loading, which the render below turns into the same
+   * "Loading…" the rest of the app uses. An unreadable store degrades to
+   * level 0 per word rather than blocking the session (spec 0019 decision 2:
+   * failed reads degrade to absent).
+   */
+  const [levels, setLevels] = useState<Map<string, number> | null>(null);
+  useEffect(() => {
+    let live = true;
+    const read = async () => {
+      const entries = await Promise.all(
+        unit.itemIds.map(async (itemId) => {
+          const state = await store?.getItemState(itemId);
+          return [
+            itemId,
+            wordLevel(state ?? null, schedulingConfig().pace),
+          ] as const;
+        }),
+      );
+      if (live) {
+        setLevels(new Map(entries));
+      }
+    };
+    void read().catch(() => {
+      if (live) {
+        setLevels(new Map());
+      }
+    });
+    return () => {
+      live = false;
+    };
+  }, [unit.id, store]);
+
   const pairs = useMemo(
-    () => buildUnitSession(unit, content, rngFor(unit.id)),
-    // Same seeded-rebuild rule as TaskSession.
-    [unit.id, content],
+    () =>
+      levels === null
+        ? []
+        : buildDrillSession(
+            unit,
+            content,
+            (id) => levels.get(id) ?? 0,
+            repetitionsPerWord(),
+            rngFor(unit.id),
+          ),
+    // Same seeded-rebuild rule as TaskSession, plus the levels the plan
+    // reads: they arrive once and do not change while the session runs.
+    [unit.id, content, levels],
   );
   const questions = useMemo(() => pairs.map((pair) => pair.question), [pairs]);
   const taskIds = useMemo(() => pairs.map((pair) => pair.taskId), [pairs]);
@@ -367,6 +416,18 @@ function UnitSession({
         }
       }
     : undefined;
+
+  // The plan is read from the learner's levels, so there is nothing to show
+  // until they arrive. Rendering the session early would open every word at
+  // `matching` and then swap the questions underneath the learner.
+  if (levels === null) {
+    return (
+      <main>
+        <h1>{unit.title}</h1>
+        <p>Loading…</p>
+      </main>
+    );
+  }
 
   return (
     <SessionScreen
