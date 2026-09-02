@@ -29,6 +29,26 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
+describe("Settings: practice depth (plan 0025 §12)", () => {
+  it("defaults to Normal and writes the chosen preset", () => {
+    renderSettings();
+    const select = screen.getByLabelText(/Practice depth/);
+    expect((select as HTMLSelectElement).value).toBe("normal");
+    fireEvent.change(select, { target: { value: "careful" } });
+    expect(getLearning().progression).toBe("careful");
+  });
+
+  it("names the repetitions each preset owes, never a bare number to tune", () => {
+    renderSettings();
+    expect(
+      screen.getByRole("option", { name: /Careful/ }).textContent,
+    ).toContain("3");
+    expect(screen.getByRole("option", { name: /Fast/ }).textContent).toContain(
+      "1",
+    );
+  });
+});
+
 describe("Settings: the keyboard rows", () => {
   it("shows neither row for a domain that declares no extra characters", () => {
     renderSettings();

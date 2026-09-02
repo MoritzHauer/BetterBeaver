@@ -325,7 +325,7 @@ The session engine, the ceiling draw and the two derived exercises, landed toget
 
 `SessionScreen` was split first (shell, interactions, summary, queue hook): at 1508 lines it was over the ceiling `docs/design.md` pins, and the queue had to become one replaceable thing before a drill could drive it.
 
-**Still open here:** the Progression preset is wired for repetitions per word but has no Settings row yet, and its Fast variant — whether a clean streak may advance two levels in a day — is open question 1 and unimplemented.
+**Still open here:** the Progression preset's *second* effect — whether a clean streak may advance two levels in a day on Fast — is unimplemented, because it is open question 1 and the plan does not settle what evidence should gate it. The repetitions-per-word half is wired, and Settings names it "Practice depth" rather than "Progression speed": what a learner picks is how many times they must get a word right, not an abstract speed.
 
 ## Open questions
 

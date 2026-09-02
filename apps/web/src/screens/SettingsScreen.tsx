@@ -18,9 +18,11 @@ import { getThemePref, setThemePref, type ThemePref } from "../theme";
 import { getDisplayName, setDisplayName } from "../identity";
 import { APP_COMMIT, APP_VERSION, REPO_URL } from "../version";
 import {
+  REPETITIONS_PER_WORD,
   getLearning,
   setLearning,
   type LearningSettings,
+  type Progression,
   type SkipLength,
 } from "../learning";
 import { REVIEW_PACES, type ReviewPace } from "@betterbeaver/srs";
@@ -42,6 +44,14 @@ const PACE_OPTIONS: { pace: ReviewPace; label: string }[] = [
   { pace: "thorough", label: "Thorough" },
   { pace: "balanced", label: "Balanced" },
   { pace: "light", label: "Light" },
+];
+
+/** Plan 0025 §12: how many correct answers a word is owed per session.
+ * Named, never typed — the same argument as the pace presets. */
+const PROGRESSION_OPTIONS: { progression: Progression; label: string }[] = [
+  { progression: "careful", label: "Careful" },
+  { progression: "normal", label: "Normal" },
+  { progression: "fast", label: "Fast" },
 ];
 
 const SKIP_OPTIONS: { skip: SkipLength; label: string }[] = [
@@ -352,6 +362,28 @@ export function SettingsScreen({
           says both how hard the next question is and how long until you see it
           again. Getting it wrong steps back two levels, never back to the
           start. Cards you already have keep their current due dates.
+        </p>
+        <label className="field">
+          Practice depth
+          <select
+            value={learning.progression}
+            onChange={(event) =>
+              updateLearning({
+                progression: event.target.value as Progression,
+              })
+            }
+          >
+            {PROGRESSION_OPTIONS.map(({ progression, label }) => (
+              <option key={progression} value={progression}>
+                {label} — {REPETITIONS_PER_WORD[progression]}&times; per word
+              </option>
+            ))}
+          </select>
+        </label>
+        <p className="status">
+          How many times you have to get a word right before a practice session
+          lets it go. More is slower but sticks harder; one is every question a
+          step up.
         </p>
         {extraChars !== undefined && extraChars.length > 0 && (
           <>
