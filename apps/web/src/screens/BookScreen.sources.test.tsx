@@ -84,7 +84,6 @@ const build = (book: BookDocument) =>
 const store = {
   getStreak: async () => null,
   getItemState: async () => null,
-  getAttemptedTaskIds: async () => [],
 } as unknown as ProgressStore;
 
 function makeSession(overrides: Partial<EditSessionValue> = {}) {
@@ -122,7 +121,7 @@ function renderBook(session: EditSessionValue | null, book = BOOK) {
   const tree = (
     <BookScreen
       content={build(book)}
-      attemptedTaskIds={new Set()}
+      unitProgress={new Map()}
       store={store}
       epoch={0}
       onSelectLesson={() => {}}

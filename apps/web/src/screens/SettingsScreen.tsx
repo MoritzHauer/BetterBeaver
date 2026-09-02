@@ -18,16 +18,18 @@ import { getThemePref, setThemePref, type ThemePref } from "../theme";
 import { getDisplayName, setDisplayName } from "../identity";
 import { APP_COMMIT, APP_VERSION, REPO_URL } from "../version";
 import {
+  REPETITIONS_PER_WORD,
   getLearning,
   setLearning,
   type LearningSettings,
+  type Progression,
   type SkipLength,
 } from "../learning";
+import { REVIEW_PACES, type ReviewPace } from "@betterbeaver/srs";
 import {
-  REVIEW_PACES,
-  type ReviewPace,
-  type SchedulerKind,
-} from "@betterbeaver/srs";
+  KeyboardSetupCard,
+  keyboardPlatform,
+} from "../components/KeyboardSetupCard";
 
 const THEME_OPTIONS: { pref: ThemePref; label: string }[] = [
   { pref: "system", label: "System" },
@@ -44,9 +46,12 @@ const PACE_OPTIONS: { pace: ReviewPace; label: string }[] = [
   { pace: "light", label: "Light" },
 ];
 
-const SCHEDULER_OPTIONS: { scheduler: SchedulerKind; label: string }[] = [
-  { scheduler: "ladder", label: "Ladder" },
-  { scheduler: "sm2", label: "Classic SM-2" },
+/** Plan 0025 §12: how many correct answers a word is owed per session.
+ * Named, never typed — the same argument as the pace presets. */
+const PROGRESSION_OPTIONS: { progression: Progression; label: string }[] = [
+  { progression: "careful", label: "Careful" },
+  { progression: "normal", label: "Normal" },
+  { progression: "fast", label: "Fast" },
 ];
 
 const SKIP_OPTIONS: { skip: SkipLength; label: string }[] = [
@@ -62,8 +67,13 @@ export function SettingsScreen({
   onImportBook,
   importPrivateBook,
   refreshContent,
+  extraChars,
 }: {
   onBack: () => void;
+  /** The current domain's `extraChars` (plan 0025 §10). The keyboard rows
+   * below render only when a domain declares some: a learner whose script
+   * has no missing characters has nothing to set up and no row to want. */
+  extraChars?: readonly string[] | undefined;
   onAbout: () => void;
   onSignIn: () => void;
   /** Re-downloads every member Book's documents and assets, then reloads
@@ -95,6 +105,9 @@ export function SettingsScreen({
   );
   const [offlineOn, setOfflineOn] = useState(isOffline);
   const [learning, setLearningState] = useState<LearningSettings>(getLearning);
+  // The setup walkthrough, re-openable here after it was dismissed in a
+  // session (plan 0025 §10).
+  const [keyboardHelpOpen, setKeyboardHelpOpen] = useState(false);
   const [user, setUser] = useState<User | null | "loading">(
     getSupabase() === null ? null : "loading",
   );
@@ -337,37 +350,73 @@ export function SettingsScreen({
           >
             {PACE_OPTIONS.map(({ pace, label }) => (
               <option key={pace} value={pace}>
-                {label} — {REVIEW_PACES[pace].join(", ")} days
+                {label} — {REVIEW_PACES[pace].slice(1).join(", ")} days
               </option>
             ))}
           </select>
         </label>
         <p className="status">
-          How fast a word you keep getting right moves out of your way. Cards
-          you already have keep their current due dates.
+          How fast a word you keep getting right moves out of your way. Every
+          word has a level: getting it right moves it one level up, at most one
+          level a day once it is being asked to produce the word, and the level
+          says both how hard the next question is and how long until you see it
+          again. Getting it wrong steps back two levels, never back to the
+          start. Cards you already have keep their current due dates.
         </p>
         <label className="field">
-          Scheduler
+          Practice depth
           <select
-            value={learning.scheduler}
+            value={learning.progression}
             onChange={(event) =>
               updateLearning({
-                scheduler: event.target.value as SchedulerKind,
+                progression: event.target.value as Progression,
               })
             }
           >
-            {SCHEDULER_OPTIONS.map(({ scheduler, label }) => (
-              <option key={scheduler} value={scheduler}>
-                {label}
+            {PROGRESSION_OPTIONS.map(({ progression, label }) => (
+              <option key={progression} value={progression}>
+                {label} — {REPETITIONS_PER_WORD[progression]}&times; per word
               </option>
             ))}
           </select>
         </label>
         <p className="status">
-          Ladder: Good moves one step up the pace above, Hard steps back one and
-          asks again tomorrow, Again starts the word over. Classic SM-2 is the
-          older interval maths. You can switch back and forth freely.
+          How many times you have to get a word right before a practice session
+          lets it go. More is slower but sticks harder; one is every question a
+          step up.
         </p>
+        {extraChars !== undefined && extraChars.length > 0 && (
+          <>
+            <label className="field">
+              <input
+                type="checkbox"
+                checked={learning.extraKeys}
+                onChange={(event) =>
+                  updateLearning({ extraKeys: event.target.checked })
+                }
+              />{" "}
+              Show {extraChars.join(" ")} under typed answers
+            </label>
+            <p className="status">
+              Off by default: adding the language&rsquo;s own keyboard layout
+              works everywhere on your phone, not just here. These keys are the
+              fallback if you cannot.
+            </p>
+            <button onClick={() => setKeyboardHelpOpen((open) => !open)}>
+              {keyboardHelpOpen ? "Hide" : "How to add the keyboard"}
+            </button>
+            {keyboardHelpOpen && (
+              <KeyboardSetupCard
+                chars={extraChars}
+                platform={keyboardPlatform(navigator.userAgent)}
+                extraKeys={learning.extraKeys}
+                onToggleExtraKeys={(next) =>
+                  updateLearning({ extraKeys: next })
+                }
+              />
+            )}
+          </>
+        )}
         <label className="field">
           Skip for
           <select

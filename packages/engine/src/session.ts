@@ -1,4 +1,11 @@
-import type { Content, Item, Task, Unit } from "@betterbeaver/schema";
+import type {
+  Content,
+  Exercise,
+  Item,
+  Task,
+  TaskType,
+  Unit,
+} from "@betterbeaver/schema";
 import {
   gapClozeMarkup,
   itemDisplayText,
@@ -9,10 +16,17 @@ import {
   sentenceTokens,
   stripClozeMarkup,
   RECOGNIZE_DISTRACTOR_COUNT,
+  TASK_EXERCISES,
 } from "@betterbeaver/schema";
 import type { Quality } from "@betterbeaver/srs";
 import { blankUnitId, type SchedulingUnit } from "./units.js";
+import { availableExercises, drawExercise } from "./draw.js";
+import type { PlannedVisit } from "./drill.js";
 import { normalizeTypedInput } from "./normalize.js";
+import { shuffle, type Rng } from "./rng.js";
+
+// Re-exported so every existing importer of `shuffle`/`Rng` keeps working.
+export { shuffle, type Rng };
 
 export interface RecognizeQuestion {
   kind: "recognize";
@@ -69,6 +83,23 @@ export interface ListenQuestion {
 }
 
 /** Hear the audio, type what was said. Auto-graded via `checkTypedAnswer`. */
+/**
+ * Type the foreign form from its meaning (plan 0025 §9, level 9): prompt is
+ * the item's display text, target its `recognizePrompt`. Auto-graded via
+ * `checkTypedAnswer`, the same check cloze and dictation use.
+ *
+ * Derived, not authored — no task type builds this, which is what makes the
+ * top of the ladder reachable on Books published before the plan existed.
+ * Lexemes and concepts only: typing a whole sentence from its translation is
+ * dictation without the audio, and belongs at level 10 if anywhere.
+ */
+export interface WriteQuestion {
+  kind: "write";
+  unitId: string;
+  prompt: string;
+  target: string;
+}
+
 export interface DictationQuestion {
   kind: "dictation";
   unitId: string;
@@ -93,7 +124,10 @@ export interface MinimalPairQuestion {
   correctIndex: number;
 }
 
-/** MCQ over same-kind display texts, prompted by an image. Auto-graded like `RecognizeQuestion`. */
+/** MCQ over same-kind foreign forms, prompted by an image. Auto-graded like
+ * `RecognizeQuestion`. Production direction (plan 0025 §2): an image over a
+ * list of English glosses puts no foreign form on the screen at all, so it
+ * tests nothing about the language. */
 export interface PictureQuestion {
   kind: "picture";
   unitId: string;
@@ -127,6 +161,7 @@ export interface NoteQuestion {
 }
 
 export type Question =
+  | WriteQuestion
   | RecognizeQuestion
   | RecallQuestion
   | ClozeQuestion
@@ -143,9 +178,6 @@ export type Question =
 /** One `(schedulingUnitId, quality)` grading outcome (the outcome-list contract, plan 0002). */
 export type QuestionOutcome = [unitId: string, quality: Quality];
 
-/** Uniform random number in [0, 1), injected so sessions are reproducible in tests. */
-export type Rng = () => number;
-
 /** Builds the recall-presentation question for one item. */
 function recallQuestion(item: Item): RecallQuestion {
   return {
@@ -157,43 +189,55 @@ function recallQuestion(item: Item): RecallQuestion {
 }
 
 /**
- * Fisher-Yates shuffle of a copy of `items`, using `rng` for the swap index
- * at each step. Pinned algorithm: iterate `i` from `length - 1` down to 1,
- * `j = Math.floor(rng() * (i + 1))`, swap `i` and `j`. Exported for the
- * ad-hoc session builder (plan 0004) — the one shuffle everywhere.
- */
-export function shuffle<T>(items: T[], rng: Rng): T[] {
-  const result = [...items];
-  for (let i = result.length - 1; i >= 1; i--) {
-    const j = Math.floor(rng() * (i + 1));
-    const temp = result[i]!;
-    result[i] = result[j]!;
-    result[j] = temp;
-  }
-  return result;
-}
-
-/**
  * Samples `RECOGNIZE_DISTRACTOR_COUNT` same-kind distractors from
- * `unitItems` for `item` and splices its own display text in at a
- * shuffle-scripted index. Shared by `recognize`, `listen`, and `picture`
+ * `unitItems` for `item` and splices `item`'s own choice in at a
+ * shuffle-scripted index. Shared by `recognize`, `listen` and `picture`
  * (the pinned shuffle-and-insert algorithm).
+ *
+ * `choiceText` is the direction (plan 0025 §2): `itemDisplayText` renders
+ * the meaning side, so the learner comprehends; `recognizePrompt` renders
+ * the foreign side, so the learner produces. Distractors are rendered the
+ * same way as the answer, or they would give themselves away.
+ *
+ * Choices are deduplicated *by rendered text*. The validator's class (h)
+ * only guarantees distinct display texts, so a produce-direction board can
+ * be handed two items that share a script — an unanswerable question, since
+ * only one of the two identical buttons is the correct index. Dropping the
+ * clash yields a shorter board instead, exactly as a unit short of siblings
+ * does. Filtering happens before the shuffle so content without a clash
+ * consumes the rng identically.
  */
 function sampleMcq(
   item: Item,
   unitItems: Item[],
   rng: Rng,
+  choiceText: (candidate: Item) => string,
 ): { choices: string[]; correctIndex: number } {
+  const answer = choiceText(item);
   const candidates = unitItems.filter(
     (c) => c.id !== item.id && c.kind === item.kind,
   );
-  const distractors = shuffle(candidates, rng).slice(
-    0,
-    RECOGNIZE_DISTRACTOR_COUNT,
+  const seen = new Set([answer]);
+  const distractors: string[] = [];
+  for (const candidate of shuffle(candidates, rng)) {
+    if (distractors.length === RECOGNIZE_DISTRACTOR_COUNT) {
+      break;
+    }
+    const text = choiceText(candidate);
+    if (seen.has(text)) {
+      continue;
+    }
+    seen.add(text);
+    distractors.push(text);
+  }
+  // Clamped, because a board short of distractors would otherwise report a
+  // correct index past its own end (splice silently appends).
+  const correctIndex = Math.min(
+    Math.floor(rng() * (RECOGNIZE_DISTRACTOR_COUNT + 1)),
+    distractors.length,
   );
-  const correctIndex = Math.floor(rng() * (RECOGNIZE_DISTRACTOR_COUNT + 1));
-  const choices = distractors.map((candidate) => itemDisplayText(candidate));
-  choices.splice(correctIndex, 0, itemDisplayText(item));
+  const choices = [...distractors];
+  choices.splice(correctIndex, 0, answer);
   return { choices, correctIndex };
 }
 
@@ -389,7 +433,12 @@ export function buildTaskSession(
 
       return task.itemIds.map((itemId): Question => {
         const item = itemById.get(itemId)!;
-        const { choices, correctIndex } = sampleMcq(item, unitItems, rng);
+        const { choices, correctIndex } = sampleMcq(
+          item,
+          unitItems,
+          rng,
+          itemDisplayText,
+        );
         return {
           kind: "recognize",
           unitId: itemId,
@@ -449,7 +498,12 @@ export function buildTaskSession(
       const unitItems = owningUnitItems();
       return task.itemIds.map((itemId): Question => {
         const item = itemById.get(itemId)!;
-        const { choices, correctIndex } = sampleMcq(item, unitItems, rng);
+        const { choices, correctIndex } = sampleMcq(
+          item,
+          unitItems,
+          rng,
+          itemDisplayText,
+        );
         return {
           kind: "listen",
           unitId: itemId,
@@ -498,7 +552,12 @@ export function buildTaskSession(
       const unitItems = owningUnitItems();
       return task.itemIds.map((itemId): Question => {
         const item = itemById.get(itemId)!;
-        const { choices, correctIndex } = sampleMcq(item, unitItems, rng);
+        const { choices, correctIndex } = sampleMcq(
+          item,
+          unitItems,
+          rng,
+          recognizePrompt,
+        );
         return {
           kind: "picture",
           unitId: itemId,
@@ -561,6 +620,113 @@ export function buildTaskSession(
  * `taskId` at construction time is the only reliable way to carry it
  * forward.
  */
+/**
+ * The task type that presents `exercise`, or `null` for the two this plan
+ * derives from content that authored no task for them (plan 0025 §9).
+ *
+ * The reverse of `TASK_EXERCISES`, computed rather than written out so the
+ * two cannot drift: adding an exercise to a task type's list is enough.
+ */
+function taskTypeFor(exercise: Exercise): TaskType | null {
+  for (const [type, exercises] of Object.entries(TASK_EXERCISES)) {
+    if (exercises.includes(exercise) && exercise !== "recognize-produce") {
+      return type as TaskType;
+    }
+  }
+  return null;
+}
+
+/**
+ * The question that asks `unit` as `exercise` (plan 0025 §4 picks the
+ * exercise; this builds it). `null` when the content cannot produce one —
+ * a caller with no question moves on rather than showing a broken card.
+ *
+ * Exercises backed by an authored task delegate to `buildTaskSession` over a
+ * **synthetic single-item copy** of the real task, which is plan 0022 §6's
+ * trick generalised: every builder — distractor sampling, token banks,
+ * asset stems, the cloze fan-out — is reused untouched, and the synthetic
+ * task keeps the real task's id so `owningUnitOf` still finds the pool.
+ *
+ * The two derived exercises are built here directly, because no task exists
+ * to copy.
+ */
+export function buildExerciseQuestion(
+  unit: SchedulingUnit,
+  exercise: Exercise,
+  content: Content,
+  rng: Rng,
+): Question | null {
+  const item = unit.item;
+  if (item === undefined) {
+    return null;
+  }
+
+  if (exercise === "write") {
+    if (item.kind !== "lexeme" && item.kind !== "concept") {
+      return null;
+    }
+    return {
+      kind: "write",
+      unitId: unit.id,
+      prompt: itemDisplayText(item),
+      target: recognizePrompt(item),
+    };
+  }
+
+  if (exercise === "recognize-produce") {
+    if (item.kind === "pair") {
+      return null;
+    }
+    const owner = content.units.find((u) => u.itemIds.includes(item.id));
+    const unitItems = (owner?.itemIds ?? [])
+      .map((id) => content.items.find((i) => i.id === id))
+      .filter((i): i is Item => i !== undefined);
+    const { choices, correctIndex } = sampleMcq(
+      item,
+      unitItems,
+      rng,
+      recognizePrompt,
+    );
+    return {
+      kind: "recognize",
+      unitId: unit.id,
+      prompt: itemDisplayText(item),
+      choices,
+      correctIndex,
+    };
+  }
+
+  const type = taskTypeFor(exercise);
+  if (type === null) {
+    return null;
+  }
+  const task = content.tasks.find(
+    (candidate) =>
+      candidate.type === type && candidate.itemIds.includes(item.id),
+  );
+  if (task === undefined) {
+    return null;
+  }
+  // Matching keeps the task's whole item list: a board is a board, and a
+  // one-pair one "is not a question at all" (plan 0022 §6's words). Every
+  // other exercise narrows to this item, so the session asks about the word
+  // whose turn it is rather than its whole task.
+  const built =
+    exercise === "matching"
+      ? buildTaskSession(task, content, rng)
+      : buildTaskSession({ ...task, itemIds: [item.id] }, content, rng);
+  // A cloze task fans out one question per blank; this scheduling unit is
+  // one of them, so pick the blank it names rather than the first.
+  if (unit.blankNumber !== undefined) {
+    // A matching board has no `unitId` — and cannot be a cloze question
+    // anyway, so narrowing it away here is exhaustive rather than defensive.
+    return (
+      built.find((q) => q.kind !== "matching" && q.unitId === unit.id) ?? null
+    );
+  }
+  return built[0] ?? null;
+}
+
 export function buildUnitSession(
   unit: Unit,
   content: Content,
@@ -616,6 +782,73 @@ function countTaskQuestions(task: Task, itemById: Map<string, Item>): number {
       task.type satisfies never;
       throw new Error(`unknown task type: ${task.type as string}`);
   }
+}
+
+/**
+ * The question for one planned visit (plan 0025 §4, §6): the draw picks the
+ * exercise from the word's level and the visit's slot, and the builder turns
+ * it into a card.
+ *
+ * One visit at a time, not a whole session: §6's queue is asked for the next
+ * question and told how the answer went, so a word that was just missed is
+ * re-drawn a level lower rather than re-showing the card it already failed.
+ *
+ * `null` when the content can build nothing for this word — reachable from a
+ * draft, where a unit can hold an item no task references yet. The caller
+ * moves on rather than showing a blank card.
+ *
+ * `coveredByBoard` is the words a matching board earlier in this session
+ * already answered for. A board answers for every word on it, so without
+ * this a unit of four new words would open with four identical boards; a
+ * covered word draws its next exercise up instead.
+ */
+export function buildVisitQuestion(
+  visit: PlannedVisit,
+  unit: Unit,
+  content: Content,
+  levelOf: (schedulingUnitId: string) => number,
+  rng: Rng,
+  coveredByBoard: ReadonlySet<string> = new Set(),
+): { question: Question; taskId: string } | null {
+  const item = content.items.find((candidate) => candidate.id === visit.unitId);
+  if (item === undefined) {
+    return null;
+  }
+
+  let available = availableExercises(item, content);
+  if (coveredByBoard.has(visit.unitId)) {
+    available = available.filter((exercise) => exercise !== "matching");
+  }
+  // `levelOffset` is how far this word has slipped *within* the session: a
+  // miss brings it back one lower, so the draw sees the lowered level.
+  const level = Math.max(levelOf(visit.unitId) + visit.levelOffset, 0);
+  const exercise = drawExercise(level, visit.slot, available, rng);
+  if (exercise === null) {
+    return null;
+  }
+  const question = buildExerciseQuestion(
+    { id: item.id, item },
+    exercise,
+    content,
+    rng,
+  );
+  if (question === null) {
+    return null;
+  }
+
+  // The task this exercise came from, for the pin control and the edit
+  // route. A derived exercise has no authored task, so it borrows the unit's
+  // first task that references the item — which is what both of those
+  // surfaces actually want: somewhere in this unit to act on.
+  const taskById = new Map(content.tasks.map((task) => [task.id, task]));
+  const taskId =
+    unit.taskIds.find((id) => {
+      const task = taskById.get(id);
+      return task !== undefined && task.itemIds.includes(item.id);
+    }) ??
+    unit.taskIds[0] ??
+    unit.id;
+  return { question, taskId };
 }
 
 export function countUnitQuestions(unit: Unit, content: Content): number {

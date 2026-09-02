@@ -416,6 +416,40 @@ section.card {
   margin: 1.5rem 0;
 }
 
+/* Key row for the characters a domain declares its script needs and a
+ * learner's keyboard cannot produce (plan 0025 §10). 44px minimum touch
+ * target, per the accessibility floor in design.md. */
+/* The keyboard setup card (plan 0025 §10): a `.card` that also appears
+   above a typed answer, so it needs the margin a session body does not
+   otherwise give it, and steps that read as steps. */
+.keyboard-setup {
+  margin-bottom: 1rem;
+  text-align: left;
+}
+
+.keyboard-setup ol {
+  margin: 0.5rem 0;
+  padding-left: 1.25rem;
+}
+
+.keyboard-setup li {
+  margin-bottom: 0.4rem;
+}
+
+.extra-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.extra-keys button {
+  min-width: 44px;
+  min-height: 44px;
+  font-size: 1.25rem;
+  padding: 0;
+}
+
 .card.correct {
   border-color: var(--correct-border);
   background: var(--correct-bg);

@@ -1,11 +1,14 @@
 import { describe, it, expect } from "vitest";
 import type { Content, Item, Lesson, Unit } from "@betterbeaver/schema";
-import type { SchedulingConfig, SrsState } from "@betterbeaver/srs";
+import type { SrsState } from "@betterbeaver/srs";
+import { REVIEW_PACES } from "@betterbeaver/srs";
 import {
   dueCountsByLesson,
   dueCountsByUnit,
   isUnitComplete,
   isUnitUnlocked,
+  unitProgressByBook,
+  type UnitProgress,
   isLessonComplete,
   isLessonUnlocked,
   nextUnit,
@@ -14,11 +17,18 @@ import {
 } from "./progress.js";
 import type { SchedulingUnit } from "./units.js";
 
-/** The interval oracles below pin plan 0001's SM-2 arithmetic, which plan
- * 0022 made the non-default scheduler — so they ask for it by name. The
- * ladder's own transitions are covered in `packages/srs`, and the
- * default-scheduler path is exercised at the bottom of this file. */
-const SM2: SchedulingConfig = { scheduler: "sm2", pace: "balanced" };
+/** A card written by the level scheduler, at `level` on Balanced. The
+ * level's own transitions are covered in `packages/srs`; what these tests
+ * pin is how `applyGrade` and `reviewQueue` behave around them. */
+function atLevel(level: number, due: string): SrsState {
+  return {
+    due,
+    intervalDays: REVIEW_PACES.balanced[level]!,
+    ease: 2.5,
+    reps: level,
+    levelDay: "2026-07-01",
+  };
+}
 
 function makeUnit(overrides: Partial<Unit> & Pick<Unit, "id">): Unit {
   return {
@@ -65,16 +75,196 @@ function makeContent(args: {
   };
 }
 
-describe("isUnitComplete", () => {
-  it("is false until every task of the unit has been attempted", () => {
-    const unit = makeUnit({
-      id: "t-unit-a",
-      taskIds: ["t-task-1", "t-task-2"],
-    });
+/** A progress map in which exactly the named units are complete; every
+ * other unit reads incomplete, which is what an absent entry means. */
+function completed(...unitIds: string[]): Map<string, UnitProgress> {
+  return new Map(
+    unitIds.map((id) => [
+      id,
+      { percent: 100, started: 1, total: 1, complete: true },
+    ]),
+  );
+}
 
-    expect(isUnitComplete(unit, new Set())).toBe(false);
-    expect(isUnitComplete(unit, new Set(["t-task-1"]))).toBe(false);
-    expect(isUnitComplete(unit, new Set(["t-task-1", "t-task-2"]))).toBe(true);
+describe("isUnitComplete", () => {
+  it("reads the unit's own entry in the sweep", () => {
+    const unit = makeUnit({ id: "t-unit-a" });
+    expect(isUnitComplete(unit, completed())).toBe(false);
+    expect(isUnitComplete(unit, completed("t-unit-b"))).toBe(false);
+    expect(isUnitComplete(unit, completed("t-unit-a"))).toBe(true);
+  });
+});
+
+describe("unitProgressByBook (plan 0025 §8)", () => {
+  const water: Item = {
+    id: "t-item-water",
+    kind: "lexeme",
+    payload: { script: "суу", transliteration: "suu", gloss: "water" },
+    sourceRef: "t-resource-1",
+  };
+  const bread: Item = {
+    id: "t-item-bread",
+    kind: "lexeme",
+    payload: { script: "нан", transliteration: "nan", gloss: "bread" },
+    sourceRef: "t-resource-1",
+  };
+  const unit = makeUnit({
+    id: "t-unit-a",
+    itemIds: [water.id, bread.id],
+    taskIds: ["t-task-1"],
+    noteIds: ["t-note-1"],
+  });
+  const content: Content = {
+    ...makeContent({
+      lessonIds: ["t-lesson-a"],
+      lessons: [makeLesson({ id: "t-lesson-a", unitIds: [unit.id] })],
+      units: [unit],
+    }),
+    items: [water, bread],
+    tasks: [{ id: "t-task-1", type: "recall", itemIds: [water.id, bread.id] }],
+    notes: [{ id: "t-note-1", stem: "n1" }],
+  };
+
+  function at(level: number): SrsState {
+    return {
+      due: "2026-07-05T00:00:00.000Z",
+      intervalDays: 1,
+      ease: 2.5,
+      reps: level,
+      levelDay: "2026-07-04",
+    };
+  }
+
+  it("is the mean word level times ten, as a percentage", () => {
+    const states = new Map([
+      [water.id, at(3)],
+      [bread.id, at(7)],
+    ]);
+    expect(unitProgressByBook(content, states).get(unit.id)).toEqual({
+      percent: 50,
+      started: 2,
+      total: 2,
+      complete: true,
+    });
+  });
+
+  it("moves from the first session, and reaches 100 only at the top", () => {
+    expect(unitProgressByBook(content, new Map()).get(unit.id)?.percent).toBe(
+      0,
+    );
+    expect(
+      unitProgressByBook(
+        content,
+        new Map([
+          [water.id, at(1)],
+          [bread.id, at(0)],
+        ]),
+      ).get(unit.id)?.percent,
+    ).toBe(5);
+    expect(
+      unitProgressByBook(
+        content,
+        new Map([
+          [water.id, at(10)],
+          [bread.id, at(10)],
+        ]),
+      ).get(unit.id)?.percent,
+    ).toBe(100);
+  });
+
+  it("is complete when every word has been right once, not when it is mastered", () => {
+    // "You have been through this unit" and "you are done with this unit"
+    // are different facts. A unit read as complete at 10% is telling the
+    // truth twice.
+    const progress = unitProgressByBook(
+      content,
+      new Map([
+        [water.id, at(1)],
+        [bread.id, at(1)],
+      ]),
+    ).get(unit.id);
+    expect(progress).toEqual({
+      percent: 10,
+      started: 2,
+      total: 2,
+      complete: true,
+    });
+  });
+
+  it("is not complete while one word has never been right", () => {
+    // Stricter than the rule it replaces: a wrong answer counted as an
+    // attempt, and one answer marked a whole five-item task attempted.
+    const progress = unitProgressByBook(
+      content,
+      new Map([
+        [water.id, at(6)],
+        [bread.id, at(0)],
+      ]),
+    ).get(unit.id);
+    expect(progress?.started).toBe(1);
+    expect(progress?.complete).toBe(false);
+  });
+
+  it("does not count the unit's notes", () => {
+    // A note is not a word and never reaches a level, so weighting the bar
+    // with one would cap it below 100 forever (plan 0025 §13).
+    const states = new Map([
+      [water.id, at(10)],
+      [bread.id, at(10)],
+      ["note:t-note-1", at(0)],
+    ]);
+    expect(unitProgressByBook(content, states).get(unit.id)).toEqual({
+      percent: 100,
+      started: 2,
+      total: 2,
+      complete: true,
+    });
+  });
+
+  it("counts each cloze blank as its own word", () => {
+    const sentence: Item = {
+      id: "t-item-sentence",
+      kind: "sentence",
+      payload: { text: "{{c1::a}} {{c2::b}}", translation: "t" },
+      sourceRef: "t-resource-1",
+    };
+    const clozeUnit = makeUnit({
+      id: "t-unit-cloze",
+      itemIds: [sentence.id],
+      taskIds: ["t-task-cloze"],
+    });
+    const clozeContent: Content = {
+      ...content,
+      units: [clozeUnit],
+      items: [sentence],
+      tasks: [{ id: "t-task-cloze", type: "cloze", itemIds: [sentence.id] }],
+      notes: [],
+    };
+    const progress = unitProgressByBook(
+      clozeContent,
+      new Map([[`${sentence.id}::c1`, at(4)]]),
+    ).get(clozeUnit.id);
+    expect(progress?.total).toBe(2);
+    expect(progress?.started).toBe(1);
+    expect(progress?.percent).toBe(20);
+  });
+
+  it("reads a unit with no words as complete rather than unfinishable", () => {
+    // A scheduling unit exists only for an item some task references, so
+    // "no words" means "no exercises" — and a unit nothing could ever
+    // finish would sit across the navigation spine forever.
+    const empty = makeUnit({ id: "t-unit-empty" });
+    const emptyContent = makeContent({
+      lessonIds: ["t-lesson-a"],
+      lessons: [makeLesson({ id: "t-lesson-a", unitIds: [empty.id] })],
+      units: [empty],
+    });
+    expect(unitProgressByBook(emptyContent, new Map()).get(empty.id)).toEqual({
+      percent: 0,
+      started: 0,
+      total: 0,
+      complete: true,
+    });
   });
 });
 
@@ -88,18 +278,16 @@ describe("isUnitUnlocked", () => {
   const units = [unitA, unitB];
 
   it("a unit without unlocksAfterUnitId is always unlocked", () => {
-    expect(isUnitUnlocked(unitA, units, new Set())).toBe(true);
+    expect(isUnitUnlocked(unitA, units, completed())).toBe(true);
   });
 
-  it("is locked when the gating unit's tasks are not all attempted", () => {
-    expect(isUnitUnlocked(unitB, units, new Set())).toBe(false);
-    expect(isUnitUnlocked(unitB, units, new Set(["t-task-1"]))).toBe(false);
+  it("is locked while the gating unit still has a word at level 0", () => {
+    expect(isUnitUnlocked(unitB, units, completed())).toBe(false);
+    expect(isUnitUnlocked(unitB, units, completed("t-unit-b"))).toBe(false);
   });
 
-  it("is unlocked once every task of the gating unit is attempted", () => {
-    expect(
-      isUnitUnlocked(unitB, units, new Set(["t-task-1", "t-task-2"])),
-    ).toBe(true);
+  it("is unlocked once every word of the gating unit has been right once", () => {
+    expect(isUnitUnlocked(unitB, units, completed("t-unit-a"))).toBe(true);
   });
 
   it("defensively treats a missing gate unit as unlocked", () => {
@@ -107,7 +295,7 @@ describe("isUnitUnlocked", () => {
       id: "t-unit-c",
       unlocksAfterUnitId: "t-unit-missing",
     });
-    expect(isUnitUnlocked(orphan, units, new Set())).toBe(true);
+    expect(isUnitUnlocked(orphan, units, completed())).toBe(true);
   });
 });
 
@@ -121,10 +309,10 @@ describe("isLessonComplete", () => {
     });
     const units = [unitA, unitB];
 
-    expect(isLessonComplete(lesson, units, new Set())).toBe(false);
-    expect(isLessonComplete(lesson, units, new Set(["t-task-1"]))).toBe(false);
+    expect(isLessonComplete(lesson, units, completed())).toBe(false);
+    expect(isLessonComplete(lesson, units, completed("t-unit-a"))).toBe(false);
     expect(
-      isLessonComplete(lesson, units, new Set(["t-task-1", "t-task-2"])),
+      isLessonComplete(lesson, units, completed("t-unit-a", "t-unit-b")),
     ).toBe(true);
   });
 });
@@ -144,16 +332,16 @@ describe("isLessonUnlocked", () => {
   const units = [lessonUnitA];
 
   it("a lesson without unlocksAfterLessonId is always unlocked", () => {
-    expect(isLessonUnlocked(lessonA, lessons, units, new Set())).toBe(true);
+    expect(isLessonUnlocked(lessonA, lessons, units, completed())).toBe(true);
   });
 
   it("is locked when the gating lesson's units are not all complete", () => {
-    expect(isLessonUnlocked(lessonB, lessons, units, new Set())).toBe(false);
+    expect(isLessonUnlocked(lessonB, lessons, units, completed())).toBe(false);
   });
 
   it("is unlocked once every unit of the gating lesson is complete", () => {
     expect(
-      isLessonUnlocked(lessonB, lessons, units, new Set(["t-task-1"])),
+      isLessonUnlocked(lessonB, lessons, units, completed("t-unit-a")),
     ).toBe(true);
   });
 
@@ -162,7 +350,7 @@ describe("isLessonUnlocked", () => {
       id: "t-lesson-c",
       unlocksAfterLessonId: "t-lesson-missing",
     });
-    expect(isLessonUnlocked(orphan, lessons, units, new Set())).toBe(true);
+    expect(isLessonUnlocked(orphan, lessons, units, completed())).toBe(true);
   });
 });
 
@@ -182,25 +370,22 @@ describe("nextUnit", () => {
     units: [unitA1, unitA2, unitB1],
   });
 
-  it("nothing attempted -> the first unit of the first lesson", () => {
-    expect(nextUnit(content, new Set())).toEqual({
+  it("nothing answered -> the first unit of the first lesson", () => {
+    expect(nextUnit(content, completed())).toEqual({
       lessonId: lessonA.id,
       unitId: unitA1.id,
     });
   });
 
   it("first unit complete -> the second unit", () => {
-    expect(nextUnit(content, new Set(["t-task-a1"]))).toEqual({
+    expect(nextUnit(content, completed("t-unit-a1"))).toEqual({
       lessonId: lessonA.id,
       unitId: unitA2.id,
     });
   });
 
-  it("half-attempted unit (some but not all taskIds) -> that same unit, not the next one", () => {
-    const half = makeUnit({
-      id: "t-unit-half",
-      taskIds: ["t-task-h1", "t-task-h2"],
-    });
+  it("half-answered unit (some but not all words) -> that same unit, not the next one", () => {
+    const half = makeUnit({ id: "t-unit-half" });
     const lessonHalf = makeLesson({
       id: "t-lesson-half",
       unitIds: [half.id, unitA1.id],
@@ -210,21 +395,21 @@ describe("nextUnit", () => {
       lessons: [lessonHalf],
       units: [half, unitA1],
     });
-    expect(nextUnit(halfContent, new Set(["t-task-h1"]))).toEqual({
+    expect(nextUnit(halfContent, completed())).toEqual({
       lessonId: lessonHalf.id,
       unitId: half.id,
     });
   });
 
   it("last unit of lesson 1 complete -> the first unit of lesson 2 (crosses the boundary)", () => {
-    expect(nextUnit(content, new Set(["t-task-a1", "t-task-a2"]))).toEqual({
+    expect(nextUnit(content, completed("t-unit-a1", "t-unit-a2"))).toEqual({
       lessonId: lessonB.id,
       unitId: unitB1.id,
     });
   });
 
   it("skip-ahead shape: lesson 1 incomplete, lesson 2 fully complete -> points back into lesson 1", () => {
-    expect(nextUnit(content, new Set(["t-task-b1"]))).toEqual({
+    expect(nextUnit(content, completed("t-unit-b1"))).toEqual({
       lessonId: lessonA.id,
       unitId: unitA1.id,
     });
@@ -232,7 +417,7 @@ describe("nextUnit", () => {
 
   it("every unit complete -> null", () => {
     expect(
-      nextUnit(content, new Set(["t-task-a1", "t-task-a2", "t-task-b1"])),
+      nextUnit(content, completed("t-unit-a1", "t-unit-a2", "t-unit-b1")),
     ).toBeNull();
   });
 
@@ -246,7 +431,7 @@ describe("nextUnit", () => {
       lessons: [danglingLesson],
       units: [unitB1],
     });
-    expect(nextUnit(danglingContent, new Set())).toEqual({
+    expect(nextUnit(danglingContent, completed())).toEqual({
       lessonId: danglingLesson.id,
       unitId: unitB1.id,
     });
@@ -260,7 +445,7 @@ describe("nextUnit", () => {
       lessons: [lessonB, lessonA],
       units: [unitB1, unitA2, unitA1],
     });
-    expect(nextUnit(reorderedContent, new Set())).toEqual({
+    expect(nextUnit(reorderedContent, completed())).toEqual({
       lessonId: lessonA.id,
       unitId: unitA1.id,
     });
@@ -384,6 +569,47 @@ describe("reviewQueue pinning (plan 0008)", () => {
   });
 });
 
+describe("notes leave the review queue (plan 0025 §13)", () => {
+  const note: SchedulingUnit = {
+    id: "note:t-note-1",
+    note: { id: "t-note-1", stem: "n1" },
+  };
+  const dueYesterday: SrsState = {
+    due: "2026-07-04T00:00:00.000Z",
+    intervalDays: 1,
+    ease: 2.5,
+    reps: 1,
+    levelDay: "2026-07-03",
+  };
+  const now = new Date("2026-07-05T00:00:00Z");
+  const states = new Map<string, SrsState>([
+    [note.id, dueYesterday],
+    [item1.id, dueYesterday],
+  ]);
+
+  it("leaves a due note out entirely", () => {
+    // Theory is reference material, read when it is needed. It used to come
+    // back as a self-graded flashcard forever, because every note in a unit
+    // is a scheduling unit.
+    expect(reviewQueue([note, unit1], states, now)).toEqual([unit1]);
+  });
+
+  it("puts it back the moment it is pinned", () => {
+    // Pin already grades a note `again` so that it becomes due; for notes
+    // only, it now also means "include this at all".
+    expect(reviewQueue([note, unit1], states, now, new Set([note.id]))).toEqual(
+      [note, unit1],
+    );
+  });
+
+  it("does not touch stored note state", () => {
+    // Nothing to migrate: the state stays where it is and simply is not
+    // read for queueing.
+    reviewQueue([note], states, now);
+    expect(states.get(note.id)).toEqual(dueYesterday);
+  });
+});
+
 describe("reviewQueue / applyGrade boundary: due exactly equal to now", () => {
   it("a unit due exactly at `now` is included in reviewQueue", () => {
     const states = new Map<string, SrsState>([
@@ -436,48 +662,59 @@ describe("reviewQueue / applyGrade repair: unparseable due", () => {
   it("applyGrade repairs a corrupted due state by advancing it", () => {
     const corrupted: SrsState = {
       due: "not-a-date",
-      intervalDays: 1,
+      intervalDays: 30,
       ease: 2.5,
-      reps: 1,
+      reps: 8,
+      levelDay: "2026-07-01",
     };
-    const result = applyGrade(
-      corrupted,
-      4,
-      new Date("2026-07-06T00:00:00Z"),
-      SM2,
-    );
+    const result = applyGrade(corrupted, 4, new Date("2026-07-06T00:00:00Z"));
     expect(result).not.toBeNull();
-    expect(result!.due).toBe("2026-07-12T00:00:00.000Z");
+    expect(result!.reps).toBe(9);
+    expect(result!.due).toBe("2026-10-04T00:00:00.000Z");
   });
 });
 
 describe("clock-injected review cycle", () => {
   it("first grading schedules the item, review queue reflects due, re-grading while not due is practice-only, grading when due advances", () => {
-    const firstGrade = new Date("2026-07-04T10:00:00Z");
-    const state1 = applyGrade(null, 4, firstGrade, SM2);
-    expect(state1).not.toBeNull();
-    expect(state1!.due).toBe("2026-07-05T00:00:00.000Z");
+    // Staged at the production level, where the practice-only rule applies:
+    // below it a word is due daily and answering it again the same day is
+    // the point (plan 0025 §5), which the test below this one pins.
+    const state1 = atLevel(6, "2026-07-04T00:00:00.000Z");
 
-    const states = new Map<string, SrsState>([[item1.id, state1!]]);
+    const states = new Map<string, SrsState>([[item1.id, state1]]);
     expect(
-      reviewQueue([unit1], states, new Date("2026-07-04T12:00:00Z")),
+      reviewQueue([unit1], states, new Date("2026-07-03T12:00:00Z")),
     ).toEqual([]);
     expect(
-      reviewQueue([unit1], states, new Date("2026-07-05T01:00:00Z")),
+      reviewQueue([unit1], states, new Date("2026-07-04T01:00:00Z")),
     ).toEqual([unit1]);
 
-    // Not due yet at 2026-07-04T12:00:00Z: practice-only, nothing to persist.
-    expect(
-      applyGrade(state1, 4, new Date("2026-07-04T12:00:00Z"), SM2),
-    ).toBeNull();
-
-    // Due by 2026-07-05T01:00:00Z: grading advances state.
-    const secondGrade = new Date("2026-07-05T01:00:00Z");
-    const state2 = applyGrade(state1, 4, secondGrade, SM2);
+    // Due by 2026-07-04T01:00:00Z: grading advances state.
+    const state2 = applyGrade(state1, 4, new Date("2026-07-04T01:00:00Z"));
     expect(state2).not.toBeNull();
-    expect(state2!.reps).toBe(2);
-    expect(state2!.intervalDays).toBe(6);
-    expect(state2!.due).toBe("2026-07-11T00:00:00.000Z");
+    expect(state2!.reps).toBe(7);
+    expect(state2!.intervalDays).toBe(15);
+    expect(state2!.due).toBe("2026-07-19T00:00:00.000Z");
+
+    // Not due until then: practice-only, nothing to persist.
+    expect(applyGrade(state2, 4, new Date("2026-07-05T12:00:00Z"))).toBeNull();
+  });
+
+  it("keeps counting answers to a word that has not reached production yet", () => {
+    // The other half of §5: a word answered right once is due tomorrow, so
+    // the practice-only rule alone would refuse the rest of its first
+    // session and it could never reach level 3 in one sitting.
+    const morning = new Date("2026-07-04T09:00:00Z");
+    const evening = new Date("2026-07-04T21:00:00Z");
+    const first = applyGrade(null, 4, morning);
+    expect(first!.reps).toBe(1);
+    const second = applyGrade(first, 4, morning);
+    expect(second!.reps).toBe(2);
+    const third = applyGrade(second, 4, evening);
+    expect(third!.reps).toBe(3);
+    // And there it stops for the day: the fourth win would arrive at
+    // production, which the day guard refuses.
+    expect(applyGrade(third, 4, evening)!.reps).toBe(3);
   });
 });
 
@@ -500,38 +737,39 @@ describe("cloze blanks schedule independently (plan 0002 done-criterion)", () =>
       blankNumber: 2,
     };
 
+    // Both blanks start at level 7 — 15 days on Balanced — because that is
+    // where one right answer and one wrong one part company. Under the
+    // level scheduler the first four levels are all daily (plan 0025 §3),
+    // so a brand-new pair of blanks would be due together whatever they
+    // scored, and the independence would be invisible rather than absent.
     const day0 = new Date("2026-07-04T00:00:00Z");
+    const seeded = atLevel(7, "2026-07-04T00:00:00.000Z");
     const states = new Map<string, SrsState>();
-    states.set(blank1.id, applyGrade(null, 4, day0, SM2)!);
-    states.set(blank2.id, applyGrade(null, 4, day0, SM2)!);
-    // First SM-2 grade always yields a 1-day interval, so both blanks are
-    // due at day 1 regardless of quality.
-    expect(states.get(blank1.id)!.due).toBe("2026-07-05T00:00:00.000Z");
-    expect(states.get(blank2.id)!.due).toBe("2026-07-05T00:00:00.000Z");
-
-    const day1 = new Date("2026-07-05T00:00:00Z");
-    expect(reviewQueue([blank1, blank2], states, day1)).toEqual([
+    states.set(blank1.id, seeded);
+    states.set(blank2.id, seeded);
+    expect(reviewQueue([blank1, blank2], states, day0)).toEqual([
       blank1,
       blank2,
     ]);
-    states.set(blank1.id, applyGrade(states.get(blank1.id)!, 4, day1, SM2)!);
-    states.set(blank2.id, applyGrade(states.get(blank2.id)!, 2, day1, SM2)!);
 
-    const day2 = new Date("2026-07-06T00:00:00Z");
-    expect(reviewQueue([blank1, blank2], states, day2)).toEqual([blank2]);
+    states.set(blank1.id, applyGrade(states.get(blank1.id)!, 4, day0)!);
+    states.set(blank2.id, applyGrade(states.get(blank2.id)!, 2, day0)!);
+    // Right: level 8, 30 days. Wrong: two levels back to 5, 5 days — the
+    // §5 fall-back, not a reset to the start.
+    expect(states.get(blank1.id)!.reps).toBe(8);
+    expect(states.get(blank2.id)!.reps).toBe(5);
 
-    // Blank 1 (graded "correct") returns further out (~day 7+); blank 2
-    // (graded "wrong") is due again the very next day.
+    const day5 = new Date("2026-07-09T00:00:00Z");
+    expect(reviewQueue([blank1, blank2], states, day5)).toEqual([blank2]);
+
     const blank1Due = new Date(states.get(blank1.id)!.due).getTime();
-    const day2Time = day2.getTime();
-    expect(blank1Due).toBeGreaterThan(day2Time);
-    expect(blank1Due - day2Time).toBeGreaterThanOrEqual(
-      4 * 24 * 60 * 60 * 1000,
+    expect(blank1Due - day5.getTime()).toBeGreaterThanOrEqual(
+      20 * 24 * 60 * 60 * 1000,
     );
   });
 });
 
-describe("applyGrade under the default (ladder) scheduler", () => {
+describe("applyGrade under the default pace", () => {
   const sentence: Item = {
     id: "t-item-ladder-sentence",
     kind: "sentence",
@@ -549,32 +787,33 @@ describe("applyGrade under the default (ladder) scheduler", () => {
     blankNumber: 2,
   };
 
-  it("cloze blanks still schedule independently, on ladder intervals", () => {
+  it("walks a new blank up the daily levels, one day at a time after that", () => {
     const day0 = new Date("2026-08-05T00:00:00Z");
     const states = new Map<string, SrsState>();
     states.set(blank1.id, applyGrade(null, 4, day0)!);
     states.set(blank2.id, applyGrade(null, 4, day0)!);
-    // A first Good under the ladder is rung 1 — 5 days, not SM-2's 1.
-    expect(states.get(blank1.id)!.due).toBe("2026-08-10T00:00:00.000Z");
+    // A first Good is level 1 — due tomorrow, because difficulty is what
+    // climbs through the first four levels, not spacing.
+    expect(states.get(blank1.id)!.due).toBe("2026-08-06T00:00:00.000Z");
 
-    const day5 = new Date("2026-08-10T00:00:00Z");
-    expect(reviewQueue([blank1, blank2], states, day5)).toEqual([
+    const day1 = new Date("2026-08-06T00:00:00Z");
+    expect(reviewQueue([blank1, blank2], states, day1)).toEqual([
       blank1,
       blank2,
     ]);
-    states.set(blank1.id, applyGrade(states.get(blank1.id)!, 4, day5)!);
-    states.set(blank2.id, applyGrade(states.get(blank2.id)!, 2, day5)!);
-
-    const day6 = new Date("2026-08-11T00:00:00Z");
-    expect(reviewQueue([blank1, blank2], states, day6)).toEqual([blank2]);
-    expect(states.get(blank1.id)!.intervalDays).toBe(15);
-    expect(states.get(blank2.id)!.intervalDays).toBe(1);
+    states.set(blank1.id, applyGrade(states.get(blank1.id)!, 4, day1)!);
+    states.set(blank2.id, applyGrade(states.get(blank2.id)!, 2, day1)!);
+    expect(states.get(blank1.id)!.reps).toBe(2);
+    // Two levels back from 1 floors at 0 — the bottom, not a punishment.
+    expect(states.get(blank2.id)!.reps).toBe(0);
   });
 
-  it("still refuses to advance a not-due card", () => {
-    const day0 = new Date("2026-08-05T00:00:00Z");
-    const state = applyGrade(null, 4, day0)!;
-    expect(applyGrade(state, 4, new Date("2026-08-06T00:00:00Z"))).toBeNull();
+  it("still refuses to advance a not-due card at the production levels", () => {
+    const state = atLevel(6, "2026-08-05T00:00:00.000Z");
+    const advanced = applyGrade(state, 4, new Date("2026-08-05T00:00:00Z"))!;
+    expect(
+      applyGrade(advanced, 4, new Date("2026-08-06T00:00:00Z")),
+    ).toBeNull();
   });
 });
 

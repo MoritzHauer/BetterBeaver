@@ -74,6 +74,19 @@ export const domainSchema = z.object({
   glossLanguage: z.string().min(1),
   /** BCP-47 tag for reading entry script aloud via TTS (plan 0004's rules, moved here by plan 0006). */
   readAloudLang: z.string().min(1).optional(),
+  /**
+   * Characters this domain's script needs that a learner's keyboard cannot
+   * produce (plan 0025 §10), rendered as a key row over every typed-input
+   * exercise. Kyrgyz is the Russian layout plus exactly three letters, so
+   * `["ң", "ө", "ү"]`; Turkish would declare `ğ ı ş ç ö ü`, a maths domain
+   * `≤ ∈ ∀`. Absent means no row — the list is authored because isolating
+   * these needs a per-language model of what a keyboard already has, which
+   * is the domain-specific code plan 0023 §9 refuses to build.
+   *
+   * Additive and optional, so an older client drops it and parses the
+   * domain unchanged: no `CONTENT_SCHEMA_VERSION` bump.
+   */
+  extraChars: z.array(z.string().min(1)).max(12).optional(),
 });
 export type Domain = z.infer<typeof domainSchema>;
 
@@ -508,6 +521,95 @@ export const TASK_NEEDS_DISTRACTORS: Record<TaskType, boolean> = {
   picture: true,
   // build's word-bank distractors are its own mechanism (engine), not the MCQ sampler.
   build: false,
+};
+
+/**
+ * Every exercise the level ladder ranks (plan 0025 §2).
+ *
+ * An exercise is not the same thing as a task type. `recognize` runs in two
+ * directions — see the foreign word and pick the meaning, or see the meaning
+ * and pick the foreign word — and those are two exercises two levels apart.
+ * `write` is derived from lexeme/concept items with no authored task type of
+ * its own (§9), which is why the two tables below point in opposite
+ * directions: `EXERCISE_LEVEL` covers the ladder, `TASK_EXERCISES` covers
+ * what content can author.
+ */
+export const EXERCISES = [
+  "matching",
+  "recognize",
+  "listen",
+  "minimal-pair",
+  "recognize-produce",
+  "picture",
+  "scramble",
+  "build",
+  "cloze",
+  "recall",
+  "write",
+  "dictation",
+  "shadowing",
+] as const;
+export type Exercise = (typeof EXERCISES)[number];
+
+/** The ladder's bounds. A word level shares the scale but starts at 0 — "not answered correctly yet" (plan 0025 §1). */
+export const MIN_EXERCISE_LEVEL = 1;
+export const MAX_EXERCISE_LEVEL = 10;
+
+/**
+ * How hard each exercise is (plan 0025 §2) — a fixed property of the
+ * exercise, identical for every learner and every Book, and the number a
+ * word's level is compared against.
+ *
+ * `null` is *unranked*, not "level 0": `shadowing` never checks the answer,
+ * so it can neither be a level nor confirm one, and it is never chosen to
+ * advance a word.
+ *
+ * Ties are deliberate. Two exercises at the same level are equally hard and
+ * differ only in modality, so a Book with no audio has fewer options at that
+ * level rather than a hole in its ladder. Three placements carry their own
+ * argument (§2): `matching` sits below `recognize` because a board clears
+ * correct pairs and carries the last one by elimination; `recall` sits below
+ * `write` because both are free production from the meaning side but `write`
+ * is checked; `picture` is a production exercise because an image prompting
+ * a list of English glosses involves no foreign form anywhere.
+ */
+export const EXERCISE_LEVEL: Record<Exercise, number | null> = {
+  shadowing: null,
+  matching: 1,
+  recognize: 2,
+  listen: 3,
+  "minimal-pair": 3,
+  "recognize-produce": 4,
+  picture: 4,
+  scramble: 5,
+  build: 6,
+  cloze: 7,
+  recall: 8,
+  write: 9,
+  dictation: 10,
+};
+
+/**
+ * The exercises each authored task type presents, lowest level first.
+ * Exhaustive over TaskType so adding a type forces a decision here.
+ *
+ * `write` appears in no list: it is derived from any lexeme or concept item
+ * rather than authored as a task (§9), so it is reachable from content that
+ * has no such task type — which is the point, since no published Book could
+ * have authored one.
+ */
+export const TASK_EXERCISES: Record<TaskType, readonly Exercise[]> = {
+  matching: ["matching"],
+  recognize: ["recognize", "recognize-produce"],
+  listen: ["listen"],
+  "minimal-pair": ["minimal-pair"],
+  picture: ["picture"],
+  scramble: ["scramble"],
+  build: ["build"],
+  cloze: ["cloze"],
+  recall: ["recall"],
+  dictation: ["dictation"],
+  shadowing: ["shadowing"],
 };
 
 export const taskSchema = z.object({

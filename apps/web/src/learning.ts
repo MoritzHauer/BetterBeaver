@@ -1,5 +1,7 @@
 /**
- * Learning settings (plan 0022 §8): review pace, scheduler, skip length.
+ * Learning settings (plan 0022 §8): review pace, skip length, and the typed
+ * key row. The scheduler row is gone — plan 0025 §11 removed classic SM-2,
+ * so there is nothing left to choose between.
  *
  * One `bb.learning` key holding one JSON object, which is what makes this
  * free of migration and export work — `progress/backup.ts` sweeps every
@@ -9,14 +11,13 @@
  *
  * Global by force, not by choice: design.md pins "one word = one SRS state
  * across topics" and `bb.item.*` is keyed by item id with no Book scope, so
- * a per-Book ladder would have two schedulers writing contradictory
- * intervals into one lexeme's single state.
+ * a per-Book pace would have two schedulers writing contradictory intervals
+ * into one lexeme's single state.
  */
 import {
   DEFAULT_SCHEDULING,
   REVIEW_PACES,
   type ReviewPace,
-  type SchedulerKind,
   type SchedulingConfig,
 } from "@betterbeaver/srs";
 import { readJson } from "./progress/local-storage";
@@ -33,21 +34,47 @@ export const SKIP_DAYS: Record<SkipLength, number> = {
   year: 365,
 };
 
+/**
+ * How fast a word climbs the ladder (plan 0025 §3, §12): how many correct
+ * answers it is owed per session. One is pure progression — every
+ * appearance a stretch; three surrounds each stretch with consolidation.
+ */
+export type Progression = "careful" | "normal" | "fast";
+
+export const REPETITIONS_PER_WORD: Record<Progression, number> = {
+  careful: 3,
+  normal: 2,
+  fast: 1,
+};
+
 export interface LearningSettings extends SchedulingConfig {
   skip: SkipLength;
+  /** Whether typed exercises show the key row for a domain's `extraChars`
+   * (plan 0025 §10). **Default off**: the real fix is the platform keyboard
+   * layout, and three keys under every answer are clutter for a learner who
+   * installed one. The setup card offers this to anyone who cannot. */
+  extraKeys: boolean;
+  /** Whether the keyboard setup card has been dismissed (plan 0025 §10).
+   * One flag, not one per domain: the card teaches a device-wide skill, and
+   * a learner who has added one layout knows where the setting lives. */
+  keyboardHelpDismissed: boolean;
+  progression: Progression;
 }
 
 export const DEFAULT_LEARNING: LearningSettings = {
   ...DEFAULT_SCHEDULING,
   skip: "week",
+  extraKeys: false,
+  keyboardHelpDismissed: false,
+  progression: "normal",
 };
 
 function isPace(value: unknown): value is ReviewPace {
   return typeof value === "string" && value in REVIEW_PACES;
 }
 
-function isScheduler(value: unknown): value is SchedulerKind {
-  return value === "ladder" || value === "sm2";
+function isProgression(value: unknown): value is Progression {
+  return value === "careful" || value === "normal" || value === "fast";
 }
 
 function isSkip(value: unknown): value is SkipLength {
@@ -60,10 +87,18 @@ export function getLearning(): LearningSettings {
   const stored = readJson<Partial<LearningSettings>>(LEARNING_KEY);
   return {
     pace: isPace(stored?.pace) ? stored.pace : DEFAULT_LEARNING.pace,
-    scheduler: isScheduler(stored?.scheduler)
-      ? stored.scheduler
-      : DEFAULT_LEARNING.scheduler,
     skip: isSkip(stored?.skip) ? stored.skip : DEFAULT_LEARNING.skip,
+    extraKeys:
+      typeof stored?.extraKeys === "boolean"
+        ? stored.extraKeys
+        : DEFAULT_LEARNING.extraKeys,
+    keyboardHelpDismissed:
+      typeof stored?.keyboardHelpDismissed === "boolean"
+        ? stored.keyboardHelpDismissed
+        : DEFAULT_LEARNING.keyboardHelpDismissed,
+    progression: isProgression(stored?.progression)
+      ? stored.progression
+      : DEFAULT_LEARNING.progression,
   };
 }
 
@@ -84,6 +119,11 @@ export function setLearning(patch: Partial<LearningSettings>): void {
  * rather than cached, so a change in Settings applies to the next answer
  * without any invalidation path. */
 export function schedulingConfig(): SchedulingConfig {
-  const { pace, scheduler } = getLearning();
-  return { pace, scheduler };
+  const { pace } = getLearning();
+  return { pace };
+}
+
+/** Correct answers a word is owed per session, from the Progression preset. */
+export function repetitionsPerWord(): number {
+  return REPETITIONS_PER_WORD[getLearning().progression];
 }

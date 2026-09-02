@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useState } from "react";
 import type { Content } from "@betterbeaver/schema";
-import type { ProgressStore } from "@betterbeaver/engine";
+import type { ProgressStore, UnitProgress } from "@betterbeaver/engine";
 import {
   dueCountsByUnit,
   dueUnits,
@@ -32,7 +32,7 @@ import { GrowingTextarea } from "./UnitScreen";
 export function LessonScreen({
   content,
   lessonId,
-  attemptedTaskIds,
+  unitProgress,
   store,
   onSelectUnit,
   onPracticeTask,
@@ -41,7 +41,7 @@ export function LessonScreen({
 }: {
   content: Content;
   lessonId: string;
-  attemptedTaskIds: ReadonlySet<string>;
+  unitProgress: ReadonlyMap<string, UnitProgress>;
   /** Progress store, for the per-unit due badges (plan 0022 §7) — the same
    * `dueUnits` sweep BookScreen runs for its Daily Review badge, one level
    * down. Nothing else on this screen reads progress from storage. */
@@ -112,7 +112,7 @@ export function LessonScreen({
   });
   // Lesson-level Practice shuffles across this lesson's opened units (plan
   // 0008, pinned scope).
-  const practicePool = lessonPracticeTargets(lesson, content, attemptedTaskIds);
+  const practicePool = lessonPracticeTargets(lesson, content, unitProgress);
 
   // The unit awaiting a skip-ahead confirmation, and the one gating it. A
   // pending unit always has a gate — `isUnitUnlocked` returns true when
@@ -256,11 +256,9 @@ export function LessonScreen({
           </li>
         )}
         {units.map((unit) => {
-          const unlocked = isUnitUnlocked(unit, units, attemptedTaskIds);
-          const complete = isUnitComplete(unit, attemptedTaskIds);
-          const attemptedCount = unit.taskIds.filter((id) =>
-            attemptedTaskIds.has(id),
-          ).length;
+          const unlocked = isUnitUnlocked(unit, units, unitProgress);
+          const complete = isUnitComplete(unit, unitProgress);
+          const percent = unitProgress.get(unit.id)?.percent ?? 0;
           if (edit !== null) {
             const raw = edit.rawUnit(unit.id) ?? { id: unit.id };
             // The card can't stay one big <button> once it holds inputs, so
@@ -298,11 +296,7 @@ export function LessonScreen({
                 {/* A brand-new unit reads "unit has zero tasks" straight
                     away; slice 8's Exercises page is where that resolves. */}
                 <ProblemMarker problems={edit.entityProblems(unit.id)} />
-                <LockableProgress
-                  unlocked={unlocked}
-                  value={attemptedCount}
-                  max={unit.taskIds.length}
-                />
+                <LockableProgress unlocked={unlocked} percent={percent} />
                 <RowActions
                   onUp={() => edit.moveUnit(unit.id, -1)}
                   onDown={() => edit.moveUnit(unit.id, 1)}
@@ -354,8 +348,7 @@ export function LessonScreen({
                 <p>{unit.goal}</p>
                 <LockableProgress
                   unlocked={unlocked}
-                  value={attemptedCount}
-                  max={unit.taskIds.length}
+                  percent={percent}
                   due={dueByUnit.get(unit.id)}
                 />
               </button>

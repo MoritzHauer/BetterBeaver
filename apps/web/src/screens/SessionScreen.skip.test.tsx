@@ -58,7 +58,6 @@ function renderSession(
       onSkip={onSkip}
       onFinished={() => {}}
       onExit={() => {}}
-      requeueOnAgain
     />,
   );
 }

@@ -11,6 +11,7 @@ import {
   matchingOutcomes,
   countUnitQuestions,
   type MatchingQuestion,
+  type Question,
   type Rng,
 } from "./session.js";
 import { noteUnitId } from "./units.js";
@@ -862,7 +863,9 @@ const pictureContent: Content = {
 };
 
 describe("buildTaskSession: picture", () => {
-  it("reuses the pinned shuffle-and-insert distractor algorithm over display texts, prompted by the image stem", () => {
+  it("reuses the pinned shuffle-and-insert distractor algorithm over the foreign forms, prompted by the image stem", () => {
+    // Production direction (plan 0025 §2): the image prompts, and the
+    // choices are scripts — "A".."D" here — not the glosses it used to show.
     const rng = queueRng([0.9, 0.1, 0.5]);
     const questions = buildTaskSession(pictureTask, pictureContent, rng);
 
@@ -871,10 +874,46 @@ describe("buildTaskSession: picture", () => {
         kind: "picture",
         unitId: imageL1.id,
         imageStem: "i1",
-        choices: ["Gloss 3", "Gloss 2", "Gloss 1", "Gloss 4"],
+        choices: ["C", "B", "A", "D"],
         correctIndex: 2,
       },
     ]);
+  });
+
+  it("drops a distractor that renders as the answer rather than showing it twice", () => {
+    // Class (h) guarantees distinct glosses, not distinct scripts, so a
+    // produce-direction board can be handed a homograph. A shorter board is
+    // answerable; two identical buttons are not.
+    const homograph: Item = {
+      id: "t-item-image-homograph",
+      kind: "lexeme",
+      payload: {
+        script: "A",
+        transliteration: "a",
+        gloss: "Gloss 5",
+        imageRef: "i5",
+      },
+      sourceRef: "t-resource-1",
+    };
+    const content: Content = {
+      ...pictureContent,
+      units: [
+        { ...pictureUnit, itemIds: [...pictureUnit.itemIds, homograph.id] },
+      ],
+      items: [...pictureContent.items, homograph],
+    };
+    const rng = queueRng([0.9, 0.1, 0.5, 0.2]);
+    const questions = buildTaskSession(pictureTask, content, rng);
+
+    const [question] = questions;
+    expect(question?.kind).toBe("picture");
+    const { choices, correctIndex } = question as Extract<
+      Question,
+      { kind: "picture" }
+    >;
+    expect(choices).toHaveLength(4);
+    expect(new Set(choices).size).toBe(4);
+    expect(choices[correctIndex]).toBe("A");
   });
 });
 

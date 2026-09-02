@@ -1,6 +1,6 @@
 # Plan 0024: Focus mode — a high-repetition drill over a small working set
 
-Status: **drafted** · Owner: Moe · Date: 2026-08-24 · Scoped from an owner request ("I miss a focused learning mode. Where you can add content/vocabulary to learn with high repetition") against the code as it stands after plan 0022
+Status: **drafted** · Owner: Moe · Date: 2026-08-24 · Scoped from an owner request ("I miss a focused learning mode. Where you can add content/vocabulary to learn with high repetition") against the code as it stands after plan 0022 · **Amended 2026-09-02**: its drill engine and presentation rotation were built by [plan 0025](0025-progression-engine.md) slices 4-6 — see §2 and slice A, which are re-pointed rather than waiting
 
 ## Purpose
 
@@ -32,7 +32,7 @@ After this plan:
 - **No second scheduler.** `REVIEW_PACES`, `schedule()` and the `ladder`/`sm2` branch are untouched; the daily floor is one clamp on `due` at write time and nothing else. See §3.
 - **No leech auto-suspend, no automatic set filling.** Suggestions are a list the learner taps; nothing enters the set on its own. See §4.
 - **No named, multiple, or shareable focus sets.** One set per domain. Libraries of word lists are what `VocabList` already is — a second one with a scheduling side effect is a different feature wearing the same clothes. See §1.
-- **No `matching` inside a drill.** It grades a whole set in one question, which cannot express a per-item mastery count. It stays a Vocabulary-mode session. See §2.
+- ~~**No `matching` inside a drill.**~~ **Retired by [plan 0025](0025-progression-engine.md) §4/§6** (implemented 2026-09-02): a board grades every word on it and the drill credits each one, so it expresses a per-item mastery count after all. See §2.
 - **No mistake log.** The suggester derives its candidates from `SrsState` that is already stored. See §4.
 - **No server sync.** `bb.focus.*` rides the existing `bb.*` backup sweep, so export/import and "erase all my data" cover it the day it lands; cross-device sync arrives with backlog item 5 or not at all.
 - **No cross-domain set**, and no per-Book set. Item ids are globally unique but a learner studies one language at a time; per-domain matches `VocabListStore` and the per-domain streak.
@@ -84,15 +84,16 @@ advanceDrill(state, correct: boolean): DrillState
 
 **A wrong answer reinserts at an expanding gap** — position 2, then 5, then 10 cards ahead, clamped to the queue length — and resets nothing else: the item's `correct` count drops by one, floored at zero, so a slip costs one retrieval rather than the whole climb. Immediate re-asking is the failure mode to avoid here: answering a card you just saw the answer to is recognition of a screen, not recall of a word.
 
-**Presentation rotates by repetition index**, using each mode's existing floor check from `availableModes` over the drill's own item set, falling back down the list when a mode is unavailable:
+**Presentation is drawn from the word's level — this rotation table is superseded.** [Plan 0025 §4](0025-progression-engine.md) shipped on 2026-09-02 (slices 4-6), and its draw replaces what this section originally specified: a hardcoded `recognize` → `listen` → `recall` rotation by repetition index, with fallbacks down the list.
 
-| Repetition | Presentation | Falls back to |
-| --- | --- | --- |
-| 1st | `recognize` (MCQ, auto-graded) | `recall` when the set has < 4 distinct glosses |
-| 2nd | `listen` (audio or TTS, auto-graded) | `recognize`, then `recall` |
-| 3rd+ | `recall` (self-graded, production) | — always available |
+The draw is strictly better here and building the table first would be waste, so **whoever implements this plan calls `drawExercise` and `buildVisitQuestion` instead** (`packages/engine/src/draw.ts`, `session.ts`). Concretely:
 
-Recognition first, production last: the ordering is the point of the rotation, not variety for its own sake. `matching` is excluded (see Non-goals). Distractors come from the drill set itself, which `sampleAdhocMcq` already does — a five-word set gives thin distractors, which is honest, and the floor refuses below four.
+- The **first** appearance of a word in a drill is its *new attempt*, drawn at exactly one level above where the learner has it; every later appearance is a *repetition*, drawn at random from the level below or its own. That is `startDrill`'s slot assignment, already implemented.
+- A level the content cannot build is **skipped, not waited for**, which is what this section's fallback column was reaching for — and it generalises, where the column only covered three modes.
+- `matching` is no longer excluded on principle. A board grades every word on it, and `advanceDrill` credits each one, so it expresses a per-item mastery count perfectly well. The engine only withholds a board from a word another board in the same session already answered for. The Non-goal above is retired with this table.
+- The reinsertion gaps (2, 5, 10) and the length cap survive as written — `drill.ts` implements both, with the cap at 8× rather than 12×.
+
+What stays Focus-specific is the set itself, the mastery target of 3, the daily-due clamp and graduation.
 
 **A cap on length**: the drill ends at `12 × itemCount` answers even if something never masters, and the summary says which items did not graduate. Without it, one impossible word holds a session open forever.
 
@@ -134,7 +135,7 @@ Four entry points, all learner-initiated:
 
 Each slice ships on its own and is verifiable in the browser.
 
-- **A — `drill.ts` + tests.** Pure engine: queue, mastery counting, reinsertion gaps, presentation rotation with fallbacks, length cap. No UI, no storage. Deterministic under a seeded `Rng`, as `session.test.ts` does it.
+- **A — ~~`drill.ts` + tests~~ — already built.** `packages/engine/src/drill.ts` shipped with [plan 0025](0025-progression-engine.md) slices 4-6 (2026-09-02): queue, correct-answer counting, reinsertion gaps, length cap, deterministic under a seeded `Rng`. Presentation comes from `draw.ts` rather than a rotation table. What is left of this slice is the Focus-specific part: the set, the mastery target, the daily-due clamp and graduation.
 - **B — the bench.** `FocusStore`, the Focus screen, the My Books chip, entry points 1–3, and the drill running in `SessionScreen` over the set. **No scheduler change at all** — grading behaves exactly as it does in an ad-hoc session today. This is the slice that delivers the ask; C and D are the compounding.
 - **C — the floor and graduation.** The `due` clamp, `goodDays` bookkeeping, auto-removal, pinning in Daily Review, and the graduated line in the summary.
 - **D — suggestions.** Entry point 4, derived from `SrsState`.

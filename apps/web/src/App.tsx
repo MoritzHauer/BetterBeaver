@@ -22,7 +22,12 @@ import {
   buildRecallSession,
   buildReviewSession,
   buildTaskSession,
-  buildUnitSession,
+  advanceDrill,
+  buildVisitQuestion,
+  nextVisit,
+  shuffle,
+  startDrill,
+  collectUnitProgress,
   dueDomainUnits,
   dueUnits,
   isLessonComplete,
@@ -33,9 +38,14 @@ import {
   skipItem,
   symmetricLinks,
 } from "@betterbeaver/engine";
-import type { Question } from "@betterbeaver/engine";
+import type {
+  DrillState,
+  PlannedVisit,
+  Question,
+  UnitProgress,
+} from "@betterbeaver/engine";
 import type { Quality } from "@betterbeaver/srs";
-import { recallQuality } from "@betterbeaver/srs";
+import { recallQuality, wordLevel } from "@betterbeaver/srs";
 import type { TapLookup } from "./components/TappableText";
 import { NewBookSheet } from "./components/Sheet";
 import type { ContentInit, ContentUpdate } from "./content/source";
@@ -51,7 +61,7 @@ import { createLocalStorageVocabListStore } from "./progress/vocab-lists";
 import { createLocalStorageUserEntryStore } from "./progress/user-entries";
 import { getPinnedUnitIds, togglePinnedUnits } from "./progress/pinned-tasks";
 import { AUTO_UPDATE_KEY, RECHECK_INTERVAL_MS } from "./autoUpdate";
-import { schedulingConfig } from "./learning";
+import { repetitionsPerWord, schedulingConfig } from "./learning";
 import { isOffline } from "./offline";
 import { useStorageUnwritable } from "./storage-health";
 import { MyBooksScreen } from "./screens/MyBooksScreen";
@@ -60,6 +70,7 @@ import { BookScreen } from "./screens/BookScreen";
 import { LessonScreen } from "./screens/LessonScreen";
 import { UnitScreen } from "./screens/UnitScreen";
 import { SessionScreen } from "./screens/SessionScreen";
+import type { SessionOutcome } from "./screens/session/useSessionQueue";
 import {
   ADHOC_MODE_LABELS,
   VocabularyScreen,
@@ -112,8 +123,6 @@ const progressStore = createLocalStorageProgressStore();
 const PREVIEW_STORE: ProgressStore = {
   getItemState: async () => null,
   setItemState: async () => {},
-  getAttemptedTaskIds: async () => [],
-  markTaskAttempted: async () => {},
   getStreak: async () => null,
   setStreak: async () => {},
   incrementReps: async () => {},
@@ -271,7 +280,6 @@ function TaskSession({
       lookup={lookup}
       onEdit={onEdit}
       onGrade={handleGrade}
-      onAllAnswered={() => void store.markTaskAttempted(task.id)}
       onFinished={onDone}
       onExit={onDone}
       loadStreak={() => store.getStreak(domainId)}
@@ -323,13 +331,144 @@ function UnitSession({
   nextAction?: { label: string; onClick: () => void };
 }) {
   const domainId = content.topic.domainId;
-  const pairs = useMemo(
-    () => buildUnitSession(unit, content, rngFor(unit.id)),
-    // Same seeded-rebuild rule as TaskSession.
-    [unit.id, content],
-  );
-  const questions = useMemo(() => pairs.map((pair) => pair.question), [pairs]);
-  const taskIds = useMemo(() => pairs.map((pair) => pair.taskId), [pairs]);
+
+  /**
+   * Every word's level, read once (plan 0025 §4). The session is planned
+   * from these, so it cannot be built until they arrive — a session planned
+   * against level 0 would open every word at `matching` regardless of how
+   * well the learner already knows it.
+   *
+   * `null` while loading, which the render below turns into the same
+   * "Loading…" the rest of the app uses. An unreadable store degrades to
+   * level 0 per word rather than blocking the session (spec 0019 decision 2:
+   * failed reads degrade to absent).
+   */
+  const [levels, setLevels] = useState<Map<string, number> | null>(null);
+  useEffect(() => {
+    let live = true;
+    const read = async () => {
+      const entries = await Promise.all(
+        unit.itemIds.map(async (itemId) => {
+          const state = await store?.getItemState(itemId);
+          return [
+            itemId,
+            wordLevel(state ?? null, schedulingConfig().pace),
+          ] as const;
+        }),
+      );
+      if (live) {
+        setLevels(new Map(entries));
+      }
+    };
+    void read().catch(() => {
+      if (live) {
+        setLevels(new Map());
+      }
+    });
+    return () => {
+      live = false;
+    };
+  }, [unit.id, store]);
+
+  /**
+   * The drill (plan 0025 §6), and the visits it has handed out so far.
+   *
+   * **Visits, not questions.** What the drill decides is *which word, at
+   * which slot, how far down* — the card itself is a pure function of that
+   * plus the content, so it is derived below rather than stored. Storing
+   * built cards would freeze the session on the pre-edit text the moment the
+   * scoped `✎` sheet re-derives `content`, which is that sheet's whole
+   * point.
+   *
+   * Refs alongside the state because `extend` runs inside the session's
+   * `advance()` — an event handler, where reading state would see the value
+   * from the render that installed the callback.
+   */
+  const drillRef = useRef<DrillState | null>(null);
+  const answeredRef = useRef(0);
+  const [visits, setVisits] = useState<PlannedVisit[]>([]);
+  const [remaining, setRemaining] = useState(0);
+  const [answered, setAnswered] = useState(0);
+
+  /**
+   * The cards for those visits, rebuilt from current content.
+   *
+   * Seeded from the unit id and replayed from the start each time, so a
+   * rebuild produces the cards it produced before — the same seeded-rebuild
+   * rule `TaskSession` uses. Board coverage accumulates across the replay: a
+   * word a matching board already answered for draws its next exercise up
+   * rather than summoning an identical board.
+   */
+  const cards = useMemo(() => {
+    if (levels === null) {
+      return [];
+    }
+    const rng = rngFor(unit.id);
+    const covered = new Set<string>();
+    const built: { question: Question; taskId: string }[] = [];
+    for (const visit of visits) {
+      const card = buildVisitQuestion(
+        visit,
+        unit,
+        content,
+        (id) => levels.get(id) ?? 0,
+        rng,
+        covered,
+      );
+      if (card === null) {
+        continue;
+      }
+      if (card.question.kind === "matching") {
+        for (const prompt of card.question.prompts) {
+          covered.add(prompt.unitId);
+        }
+      }
+      built.push(card);
+    }
+    return built;
+  }, [visits, unit, content, levels]);
+
+  // Opens the session once the levels are in: the whole plan is known — its
+  // length included — but only the first visit is handed out.
+  useEffect(() => {
+    if (levels === null) {
+      return;
+    }
+    const state = startDrill(
+      shuffle([...unit.itemIds], rngFor(unit.id)),
+      repetitionsPerWord(),
+    );
+    drillRef.current = state;
+    answeredRef.current = 0;
+    const first = nextVisit(state);
+    setVisits(first === null ? [] : [first]);
+    setRemaining(state.remaining);
+    setAnswered(0);
+    // `content` is deliberately absent: only the unit and the learner's
+    // levels reopen a session, or every mid-session edit would restart it.
+  }, [unit.id, levels]);
+
+  const questions = useMemo(() => cards.map((c) => c.question), [cards]);
+  const taskIds = useMemo(() => cards.map((c) => c.taskId), [cards]);
+
+  /** Tells the drill how the card went and hands out the next visit (§6). */
+  const extend = (outcomes: SessionOutcome[]): boolean => {
+    const state = drillRef.current;
+    if (state === null) {
+      return false;
+    }
+    const next = advanceDrill(state, outcomes);
+    drillRef.current = next;
+    answeredRef.current += state.remaining - next.remaining;
+    setRemaining(next.remaining);
+    setAnswered(answeredRef.current);
+    const visit = nextVisit(next);
+    if (visit === null) {
+      return false;
+    }
+    setVisits((current) => [...current, visit]);
+    return true;
+  };
 
   async function handleGrade(unitId: string, quality: Quality) {
     await recordGrade(
@@ -370,6 +509,18 @@ function UnitSession({
       }
     : undefined;
 
+  // The plan is read from the learner's levels, so there is nothing to show
+  // until they arrive. Rendering the session early would open every word at
+  // `matching` and then swap the questions underneath the learner.
+  if (levels === null) {
+    return (
+      <main>
+        <h1>{unit.title}</h1>
+        <p>Loading…</p>
+      </main>
+    );
+  }
+
   return (
     <SessionScreen
       title={unit.title}
@@ -381,11 +532,11 @@ function UnitSession({
       onTogglePin={onTogglePin}
       onEdit={onEdit}
       onGrade={handleGrade}
-      onTaskAnswered={(taskId) => void store.markTaskAttempted(taskId)}
       onFinished={onDone}
       nextAction={nextAction}
       onExit={onDone}
       onSwipeBack={onSwipeBack}
+      drill={{ extend, remaining, answered }}
       loadStreak={() => store.getStreak(domainId)}
     />
   );
@@ -621,10 +772,6 @@ function ReviewSession({
       onSkip={handleSkip}
       onFinished={onDone}
       onExit={onDone}
-      // Daily Review is the one session that re-shows a failed card (plan
-      // 0022 §4): it shows each scheduling unit exactly once, so a failure
-      // here is the one that would otherwise vanish for a whole day.
-      requeueOnAgain
       loadStreak={() => store.getStreak(domainId)}
     />
   );
@@ -1061,9 +1208,18 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     ],
     [cachedBookSummaries, runtimeBrokenBookIds],
   );
-  const [attemptedTaskIds, setAttemptedTaskIds] = useState<Set<string>>(
-    new Set(),
+  // Every unit's progress (plan 0025 §8), which is what completion, the
+  // unlock gates and Play's "next unit" all read now that the persisted
+  // attempted-task set is gone. Recomputed from SRS state, so a unit is
+  // complete when every one of its words has been answered *correctly* at
+  // least once — not when its tasks have been touched.
+  const [unitProgress, setUnitProgress] = useState<Map<string, UnitProgress>>(
+    new Map(),
   );
+  // Bumped whenever something may have changed a word's level: the effect
+  // below re-reads. Replaces the old fire-and-forget reload, which could be
+  // called before any Book content had loaded.
+  const [progressEpoch, setProgressEpoch] = useState(0);
   // Bumped on every navigation to the book screen, so it recomputes its
   // due-review count (which task/review sessions elsewhere may have changed).
   const [bookEpoch, setBookEpoch] = useState(0);
@@ -1091,12 +1247,8 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     [content, pinEpoch],
   );
 
-  function reloadAttemptedTaskIds() {
-    // Cannot reject: `getAttemptedTaskIds` is `Promise.resolve(readJson(...))`
-    // — a throw there would be synchronous, not a rejection.
-    void progressStore
-      .getAttemptedTaskIds()
-      .then((ids) => setAttemptedTaskIds(new Set(ids)));
+  function reloadUnitProgress() {
+    setProgressEpoch((epoch) => epoch + 1);
   }
 
   function goToBook(bookId: string, editing?: boolean) {
@@ -1305,7 +1457,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
       setScreen({ screen: "review", domainId: bookContent.topic.domainId });
       return;
     }
-    const next = nextUnit(bookContent, attemptedTaskIds);
+    const next = nextUnit(bookContent, unitProgress);
     if (next !== null) {
       setScreen({
         screen: "unit",
@@ -1368,7 +1520,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     // Cannot reject: both are `Promise.resolve` over an in-memory Map.
     void contentSourceResult.source.listBooks().then(setBooks);
     void contentSourceResult.source.listDomains().then(setDomains);
-    reloadAttemptedTaskIds();
+    reloadUnitProgress();
   }, [contentSourceResult]);
 
   // `loadBook` rejects for an id the source doesn't know — reachable when a
@@ -1421,8 +1573,31 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     };
   }, [contentSourceResult, books]);
 
+  // Every unit's progress, re-read whenever a Book loads or something may
+  // have moved a word's level (plan 0025 §8). One store pass across every
+  // loaded Book: unit ids are unique across Books, and a domain's Books
+  // share scheduling units, so reading them together is both fewer reads
+  // and one consistent snapshot.
+  useEffect(() => {
+    let cancelled = false;
+    // Cannot reject: `collectUnitProgress` only awaits `readJson`-backed
+    // reads, which degrade to absent rather than throwing (spec 0019 §1).
+    void collectUnitProgress(
+      [...booksContentMap.values()],
+      progressStore,
+      schedulingConfig().pace,
+    ).then((progress) => {
+      if (!cancelled) {
+        setUnitProgress(progress);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [booksContentMap, progressEpoch]);
+
   // Per-book lesson-completion counts (plan 0010), derived from
-  // `booksContentMap` + `attemptedTaskIds` via the same `isLessonComplete`
+  // `booksContentMap` + `unitProgress` via the same `isLessonComplete`
   // BookScreen already uses.
   const bookProgress = useMemo(() => {
     const result = new Map<string, { completed: number; total: number }>();
@@ -1431,7 +1606,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
         const lesson = bookContent.lessons.find((l) => l.id === lessonId);
         return (
           lesson !== undefined &&
-          isLessonComplete(lesson, bookContent.units, attemptedTaskIds)
+          isLessonComplete(lesson, bookContent.units, unitProgress)
         );
       }).length;
       result.set(bookId, {
@@ -1440,7 +1615,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
       });
     }
     return result;
-  }, [booksContentMap, attemptedTaskIds]);
+  }, [booksContentMap, unitProgress]);
 
   // Loads the active screen's book content and its domain content together
   // (plan 0013 goal 1): both resolve via one `Promise.all(...).then(...)`
@@ -1801,6 +1976,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
         onImportBook={importDocuments}
         importPrivateBook={contentInit.importPrivateBook}
         refreshContent={contentInit.refreshContent}
+        extraChars={domainContent?.domain.extraChars}
       />
     );
   }
@@ -1969,10 +2145,15 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     // Preview opens everything (§1b): inspecting unit 12 must not cost
     // eleven skip-ahead confirms, and a bad unlock chain is caught
     // structurally anyway. A prop swap, deliberately, not a store change.
-    const shownAttempted =
+    const shownProgress =
       preview !== null
-        ? new Set(shown.tasks.map((task) => task.id))
-        : attemptedTaskIds;
+        ? new Map(
+            shown.units.map((unit) => [
+              unit.id,
+              { percent: 100, started: 0, total: 0, complete: true } as const,
+            ]),
+          )
+        : unitProgress;
     const shownStore = preview !== null ? PREVIEW_STORE : progressStore;
     // In Diff the draft has no copy of a note it deleted, and `UnitScreen`
     // drops any note whose markdown is undefined — so without this fallback
@@ -2046,7 +2227,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           content={shown}
           atSettings={screen.atSettings === true}
           unpublishedChanges={unpublishedBookIds.has(screen.bookId)}
-          attemptedTaskIds={shownAttempted}
+          unitProgress={shownProgress}
           store={shownStore}
           epoch={bookEpoch}
           onSelectLesson={(lessonId) =>
@@ -2092,7 +2273,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
         <LessonScreen
           content={shown}
           lessonId={screen.lessonId}
-          attemptedTaskIds={shownAttempted}
+          unitProgress={shownProgress}
           store={shownStore}
           onSelectUnit={(unitId) =>
             setScreen({
@@ -2210,7 +2391,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
         );
       }
       const onDone = () => {
-        reloadAttemptedTaskIds();
+        reloadUnitProgress();
         setScreen({
           screen: "unit",
           bookId: screen.bookId,
@@ -2221,7 +2402,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
       // Same exit as `onDone`, but lands on the trail's last content page —
       // the one the learner swiped forward from (owner request).
       const onSwipeBack = () => {
-        reloadAttemptedTaskIds();
+        reloadUnitProgress();
         setScreen({
           screen: "unit",
           bookId: screen.bookId,
@@ -2232,34 +2413,44 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
       };
       const lesson = shown.lessons.find((l) => l.id === screen.lessonId);
       // Plan 0020 §4: does finishing THIS unit finish the lesson? Every
-      // OTHER unit's completion is already accurate in `attemptedTaskIds`
-      // (state) — this session only ever marks this unit's own tasks — so
-      // unioning this unit's taskIds in lets the existing isLessonComplete
-      // answer synchronously, before the summary even renders. No store
-      // read needed for the label; `onNext` below still does its own read
-      // for the actual navigation.
-      // ponytail: assumes every task in `unit` yields >=1 question, so the
-      // session's onTaskAnswered really does cover all of unit.taskIds by
-      // the time the summary shows. A unit with a zero-question task would
-      // never satisfy isUnitComplete via this flow at all — same ceiling
-      // `onNext`'s fresh read hits, not one this label computation adds.
+      // OTHER unit's completion is already accurate in `unitProgress`
+      // (state), so assuming this one complete lets the existing
+      // isLessonComplete answer synchronously, before the summary even
+      // renders. No store read needed for the label; `onNext` below still
+      // does its own read for the actual navigation.
+      // The assumption is weaker than it was under the attempted-task set:
+      // completion now needs every word answered *correctly* (plan 0025
+      // §8), so a session with one word missed makes this label optimistic.
+      // `onNext`'s fresh read is what corrects it, and its "never send the
+      // learner back into the unit they just finished" branch below is what
+      // the disagreement lands on.
       const finishesLesson =
         lesson !== undefined &&
         isLessonComplete(
           lesson,
           shown.units,
-          new Set([...attemptedTaskIds, ...unit.taskIds]),
+          new Map([
+            ...unitProgress,
+            [
+              unit.id,
+              { percent: 100, started: 0, total: 0, complete: true },
+            ] as const,
+          ]),
         );
-      // Plan 0020 §4: resolve the next step from the POST-session attempted
-      // set. `attemptedTaskIds` (state) is stale here by exactly this
-      // session's own markTaskAttempted calls, and reloadAttemptedTaskIds()
-      // can't be awaited (fire-and-forget) — read the store directly.
+      // Plan 0020 §4: resolve the next step from the POST-session progress.
+      // `unitProgress` (state) is stale here by exactly this session's own
+      // grades, and `reloadUnitProgress()` can't be awaited — read the
+      // store directly.
       const onNext = async () => {
-        const ids = new Set(await progressStore.getAttemptedTaskIds());
-        setAttemptedTaskIds(ids);
+        const fresh = await collectUnitProgress(
+          [shown],
+          progressStore,
+          schedulingConfig().pace,
+        );
+        setUnitProgress((current) => new Map([...current, ...fresh]));
         if (
           lesson !== undefined &&
-          isLessonComplete(lesson, shown.units, ids)
+          isLessonComplete(lesson, shown.units, fresh)
         ) {
           setScreen({
             screen: "lesson-summary",
@@ -2271,12 +2462,12 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
         // Two branches, and they're total (plan 0020 §4): an incomplete
         // lesson always contains an incomplete unit, so `next` is null here
         // only defensively.
-        const next = nextUnit(shown, ids);
+        const next = nextUnit(shown, fresh);
         // Never send the learner back into the unit they just finished. That
-        // happens when `finishesLesson` (optimistic, computed from
-        // attemptedTaskIds ∪ unit.taskIds) and this fresh read disagree —
-        // a task that yields zero questions never gets marked attempted, and
-        // a blocked-storage write is swallowed by design (spec 0019). The
+        // happens when `finishesLesson` (optimistic, computed by assuming
+        // this unit complete) and this fresh read disagree — a word answered
+        // wrong never reaches level 1, and a blocked-storage write is
+        // swallowed by design (spec 0019). The
         // button then reads "Lesson complete" and the tap would land right
         // back where it started, with no explanation. The lesson screen is
         // the honest destination: it shows which unit is still open.
@@ -2324,7 +2515,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
         <LessonSummaryScreen
           content={shown}
           lessonId={screen.lessonId}
-          attemptedTaskIds={attemptedTaskIds}
+          unitProgress={unitProgress}
           store={progressStore}
           onNext={(target) =>
             setScreen({
@@ -2376,7 +2567,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
       );
     }
     const onTaskDone = () => {
-      reloadAttemptedTaskIds();
+      reloadUnitProgress();
       setScreen({
         screen: "unit",
         bookId: screen.bookId,

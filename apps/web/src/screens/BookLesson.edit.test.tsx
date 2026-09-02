@@ -69,7 +69,6 @@ const build = (book: BookDocument) =>
 const store = {
   getStreak: async () => null,
   getItemState: async () => null,
-  getAttemptedTaskIds: async () => [],
 } as unknown as ProgressStore;
 
 function makeSession(overrides: Partial<EditSessionValue> = {}) {
@@ -111,7 +110,7 @@ function renderBook(
   const tree = (
     <BookScreen
       content={content}
-      attemptedTaskIds={new Set()}
+      unitProgress={new Map()}
       store={store}
       epoch={0}
       onSelectLesson={onSelectLesson}
@@ -136,7 +135,7 @@ function renderLesson(session: EditSessionValue | null, book = BOOK) {
     <LessonScreen
       content={build(book)}
       lessonId="bk-l1"
-      attemptedTaskIds={new Set()}
+      unitProgress={new Map()}
       store={store}
       onSelectUnit={() => {}}
       onPracticeTask={() => {}}
@@ -254,9 +253,9 @@ describe("BookScreen", () => {
 
   it("still renders lesson cards with their progress in edit mode", () => {
     renderBook(makeSession().session);
-    // Both lessons have zero units, so both read "0/0" — the progress text
+    // Both lessons have zero units, so both read "0%" — the progress text
     // that used to disappear behind the form editor's grey boxes.
-    expect(screen.getAllByText("0/0")).toHaveLength(2);
+    expect(screen.getAllByText("0%")).toHaveLength(2);
   });
 
   it("edits the title in place, at its learner (heading) size", () => {
@@ -424,9 +423,9 @@ describe("LessonScreen", () => {
       content: build(withUnit),
     });
     renderLesson(session, withUnit);
-    // The zero-task unit reads "0/0" — the progress text that used to
+    // The untouched unit reads "0%" — the progress text that used to
     // disappear behind the form editor's grey boxes.
-    expect(screen.getByText("0/0")).toBeTruthy();
+    expect(screen.getByText("0%")).toBeTruthy();
   });
 
   it("deletes a unit behind an undo toast that restores it", () => {

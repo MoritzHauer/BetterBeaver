@@ -1,669 +1,37 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
-import type { FormEvent, ReactNode } from "react";
-import type {
-  BuildQuestion,
-  MatchingQuestion,
-  Question,
-  QuestionOutcome,
-  ScrambleQuestion,
-} from "@betterbeaver/engine";
-import type { Streak } from "@betterbeaver/engine";
-import {
-  checkMatchingPair,
-  checkScrambleAnswer,
-  checkTypedAnswer,
-  localDay,
-  matchingOutcomes,
-  resolveToken,
-} from "@betterbeaver/engine";
-import { itemDisplayText } from "@betterbeaver/schema";
+import { useRef, useState } from "react";
+import type { Question, QuestionOutcome, Streak } from "@betterbeaver/engine";
 import type { Quality, SelfGrade } from "@betterbeaver/srs";
 import { recallQuality, recognizeQuality } from "@betterbeaver/srs";
 import type { TapLookup } from "../components/TappableText";
-import { TappableText } from "../components/TappableText";
-import { NoteView } from "../components/NoteView";
-import { getAssetUrl } from "../content/bundled";
-import { getNoteMarkdown } from "../content/source";
-import { SpeakerButton } from "../tts";
-import { playCorrect, playFanfare, playWrong } from "../sounds";
+import { playCorrect, playWrong } from "../sounds";
 import { noteStorageUnwritable } from "../storage-health";
 import { FeedbackWidget } from "../components/FeedbackWidget";
 import { BookWatermark } from "../components/BookWatermark";
 import { Sheet } from "../components/Sheet";
 import { SKIP_DAYS, getLearning, type SkipLength } from "../learning";
 import { SWIPE_THRESHOLD } from "./UnitScreen";
+import { renderInteraction } from "./session/interactions";
+import {
+  useSessionQueue,
+  type SessionOutcome,
+} from "./session/useSessionQueue";
 
-/** Tally of results across a session; only the fields for the task type(s)
- * actually encountered end up non-zero. Every auto-graded kind (recognize,
- * cloze, scramble, build, matching, listen, dictation, minimal-pair, picture)
- * shares one tally; recall and shadowing (self-graded) share the other. */
-export interface SessionSummary {
-  autoCorrect: number;
-  autoTotal: number;
-  recallCounts: Record<SelfGrade, number>;
+/** How a caller drives a session whose questions are decided as it goes. */
+export interface SessionDrill {
+  /** Extends the session after `outcomes`; true if a question was appended. */
+  extend: (outcomes: SessionOutcome[]) => boolean;
+  /** Correct answers still owed — the number the learner is shown. */
+  remaining: number;
+  /** Correct answers given so far. */
+  answered: number;
 }
+import {
+  SummaryPanel,
+  emptySummary,
+  type SessionSummary,
+} from "./session/SummaryPanel";
 
-function emptySummary(): SessionSummary {
-  return {
-    autoCorrect: 0,
-    autoTotal: 0,
-    recallCounts: { again: 0, hard: 0, good: 0 },
-  };
-}
-
-type Verdict = "correct" | "incorrect";
-
-/** The fixed bottom action bar (plan 0003): the single action zone of the
- * session screen. Neutral while answering; verdict-filled after. */
-function ActionBar({
-  verdict,
-  children,
-}: {
-  verdict?: Verdict;
-  children: ReactNode;
-}) {
-  return (
-    <div className={`action-bar${verdict !== undefined ? ` ${verdict}` : ""}`}>
-      <div className="action-bar-inner">{children}</div>
-    </div>
-  );
-}
-
-/** Post-answer state of the bar: verdict text plus a full-width Continue.
- * The Continue button is auto-focused so Enter continues (preserving the
- * form-submit-then-Enter flow of typed questions). */
-function VerdictBar({
-  verdict,
-  detail,
-  advance,
-}: {
-  verdict: Verdict;
-  detail: string;
-  advance: () => void;
-}) {
-  return (
-    <ActionBar verdict={verdict}>
-      <p className="verdict">{verdict === "correct" ? "Correct!" : detail}</p>
-      <button autoFocus onClick={advance}>
-        Continue
-      </button>
-    </ActionBar>
-  );
-}
-
-/** Native audio element; unlimited replays for free, no custom player. */
-function AudioPlayer({ bookId, stem }: { bookId: string; stem: string }) {
-  const url = getAssetUrl(bookId, "audio", stem);
-  if (url === undefined) {
-    return <p className="status">Missing audio asset: {stem}</p>;
-  }
-  return <audio controls src={url} />;
-}
-
-function ImageDisplay({
-  bookId,
-  stem,
-  alt,
-}: {
-  bookId: string;
-  stem: string;
-  alt: string;
-}) {
-  const url = getAssetUrl(bookId, "img", stem);
-  if (url === undefined) {
-    return <p className="status">Missing image asset: {stem}</p>;
-  }
-  return <img src={url} alt={alt} />;
-}
-
-/** Shared MCQ choice list: recognize, listen, minimal-pair, and picture all
- * pick one of N choices against a known correct index. Tap-to-answer, so the
- * action bar holds nothing until the verdict.
- *
- * `prompt`/`lookup` (recognize only, plan 0006 step 4): recognize's prompt
- * is target-language script, shown throughout the question — but tap-to-
- * lookup is pinned to post-answer surfaces only, so it renders as plain text
- * until `picked !== null`, then swaps to `TappableText`. */
-function ChoiceList({
-  prompt,
-  lookup,
-  choices,
-  correctIndex,
-  unitId,
-  applyAuto,
-  advance,
-}: {
-  prompt?: string;
-  lookup?: TapLookup;
-  choices: readonly string[];
-  correctIndex: number;
-  unitId: string;
-  applyAuto: (unitId: string, correct: boolean) => Promise<void>;
-  advance: () => void;
-}) {
-  const [picked, setPicked] = useState<number | null>(null);
-
-  async function pick(choiceIndex: number) {
-    if (picked !== null) {
-      return;
-    }
-    setPicked(choiceIndex);
-    await applyAuto(unitId, choiceIndex === correctIndex);
-  }
-
-  return (
-    <>
-      {prompt !== undefined ? (
-        <p className="prompt">
-          {picked !== null && lookup !== undefined ? (
-            <TappableText text={prompt} lookup={lookup} />
-          ) : (
-            prompt
-          )}
-        </p>
-      ) : null}
-      <ul className="card-list">
-        {choices.map((choice, choiceIndex) => {
-          const state =
-            picked === null
-              ? ""
-              : choiceIndex === correctIndex
-                ? " correct"
-                : choiceIndex === picked
-                  ? " incorrect"
-                  : "";
-          return (
-            <li key={choiceIndex} className={`card${state}`}>
-              <button
-                disabled={picked !== null}
-                onClick={() => pick(choiceIndex)}
-              >
-                {choice}
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-      {picked !== null ? (
-        <VerdictBar
-          verdict={picked === correctIndex ? "correct" : "incorrect"}
-          detail={`Answer: ${choices[correctIndex]}`}
-          advance={advance}
-        />
-      ) : null}
-    </>
-  );
-}
-
-/** Shared reveal + self-grade: recall (reveal the answer) and shadowing
- * (reveal the transcript) both show lines behind a reveal action, then grade
- * themselves via Again/Hard/Good — all in the action bar (plan 0003). */
-function SelfGradeReveal({
-  lines,
-  revealLabel,
-  unitId,
-  applySelf,
-  advance,
-}: {
-  lines: string[];
-  revealLabel: string;
-  unitId: string;
-  applySelf: (unitId: string, grade: SelfGrade) => Promise<void>;
-  advance: () => void;
-}) {
-  const [revealed, setRevealed] = useState(false);
-  const [graded, setGraded] = useState(false);
-
-  async function grade(selfGrade: SelfGrade) {
-    if (graded) {
-      return;
-    }
-    setGraded(true);
-    await applySelf(unitId, selfGrade);
-    advance();
-  }
-
-  return (
-    <div>
-      {revealed
-        ? lines.map((line, lineIndex) => <p key={lineIndex}>{line}</p>)
-        : null}
-      <ActionBar>
-        {!revealed ? (
-          <button className="primary" onClick={() => setRevealed(true)}>
-            {revealLabel}
-          </button>
-        ) : (
-          <div className="grade-buttons">
-            {/* Sublabels, not next-interval previews (plan 0022 §9): Again
-                and Hard both re-ask tomorrow, so a "1d" on each would make
-                the two buttons look identical again — which is the confusion
-                the ladder exists to remove. */}
-            <button disabled={graded} onClick={() => grade("again")}>
-              Again
-              <small>start over</small>
-            </button>
-            <button disabled={graded} onClick={() => grade("hard")}>
-              Hard
-              <small>keep my place</small>
-            </button>
-            <button disabled={graded} onClick={() => grade("good")}>
-              Good
-              <small>advance</small>
-            </button>
-          </div>
-        )}
-      </ActionBar>
-    </div>
-  );
-}
-
-/** A note-derived review question (plan 0008 step 7): the note's markdown
- * (or, missing that, its stem as a plain fallback) is the whole card — there
- * is nothing to reveal, so the Again/Hard/Good row appears immediately below
- * it, reusing the same `applySelf` pipeline as `SelfGradeReveal` (just
- * without a reveal gate). */
-function NoteReview({
-  markdown,
-  fallbackStem,
-  lookup,
-  bookId,
-  unitId,
-  applySelf,
-  advance,
-}: {
-  markdown: string | undefined;
-  fallbackStem: string;
-  lookup: TapLookup;
-  /** The bare Book id (spec 0021-2 §2c), for a figure's `getAssetUrl` call —
-   * not to be confused with `AudioPlayer`/`ImageDisplay`'s own `bookId` prop
-   * above, a different component's copy of the same value. */
-  bookId: string;
-  unitId: string;
-  applySelf: (unitId: string, grade: SelfGrade) => Promise<void>;
-  advance: () => void;
-}) {
-  const [graded, setGraded] = useState(false);
-
-  async function grade(selfGrade: SelfGrade) {
-    if (graded) {
-      return;
-    }
-    setGraded(true);
-    await applySelf(unitId, selfGrade);
-    advance();
-  }
-
-  return (
-    <div>
-      {markdown !== undefined ? (
-        <NoteView markdown={markdown} lookup={lookup} bookId={bookId} />
-      ) : (
-        <p className="prompt">{fallbackStem}</p>
-      )}
-      <ActionBar>
-        <div className="grade-buttons">
-          <button disabled={graded} onClick={() => grade("again")}>
-            Again
-          </button>
-          <button disabled={graded} onClick={() => grade("hard")}>
-            Hard
-          </button>
-          <button disabled={graded} onClick={() => grade("good")}>
-            Good
-          </button>
-        </div>
-      </ActionBar>
-    </div>
-  );
-}
-
-/** Reveal-on-tap hint control (plan 0008 step 5): a plain "Hint" button that
- * swaps itself for `text` once tapped, never submitting an answer. Shared by
- * cloze's target-word hint and build's now-hidden-by-default English prompt
- * — the same interaction shape, just fed different text. */
-function HintReveal({ text }: { text: string }) {
-  const [revealed, setRevealed] = useState(false);
-  return revealed ? (
-    <p className="prompt">{text}</p>
-  ) : (
-    <button
-      type="button"
-      className="plain tappable-token"
-      onClick={() => setRevealed(true)}
-    >
-      Hint
-    </button>
-  );
-}
-
-/** Shared typed-input form: cloze and dictation both type an answer, checked
- * via `checkTypedAnswer`, and reveal the target on submit. The Check button
- * lives in the action bar, tied to the form via the native `form` attribute
- * so Enter still submits.
- *
- * `revealedText`/`lookup` (cloze only, plan 0006 step 4): once answered,
- * cloze reveals the sentence with its blank filled in — the "cloze sentence
- * revealed" pinned surface — as tappable text. Dictation never passes these
- * (its target is already the whole sentence with nothing left gapped, and
- * it isn't a pinned surface).
- *
- * `hint` (cloze only, plan 0008 step 5): the target blank's English word,
- * behind a `HintReveal` shown only while unanswered — purely additive, the
- * post-answer reveal above is unchanged. Dictation never passes it. */
-function TypedInput({
-  target,
-  unitId,
-  hint,
-  revealedText,
-  lookup,
-  applyAuto,
-  advance,
-}: {
-  target: string;
-  unitId: string;
-  hint?: string;
-  revealedText?: string;
-  lookup?: TapLookup;
-  applyAuto: (unitId: string, correct: boolean) => Promise<void>;
-  advance: () => void;
-}) {
-  const formId = useId();
-  const [value, setValue] = useState("");
-  const [result, setResult] = useState<Verdict | null>(null);
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (result !== null) {
-      return;
-    }
-    const correct = checkTypedAnswer(target, value);
-    setResult(correct ? "correct" : "incorrect");
-    await applyAuto(unitId, correct);
-  }
-
-  return (
-    <div>
-      <form id={formId} onSubmit={handleSubmit}>
-        <input
-          type="text"
-          autoFocus
-          value={value}
-          disabled={result !== null}
-          onChange={(event) => setValue(event.target.value)}
-        />
-      </form>
-      {result === null && hint !== undefined ? (
-        <HintReveal text={hint} />
-      ) : null}
-      {result !== null && revealedText !== undefined && lookup !== undefined ? (
-        <p className="prompt">
-          <TappableText text={revealedText} lookup={lookup} />
-        </p>
-      ) : null}
-      {result === null ? (
-        <ActionBar>
-          <button className="primary" type="submit" form={formId}>
-            Check
-          </button>
-        </ActionBar>
-      ) : (
-        <VerdictBar
-          verdict={result}
-          detail={`Answer: ${target}`}
-          advance={advance}
-        />
-      )}
-    </div>
-  );
-}
-
-/** Shuffled tokens as a pool of buttons; clicking one appends it to the
- * ordered answer row, clicking an answer token returns it to the pool (by
- * index, so duplicate token strings behave). Shared by scramble (all tokens
- * must be placed) and build (bank distractors may stay in the pool).
- *
- * `lookup` (plan 0006 step 4): once checked, the assembled sentence — "the
- * sentence just built" — renders again as tappable text below the (now
- * frozen) token rows. */
-function ScrambleInteraction({
-  question,
-  lookup,
-  applyAuto,
-  advance,
-}: {
-  question: ScrambleQuestion | BuildQuestion;
-  lookup: TapLookup;
-  applyAuto: (unitId: string, correct: boolean) => Promise<void>;
-  advance: () => void;
-}) {
-  const [pool, setPool] = useState(
-    question.tokens.map((token, key) => ({ token, key })),
-  );
-  const [answer, setAnswer] = useState<{ token: string; key: number }[]>([]);
-  const [result, setResult] = useState<Verdict | null>(null);
-
-  function moveToAnswer(poolIndex: number) {
-    if (result !== null) {
-      return;
-    }
-    const entry = pool[poolIndex];
-    if (entry === undefined) {
-      return;
-    }
-    setPool(pool.filter((_, index) => index !== poolIndex));
-    setAnswer([...answer, entry]);
-  }
-
-  function moveToPool(answerIndex: number) {
-    if (result !== null) {
-      return;
-    }
-    const entry = answer[answerIndex];
-    if (entry === undefined) {
-      return;
-    }
-    setAnswer(answer.filter((_, index) => index !== answerIndex));
-    setPool([...pool, entry]);
-  }
-
-  async function submit() {
-    if (result !== null) {
-      return;
-    }
-    const correct = checkScrambleAnswer(
-      question,
-      answer.map((entry) => entry.token),
-    );
-    setResult(correct ? "correct" : "incorrect");
-    await applyAuto(question.unitId, correct);
-  }
-
-  return (
-    <div>
-      <div className="token-row">
-        {answer.map((entry, index) => (
-          <button
-            key={entry.key}
-            disabled={result !== null}
-            onClick={() => moveToPool(index)}
-          >
-            {entry.token}
-          </button>
-        ))}
-      </div>
-      <div className="token-row">
-        {pool.map((entry, index) => (
-          <button
-            key={entry.key}
-            disabled={result !== null}
-            onClick={() => moveToAnswer(index)}
-          >
-            {entry.token}
-          </button>
-        ))}
-      </div>
-      {result !== null ? (
-        <p className="prompt">
-          <TappableText
-            text={answer.map((entry) => entry.token).join(" ")}
-            lookup={lookup}
-          />
-        </p>
-      ) : null}
-      {result === null ? (
-        <ActionBar>
-          <button
-            className="primary"
-            onClick={submit}
-            disabled={
-              question.kind === "scramble"
-                ? pool.length > 0
-                : answer.length === 0
-            }
-          >
-            Check
-          </button>
-        </ActionBar>
-      ) : (
-        <VerdictBar
-          verdict={result}
-          detail={`Answer: ${question.targetTokens.join(" ")}`}
-          advance={advance}
-        />
-      )}
-    </div>
-  );
-}
-
-/** Two columns (prompts, answers); every selection-pair is appended to a
- * history array and re-checked via `matchingOutcomes` — a non-null result
- * clears the board and applies every outcome at once. Per-pair feedback is
- * sound + card color; the action bar appears once the board clears.
- *
- * `lookup` (plan 0006 step 4): "the matched cards" — once a prompt card is
- * cleared (correctly matched), it swaps from a plain (now-disabled) button
- * to tappable text. Only the prompts column is target-language script; the
- * answers column is the gloss/translation side, so it's never tap-to-lookup
- * material and stays plain buttons throughout. */
-function MatchingBoard({
-  question,
-  lookup,
-  applyMatchingOutcomes,
-  advance,
-}: {
-  question: MatchingQuestion;
-  lookup: TapLookup;
-  applyMatchingOutcomes: (outcomes: QuestionOutcome[]) => Promise<void>;
-  advance: () => void;
-}) {
-  const [selectedPrompt, setSelectedPrompt] = useState<number | null>(null);
-  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
-  const [history, setHistory] = useState<
-    { promptIndex: number; answerIndex: number }[]
-  >([]);
-  const [clearedPrompts, setClearedPrompts] = useState<Set<number>>(new Set());
-  const [clearedAnswers, setClearedAnswers] = useState<Set<number>>(new Set());
-  const [finished, setFinished] = useState(false);
-
-  async function resolvePair(promptIndex: number, answerIndex: number) {
-    const newHistory = [...history, { promptIndex, answerIndex }];
-    setHistory(newHistory);
-    const correct = checkMatchingPair(question, promptIndex, answerIndex);
-    if (correct) {
-      playCorrect();
-      setClearedPrompts((cleared) => new Set(cleared).add(promptIndex));
-      setClearedAnswers((cleared) => new Set(cleared).add(answerIndex));
-    } else {
-      playWrong();
-    }
-    setSelectedPrompt(null);
-    setSelectedAnswer(null);
-    const outcomes = matchingOutcomes(question, newHistory);
-    if (outcomes !== null) {
-      setFinished(true);
-      await applyMatchingOutcomes(outcomes);
-    }
-  }
-
-  function pickPrompt(promptIndex: number) {
-    if (finished || clearedPrompts.has(promptIndex)) {
-      return;
-    }
-    setSelectedPrompt(promptIndex);
-    if (selectedAnswer !== null) {
-      void resolvePair(promptIndex, selectedAnswer);
-    }
-  }
-
-  function pickAnswer(answerIndex: number) {
-    if (finished || clearedAnswers.has(answerIndex)) {
-      return;
-    }
-    setSelectedAnswer(answerIndex);
-    if (selectedPrompt !== null) {
-      void resolvePair(selectedPrompt, answerIndex);
-    }
-  }
-
-  return (
-    <div>
-      <div className="matching-board">
-        <ul className="card-list">
-          {question.prompts.map((prompt, index) => {
-            const cleared = clearedPrompts.has(index);
-            return (
-              <li
-                key={index}
-                className={`card${
-                  cleared
-                    ? " correct"
-                    : selectedPrompt === index
-                      ? " selected"
-                      : ""
-                }`}
-              >
-                {cleared ? (
-                  <div>
-                    <TappableText text={prompt.text} lookup={lookup} />
-                  </div>
-                ) : (
-                  <button disabled={finished} onClick={() => pickPrompt(index)}>
-                    {prompt.text}
-                  </button>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-        <ul className="card-list">
-          {question.answers.map((answer, index) => (
-            <li
-              key={index}
-              className={`card${
-                clearedAnswers.has(index)
-                  ? " correct"
-                  : selectedAnswer === index
-                    ? " selected"
-                    : ""
-              }`}
-            >
-              <button
-                disabled={finished || clearedAnswers.has(index)}
-                onClick={() => pickAnswer(index)}
-              >
-                {answer.text}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </div>
-      {finished ? (
-        <VerdictBar verdict="correct" detail="" advance={advance} />
-      ) : null}
-    </div>
-  );
-}
+export type { SessionSummary };
 
 /** The scheduling-unit id(s) a question resolves to for pinning purposes: a
  * matching board's several ids (every prompt's and answer's unitId — a
@@ -715,288 +83,6 @@ const SKIP_SHEET_OPTIONS: { skip: SkipLength; label: string }[] = [
   { skip: "year", label: "1 year" },
 ];
 
-/** Renders the interaction for one question, per the plan's per-kind table.
- * Views only render and forward answers; all checking/normalization is
- * engine code (`checkTypedAnswer`, `checkScrambleAnswer`,
- * `checkMatchingPair`, `matchingOutcomes`). */
-function renderInteraction(
-  question: Question,
-  bookId: string,
-  readAloudLang: string | undefined,
-  lookup: TapLookup,
-  applyAuto: (unitId: string, correct: boolean) => Promise<void>,
-  applySelf: (unitId: string, grade: SelfGrade) => Promise<void>,
-  applyMatchingOutcomes: (outcomes: QuestionOutcome[]) => Promise<void>,
-  advance: () => void,
-) {
-  switch (question.kind) {
-    case "recognize":
-      return (
-        <ChoiceList
-          prompt={question.prompt}
-          lookup={lookup}
-          choices={question.choices}
-          correctIndex={question.correctIndex}
-          unitId={question.unitId}
-          applyAuto={applyAuto}
-          advance={advance}
-        />
-      );
-    case "recall":
-      return (
-        <>
-          <p className="prompt">{question.prompt}</p>
-          <SelfGradeReveal
-            lines={question.reveal}
-            revealLabel="Show answer"
-            unitId={question.unitId}
-            applySelf={applySelf}
-            advance={advance}
-          />
-        </>
-      );
-    case "cloze": {
-      const hintItem = resolveToken(
-        question.target,
-        lookup.domainContent.entries,
-      );
-      const hint =
-        hintItem !== undefined ? itemDisplayText(hintItem) : undefined;
-      return (
-        <>
-          <p className="prompt">{question.prompt}</p>
-          <TypedInput
-            target={question.target}
-            unitId={question.unitId}
-            hint={hint}
-            revealedText={question.prompt.replace("___", question.target)}
-            lookup={lookup}
-            applyAuto={applyAuto}
-            advance={advance}
-          />
-        </>
-      );
-    }
-    case "dictation":
-      return (
-        <>
-          <AudioPlayer bookId={bookId} stem={question.audioStem} />
-          <TypedInput
-            target={question.target}
-            unitId={question.unitId}
-            applyAuto={applyAuto}
-            advance={advance}
-          />
-        </>
-      );
-    case "scramble":
-      return (
-        <ScrambleInteraction
-          question={question}
-          lookup={lookup}
-          applyAuto={applyAuto}
-          advance={advance}
-        />
-      );
-    case "build":
-      return (
-        <>
-          <HintReveal text={question.prompt} />
-          <ScrambleInteraction
-            question={question}
-            lookup={lookup}
-            applyAuto={applyAuto}
-            advance={advance}
-          />
-        </>
-      );
-    case "matching":
-      return (
-        <MatchingBoard
-          question={question}
-          lookup={lookup}
-          applyMatchingOutcomes={applyMatchingOutcomes}
-          advance={advance}
-        />
-      );
-    case "listen":
-      return (
-        <>
-          {question.audio.kind === "stem" ? (
-            <AudioPlayer bookId={bookId} stem={question.audio.stem} />
-          ) : (
-            <SpeakerButton text={question.audio.text} lang={readAloudLang} />
-          )}
-          <ChoiceList
-            choices={question.choices}
-            correctIndex={question.correctIndex}
-            unitId={question.unitId}
-            applyAuto={applyAuto}
-            advance={advance}
-          />
-        </>
-      );
-    case "shadowing":
-      return (
-        <>
-          <AudioPlayer bookId={bookId} stem={question.audioStem} />
-          <SelfGradeReveal
-            lines={question.transcript}
-            revealLabel="Show transcript"
-            unitId={question.unitId}
-            applySelf={applySelf}
-            advance={advance}
-          />
-        </>
-      );
-    case "minimal-pair":
-      return (
-        <>
-          <AudioPlayer bookId={bookId} stem={question.audioStem} />
-          <ChoiceList
-            choices={question.choices}
-            correctIndex={question.correctIndex}
-            unitId={question.unitId}
-            applyAuto={applyAuto}
-            advance={advance}
-          />
-        </>
-      );
-    case "picture":
-      return (
-        <>
-          <ImageDisplay bookId={bookId} stem={question.imageStem} alt="" />
-          <ChoiceList
-            choices={question.choices}
-            correctIndex={question.correctIndex}
-            unitId={question.unitId}
-            applyAuto={applyAuto}
-            advance={advance}
-          />
-        </>
-      );
-    case "note":
-      return (
-        <NoteReview
-          markdown={getNoteMarkdown(bookId, question.stem)}
-          fallbackStem={question.stem}
-          lookup={lookup}
-          bookId={bookId}
-          unitId={question.unitId}
-          applySelf={applySelf}
-          advance={advance}
-        />
-      );
-    default:
-      question satisfies never;
-      throw new Error(`unknown question kind: ${(question as Question).kind}`);
-  }
-}
-
-/** Celebration panel (plan 0003 step 4): fanfare on mount, stat tiles for
- * the accuracy (auto-graded) or again/hard/good tallies (self-graded), and
- * the streak flame — animated when today's session extended it. */
-function SummaryPanel({
-  summary,
-  loadStreak,
-  onFinished,
-  nextAction,
-}: {
-  summary: SessionSummary;
-  loadStreak?: () => Promise<Streak | null>;
-  onFinished: (summary: SessionSummary) => void;
-  nextAction?: { label: string; onClick: () => void };
-}) {
-  const [streak, setStreak] = useState<Streak | null>(null);
-
-  useEffect(() => {
-    playFanfare();
-    void loadStreak?.().then(setStreak);
-  }, [loadStreak]);
-
-  const recallTotal =
-    summary.recallCounts.again +
-    summary.recallCounts.hard +
-    summary.recallCounts.good;
-  const extendedToday =
-    streak !== null && streak.lastActiveDay === localDay(new Date());
-  // Self-graded recall has no pass/fail — only auto-graded accuracy earns a
-  // thumbs-down beaver, and only below a middling score.
-  const passed =
-    summary.autoTotal === 0 || summary.autoCorrect / summary.autoTotal >= 0.7;
-
-  return (
-    <section>
-      <img
-        className="summary-icon"
-        src={`${import.meta.env.BASE_URL}art/icons/thumbs_${passed ? "up" : "down"}_beaver.png`}
-        alt=""
-      />
-      <h2>Session complete!</h2>
-      <div className="stat-tiles">
-        {summary.autoTotal > 0 ? (
-          <div className="stat-tile">
-            <span className="stat-value">
-              {Math.round((summary.autoCorrect / summary.autoTotal) * 100)}%
-            </span>
-            <span className="status">
-              {summary.autoCorrect} of {summary.autoTotal} correct
-            </span>
-          </div>
-        ) : null}
-        {recallTotal > 0 ? (
-          <>
-            <div className="stat-tile">
-              <span className="stat-value">{summary.recallCounts.again}</span>
-              <span className="status">Again</span>
-            </div>
-            <div className="stat-tile">
-              <span className="stat-value">{summary.recallCounts.hard}</span>
-              <span className="status">Hard</span>
-            </div>
-            <div className="stat-tile">
-              <span className="stat-value">{summary.recallCounts.good}</span>
-              <span className="status">Good</span>
-            </div>
-          </>
-        ) : null}
-        {streak !== null ? (
-          <div className="stat-tile">
-            <span className={`stat-value${extendedToday ? " flame-tick" : ""}`}>
-              <img
-                className="icon-glyph"
-                src={`${import.meta.env.BASE_URL}art/icons/fire.png`}
-                alt=""
-              />{" "}
-              {streak.length}
-            </span>
-            <span className="status">Day streak</span>
-          </div>
-        ) : null}
-      </div>
-      <ActionBar>
-        {nextAction !== undefined ? (
-          <button className="primary" autoFocus onClick={nextAction.onClick}>
-            <img
-              className="icon-glyph"
-              src={`${import.meta.env.BASE_URL}art/icons/play.png`}
-              alt=""
-            />{" "}
-            {nextAction.label}
-          </button>
-        ) : null}
-        <button
-          className={nextAction !== undefined ? "plain" : "primary"}
-          autoFocus={nextAction === undefined}
-          onClick={() => onFinished(summary)}
-        >
-          Done
-        </button>
-      </ActionBar>
-    </section>
-  );
-}
-
 /**
  * Runs one task, review, or pooled unit-practice session: presents
  * `questions` one at a time, grades each answer via `onGrade`, and shows a
@@ -1006,14 +92,12 @@ function SummaryPanel({
  *
  * Every question resolves to a list of `(unitId, quality)` outcomes (the
  * outcome-list contract, plan 0002): single-unit questions apply one, a
- * cleared matching board applies N. `onGrade` is applied once per outcome;
- * `onAllAnswered` (optional) fires once, at grade time of the last
- * question, for callers that record task attempts — so exiting after the
- * final answer still counts as a completed attempt. `onTaskAnswered` (plan
- * 0010, optional, only meaningful with `taskIds`) fires once per task, as
- * soon as that task's own questions are all answered — granular, unlike
- * `onAllAnswered`, so a pooled multi-task session credits each task as it
- * finishes rather than only at session-end.
+ * cleared matching board applies N, and `onGrade` is applied once per
+ * outcome. That is the whole of what a session reports now: the
+ * task-attempt callbacks it used to fire went with the attempted-task set
+ * plan 0025 §8 replaced, and completion is read from the levels those
+ * grades write. `taskIds` stays, because Pin and Edit still need to know
+ * which task produced a question.
  */
 export function SessionScreen({
   title,
@@ -1027,13 +111,11 @@ export function SessionScreen({
   onSkip,
   onEdit,
   onGrade,
-  onAllAnswered,
-  onTaskAnswered,
   onFinished,
   nextAction,
   onExit,
   onSwipeBack,
-  requeueOnAgain,
+  drill,
   loadStreak,
 }: {
   title: string;
@@ -1068,12 +150,6 @@ export function SessionScreen({
    * not just pooled unit sessions. */
   onEdit?: (index: number) => void;
   onGrade: (unitId: string, quality: Quality) => Promise<void>;
-  onAllAnswered?: () => void;
-  /** Fires once per task, the moment every question tagged with that task's
-   * id has been answered (plan 0010) — distinct from `onAllAnswered`, which
-   * only fires once the whole session is done. Only meaningful when
-   * `taskIds` is passed. */
-  onTaskAnswered?: (taskId: string) => void;
   onFinished: (summary: SessionSummary) => void;
   /** Plan 0020 §4: an optional forward step shown as the summary's primary
    * button. Only the pooled unit-practice session passes this — every other
@@ -1087,128 +163,38 @@ export function SessionScreen({
    * there must go through Done/`nextAction`, which is what advances the
    * lesson. */
   onSwipeBack?: () => void;
-  /** Re-show a failed card later in this same session (plan 0022 §4).
-   * **Daily Review only.** Unit practice drives `onTaskAnswered` and plan
-   * 0020's lesson chaining off its answer counts, and its own completion is
-   * what unlocks the next unit — a queue that grows under it would be
-   * reasoning about a moving target. Pedagogically the restriction costs
-   * little: a unit session already drills each item across several task
-   * types, whereas Daily Review shows each scheduling unit exactly once,
-   * which is where a failure genuinely disappears for a day. */
-  requeueOnAgain?: boolean;
+  /**
+   * Drives a session whose questions are decided as it goes (plan 0025 §6),
+   * rather than one that knows them all before it starts. Absent for review
+   * and ad-hoc study, which are one card per due scheduling unit.
+   *
+   * This is what replaced plan 0022 §4's same-session requeue (§11): a
+   * missed word comes back at an expanding gap *and a level lower*, in every
+   * session type rather than Daily Review alone.
+   */
+  drill?: SessionDrill;
   /** Fetches the current streak for the summary panel (plan 0003). */
   loadStreak?: () => Promise<Streak | null>;
 }) {
-  const [index, setIndex] = useState(0);
   const [summary, setSummary] = useState<SessionSummary>(emptySummary);
-  const [done, setDone] = useState(false);
-  const [skipSheetOpen, setSkipSheetOpen] = useState(false);
-  const answeredCount = useRef(0);
-  const touchStartX = useRef<number | null>(null);
-
   /**
-   * The live queue (plan 0022 §4), as positions into `questions` rather than
-   * copies of them: a failed card in Daily Review is re-inserted three cards
-   * later, so the same question can occupy two positions, and the session is
-   * not over until the second one is answered.
-   *
-   * Positions, not copies, because `questions` is a live prop — the scoped
-   * `✎` sheet re-derives it from the draft mid-session, and a snapshot would
-   * freeze the session on the pre-edit text. `repeat` marks the re-inserted
-   * visit, which never requeues again: "answered again" ends it, however it
-   * went, so a card the learner keeps failing cannot extend the session
-   * forever.
+   * What the current question graded, collected as its outcomes land and
+   * handed to the drill when the card is done with. A matching board reports
+   * several; every other kind reports one.
    */
-  const [queue, setQueue] = useState<{ source: number; repeat?: true }[]>(() =>
-    questions.map((_, source) => ({ source })),
+  const pending = useRef<SessionOutcome[]>([]);
+  const { question, source, done, advance, position, length } = useSessionQueue(
+    questions,
+    drill === undefined
+      ? undefined
+      : () => {
+          const outcomes = pending.current;
+          pending.current = [];
+          return drill.extend(outcomes);
+        },
   );
-
-  /**
-   * The queue's length as of *now*, including an insertion made earlier in
-   * this same tick. `advance()` runs immediately after the grade handler
-   * that requeues, in the same closure, where `queue` is still the
-   * pre-insertion array — without this, failing the last card of a review
-   * would end the session on the spot and the requeued card would never be
-   * shown. Re-synced on every render, so it can never drift.
-   */
-  const queueLength = useRef(queue.length);
-  queueLength.current = queue.length;
-
-  // Keep the queue in step with a `questions` prop that changed under us:
-  // drop entries whose question is gone, append ones that appeared. Requeued
-  // visits of surviving questions are preserved. Returning `current`
-  // unchanged when nothing moved is what keeps this from looping.
-  useEffect(() => {
-    setQueue((current) => {
-      const kept = current.filter((entry) => entry.source < questions.length);
-      const seen = new Set(kept.map((entry) => entry.source));
-      const added = questions
-        .map((_, source) => source)
-        .filter((source) => !seen.has(source))
-        .map((source) => ({ source }));
-      return kept.length === current.length && added.length === 0
-        ? current
-        : [...kept, ...added];
-    });
-  }, [questions.length]);
-
-  // Per-task question totals (plan 0010), recomputed only when `taskIds`
-  // changes: how many questions belong to each distinct task id, so
-  // `noteAnswered` can tell when a given task's questions are all answered.
-  const taskTotals = useMemo(() => {
-    const totals = new Map<string, number>();
-    for (const taskId of taskIds ?? []) {
-      if (taskId !== undefined) {
-        totals.set(taskId, (totals.get(taskId) ?? 0) + 1);
-      }
-    }
-    return totals;
-  }, [taskIds]);
-  const taskAnsweredCount = useRef(new Map<string, number>());
-
-  // Clamped, not a bare `queue[index]`: the questions now re-derive from
-  // the draft while the scoped `✎` sheet is open, and the sheet's exercise
-  // card can drop an item — shrinking the list under a session already past
-  // that point. `index` would then read past the end and the body rendered
-  // blank with no way forward. Empty list still lands on `undefined`, which
-  // the render below already handles.
-  const entry = queue[Math.min(index, queue.length - 1)];
-  const source = entry?.source;
-  const question = source === undefined ? undefined : questions[source];
-
-  function advance() {
-    if (index + 1 >= queueLength.current) {
-      setDone(true);
-    } else {
-      // Snapshot form (not a functional updater) so a stray double-call
-      // within one render advances once, never skipping a question.
-      setIndex(index + 1);
-    }
-  }
-
-  /** Called once per question, when its outcome(s) are applied (each
-   * interaction component guards against re-entry, so exactly once). Reads
-   * the current question's task id via `source` — called before `advance()`
-   * shifts `index`, so it still points at the just-answered question.
-   *
-   * Both counters are strict equalities against the *original* question
-   * count, so a requeued answer (Daily Review only, where neither callback
-   * is passed) pushes past them rather than firing them twice. */
-  function noteAnswered() {
-    answeredCount.current += 1;
-    if (answeredCount.current === questions.length) {
-      onAllAnswered?.();
-    }
-    const taskId = source === undefined ? undefined : taskIds?.[source];
-    if (taskId !== undefined) {
-      const counts = taskAnsweredCount.current;
-      const nextCount = (counts.get(taskId) ?? 0) + 1;
-      counts.set(taskId, nextCount);
-      if (nextCount === taskTotals.get(taskId)) {
-        onTaskAnswered?.(taskId);
-      }
-    }
-  }
+  const [skipSheetOpen, setSkipSheetOpen] = useState(false);
+  const touchStartX = useRef<number | null>(null);
 
   function tallyAuto(corrects: boolean[]) {
     setSummary((s) => ({
@@ -1222,49 +208,22 @@ export function SessionScreen({
   // of these three (spec 0019 §3b) — wrapping here, once, covers all nine
   // `pick`/`grade`/`handleSubmit`/`submit`/`resolvePair` call sites at once.
   // The guard wraps the ENTIRE body, not just the `onGrade` await: a
-  // blocked-storage throw out of `noteAnswered` -> `onTaskAnswered`/
-  // `onAllAnswered` -> `markTaskAttempted`, or out of `playCorrect`/
-  // `playWrong` (both synchronous `localStorage` reads), would otherwise
-  // escape before `onGrade` ever runs and trap the learner exactly like an
-  // unguarded `onGrade` rejection would (owner decision 4: the learner is
-  // never trapped). Swallowing here, rather than in the two `grade`
-  // functions that call `advance()` after, means every caller — including
-  // the five `pick`/`handleSubmit`/`submit`/`resolvePair` sites that never
-  // call `advance()` themselves — still runs its own follow-up.
-  /**
-   * Re-inserts the current card three cards later (plan 0022 §4):
-   * `min(index + 4, queue.length)` is one expression with no branch — with
-   * at least three cards left it lands exactly three later, with fewer it
-   * lands at the end. Nothing is persisted and nothing needs to be: Again
-   * already put the card at rung 0 due tomorrow, so a closed app loses only
-   * a same-day drill, and the requeued answer has no grading effect anyway
-   * (`applyGrade` returns null for a card that is no longer due).
-   */
-  function requeueCurrent() {
-    if (!requeueOnAgain || entry === undefined || entry.repeat === true) {
-      return;
-    }
-    const position = Math.min(index, queue.length - 1);
-    queueLength.current += 1;
-    setQueue((current) => {
-      const next = [...current];
-      next.splice(Math.min(position + 4, current.length), 0, {
-        source: entry.source,
-        repeat: true,
-      });
-      return next;
-    });
-  }
-
+  // blocked-storage throw out of `playCorrect`/`playWrong` (both synchronous
+  // `localStorage` reads) would otherwise escape before `onGrade` ever runs
+  // and trap the learner exactly like an unguarded `onGrade` rejection would
+  // (owner decision 4: the learner is never trapped). Swallowing here,
+  // rather than in the two `grade` functions that call `advance()` after,
+  // means every caller — including the five
+  // `pick`/`handleSubmit`/`submit`/`resolvePair` sites that never call
+  // `advance()` themselves — still runs its own follow-up.
   async function applyAuto(unitId: string, correct: boolean) {
     try {
-      noteAnswered();
       tallyAuto([correct]);
+      pending.current.push({ unitId, correct });
       if (correct) {
         playCorrect();
       } else {
         playWrong();
-        requeueCurrent();
       }
       await onGrade(unitId, recognizeQuality(correct));
     } catch {
@@ -1274,10 +233,7 @@ export function SessionScreen({
 
   async function applySelf(unitId: string, grade: SelfGrade) {
     try {
-      noteAnswered();
-      if (grade === "again") {
-        requeueCurrent();
-      }
+      pending.current.push({ unitId, correct: grade === "good" });
       setSummary((s) => ({
         ...s,
         recallCounts: {
@@ -1293,10 +249,18 @@ export function SessionScreen({
 
   async function applyMatchingOutcomes(outcomes: QuestionOutcome[]) {
     try {
-      noteAnswered();
       tallyAuto(
         outcomes.map(([, quality]) => quality === recognizeQuality(true)),
       );
+      for (const [unitId, quality] of outcomes) {
+        // A board answers for every word on it, and the drill credits each
+        // one (plan 0025 §6) — dropping the others would throw four answers
+        // away and ask them again.
+        pending.current.push({
+          unitId,
+          correct: quality === recognizeQuality(true),
+        });
+      }
       for (const [unitId, quality] of outcomes) {
         await onGrade(unitId, quality);
       }
@@ -1329,6 +293,14 @@ export function SessionScreen({
     currentUnitIds.length > 0 &&
     currentUnitIds.every((id) => pinnedUnitIds?.has(id));
 
+  // One place decides what the bar reads: a drill counts *correct answers
+  // owed*, which stalls on a miss instead of growing (plan 0025 §6); a
+  // fixed session counts cards.
+  const barMax =
+    drill === undefined ? length : drill.answered + drill.remaining;
+  const barValue =
+    drill === undefined ? (done ? length : position) : drill.answered;
+
   /** Pushes the current card out and moves on. Skipping is not an answer, so
    * nothing is tallied and nothing is graded — `advance()` alone. */
   async function skipCurrent(skip: SkipLength) {
@@ -1359,13 +331,13 @@ export function SessionScreen({
           className="progress-track"
           role="progressbar"
           aria-valuemin={0}
-          aria-valuemax={queue.length}
-          aria-valuenow={done ? queue.length : index}
+          aria-valuemax={barMax}
+          aria-valuenow={barValue}
         >
           <div
             className="progress-fill"
             style={{
-              width: `${((done ? queue.length : index) / Math.max(queue.length, 1)) * 100}%`,
+              width: `${(barValue / Math.max(barMax, 1)) * 100}%`,
             }}
           />
         </div>
@@ -1414,7 +386,7 @@ export function SessionScreen({
         {onEdit !== undefined &&
         question !== undefined &&
         question.kind !== "note" ? (
-          <button className="plain" onClick={() => onEdit(index)}>
+          <button className="plain" onClick={() => onEdit(source ?? 0)}>
             <img
               className="icon-glyph"
               src={`${import.meta.env.BASE_URL}art/icons/edit.png`}
@@ -1441,7 +413,7 @@ export function SessionScreen({
           nextAction={nextAction}
         />
       ) : question === undefined ? null : (
-        <div key={index} className="question">
+        <div key={position} className="question">
           {renderInteraction(
             question,
             bookId,

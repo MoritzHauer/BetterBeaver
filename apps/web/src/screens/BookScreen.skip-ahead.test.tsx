@@ -73,8 +73,6 @@ const content: Content = {
 const store: ProgressStore = {
   getItemState: () => Promise.resolve(null),
   setItemState: () => Promise.resolve(),
-  getAttemptedTaskIds: () => Promise.resolve([]),
-  markTaskAttempted: () => Promise.resolve(),
   getStreak: () => Promise.resolve(null),
   setStreak: () => Promise.resolve(),
   incrementReps: () => Promise.resolve(),
@@ -84,7 +82,7 @@ function renderBookScreen(onSelectLesson: (lessonId: string) => void) {
   return render(
     <BookScreen
       content={content}
-      attemptedTaskIds={new Set<string>()}
+      unitProgress={new Map()}
       store={store}
       epoch={0}
       onSelectLesson={onSelectLesson}

@@ -12,11 +12,13 @@ describe("learning settings", () => {
     localStorage.clear();
   });
 
-  it("defaults to the ladder on Balanced, skipping a week", () => {
+  it("defaults to Balanced, skipping a week, with no key row", () => {
     expect(getLearning()).toEqual({
-      scheduler: "ladder",
       pace: "balanced",
       skip: "week",
+      extraKeys: false,
+      keyboardHelpDismissed: false,
+      progression: "normal",
     });
     expect(getLearning()).toEqual(DEFAULT_LEARNING);
   });
@@ -25,9 +27,11 @@ describe("learning settings", () => {
     setLearning({ pace: "light" });
     setLearning({ skip: "year" });
     expect(getLearning()).toEqual({
-      scheduler: "ladder",
       pace: "light",
       skip: "year",
+      extraKeys: false,
+      keyboardHelpDismissed: false,
+      progression: "normal",
     });
   });
 
@@ -36,10 +40,15 @@ describe("learning settings", () => {
       LEARNING_KEY,
       JSON.stringify({ pace: "turbo", scheduler: "sm2", skip: "decade" }),
     );
+    // `scheduler` is a settings key that no longer exists (plan 0025 §11):
+    // a stored one is read past, not migrated away, exactly as an
+    // unrecognised pace is.
     expect(getLearning()).toEqual({
-      scheduler: "sm2",
       pace: "balanced",
       skip: "week",
+      extraKeys: false,
+      keyboardHelpDismissed: false,
+      progression: "normal",
     });
   });
 
@@ -48,12 +57,9 @@ describe("learning settings", () => {
     expect(getLearning()).toEqual(DEFAULT_LEARNING);
   });
 
-  it("hands the scheduler only the two fields it needs", () => {
-    setLearning({ scheduler: "sm2", pace: "thorough", skip: "month" });
-    expect(schedulingConfig()).toEqual({
-      scheduler: "sm2",
-      pace: "thorough",
-    });
+  it("hands the scheduler only the field it needs", () => {
+    setLearning({ pace: "thorough", skip: "month" });
+    expect(schedulingConfig()).toEqual({ pace: "thorough" });
   });
 
   it("rides the bb.* backup sweep", () => {
