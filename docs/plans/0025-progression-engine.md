@@ -313,6 +313,20 @@ The keyboard setup card, the Settings toggle, and the card's offer of the row as
 
 Browser-verified by declaring `extraChars` on the demo domain temporarily: Settings' "How to add the keyboard" opens the card with the desktop steps and the fallback toggle. The content edit was reverted.
 
+### Slices 4-6 and 8 (2026-09-02)
+
+The session engine, the ceiling draw and the two derived exercises, landed together because they interlock — §6's requeue brings a word back "one level lower", which is §4's draw, and §6's rising difficulty *is* §4's two slots.
+
+- **§6's premise was stale and is now true.** Plan 0024's `drill.ts` did not exist, so this was "write the session engine", not "generalise one". It is `packages/engine/src/drill.ts`, and 0024 §2 has been re-pointed at the draw so nobody builds the rotation table it originally specified. That is all slice 8 could be: there was no code to delete.
+- **A matching board credits every word it graded** (owner decision). `advanceDrill` drops those words' later planned visits, so the remaining count stays honest. Two consequences: 0024's "no `matching` inside a drill" non-goal is retired, and a word another board already answered for draws its next exercise up rather than summoning an identical board — without which a unit of four new words opened with four identical boards.
+- **A board is built from its whole task, not a single-item copy.** Every other exercise narrows to the word whose turn it is; matching cannot, because a one-pair board "is not a question at all" (plan 0022 §6's words).
+- **Visits are state; questions are derived.** The drill decides which word, at which slot, how far down; the card is a pure function of that plus the content. Storing built cards froze a session on the pre-edit text the moment the scoped `✎` sheet re-derived content.
+- **The practice-only rule and the day guard both still apply**, so a drill's repeated answers move the level at most as far as §5 allows however many times a word comes round.
+
+`SessionScreen` was split first (shell, interactions, summary, queue hook): at 1508 lines it was over the ceiling `docs/design.md` pins, and the queue had to become one replaceable thing before a drill could drive it.
+
+**Still open here:** the Progression preset is wired for repetitions per word but has no Settings row yet, and its Fast variant — whether a clean streak may advance two levels in a day — is open question 1 and unimplemented.
+
 ## Open questions
 
 1. **Does the Fast preset's two-level streak jump need a floor on evidence?** Two levels a day means a word can reach `write` in five days. That may be right for a learner who is genuinely fast and wrong for one who is guessing well on four-option MCQs.
