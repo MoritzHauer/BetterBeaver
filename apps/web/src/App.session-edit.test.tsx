@@ -118,7 +118,13 @@ async function startUnitSession(): Promise<void> {
   play.click();
   const practice = await screen.findByRole("button", { name: "Practice" });
   practice.click();
-  await screen.findByRole("button", { name: /Edit/ });
+  // The session's own first question, not just any /Edit/ button: the Book
+  // screen behind it has an "Edit content" control that matches too, and the
+  // session now reads the learner's levels before it can draw a card (plan
+  // 0025 §6), so waiting on the wrong one lands a render too early.
+  await waitFor(() => {
+    expect(document.querySelector("main.session .question")).not.toBeNull();
+  });
 }
 
 describe("session Edit button", () => {

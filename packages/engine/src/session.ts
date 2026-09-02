@@ -21,7 +21,7 @@ import {
 import type { Quality } from "@betterbeaver/srs";
 import { blankUnitId, type SchedulingUnit } from "./units.js";
 import { availableExercises, drawExercise } from "./draw.js";
-import { plannedVisits, startDrill } from "./drill.js";
+import type { PlannedVisit } from "./drill.js";
 import { normalizeTypedInput } from "./normalize.js";
 import { shuffle, type Rng } from "./rng.js";
 
@@ -785,87 +785,70 @@ function countTaskQuestions(task: Task, itemById: Map<string, Item>): number {
 }
 
 /**
- * A unit's practice session, planned by the progression engine (plan 0025
- * §4, §6): every word gets `repetitions` appearances — the first its new
- * attempt at one level above where it sits, the rest repetitions drawn from
- * the level below or its own — and each appearance is built as whichever
- * exercise the draw chose.
+ * The question for one planned visit (plan 0025 §4, §6): the draw picks the
+ * exercise from the word's level and the visit's slot, and the builder turns
+ * it into a card.
  *
- * Replaces `buildUnitSession`'s pooled shuffle over authored tasks. The shape
- * is unchanged (`{ question, taskId }` pairs, in order) so every caller,
- * pin control and edit route keeps working; what changed is that the session
- * is now per *word* rather than per authored task, and its difficulty is the
- * learner's rather than the author's.
+ * One visit at a time, not a whole session: §6's queue is asked for the next
+ * question and told how the answer went, so a word that was just missed is
+ * re-drawn a level lower rather than re-showing the card it already failed.
  *
- * `levelOf` is the only thing here that knows about the learner — the caller
- * reads it from the progress store, so this stays pure and testable.
+ * `null` when the content can build nothing for this word — reachable from a
+ * draft, where a unit can hold an item no task references yet. The caller
+ * moves on rather than showing a blank card.
  *
- * A word whose content can build nothing at all is skipped rather than
- * shown as a blank card; that is only reachable from a draft, where a unit
- * can hold an item no task references yet.
+ * `coveredByBoard` is the words a matching board earlier in this session
+ * already answered for. A board answers for every word on it, so without
+ * this a unit of four new words would open with four identical boards; a
+ * covered word draws its next exercise up instead.
  */
-export function buildDrillSession(
+export function buildVisitQuestion(
+  visit: PlannedVisit,
   unit: Unit,
   content: Content,
   levelOf: (schedulingUnitId: string) => number,
-  repetitions: number,
   rng: Rng,
-): { question: Question; taskId: string }[] {
-  const itemById = new Map(content.items.map((item) => [item.id, item]));
-  const taskById = new Map(content.tasks.map((task) => [task.id, task]));
-  const state = startDrill(shuffle([...unit.itemIds], rng), repetitions);
-
-  const built: { question: Question; taskId: string }[] = [];
-  const coveredByBoard = new Set<string>();
-  for (const visit of plannedVisits(state)) {
-    const item = itemById.get(visit.unitId);
-    if (item === undefined) {
-      continue;
-    }
-    // A matching board answers for every word on it, so a word already
-    // covered by one built earlier in this session must not summon another
-    // — four new words would otherwise open with four identical boards.
-    let available = availableExercises(item, content);
-    if (coveredByBoard.has(visit.unitId)) {
-      available = available.filter((exercise) => exercise !== "matching");
-    }
-    const exercise = drawExercise(
-      levelOf(visit.unitId),
-      visit.slot,
-      available,
-      rng,
-    );
-    if (exercise === null) {
-      continue;
-    }
-    const question = buildExerciseQuestion(
-      { id: item.id, item },
-      exercise,
-      content,
-      rng,
-    );
-    if (question === null) {
-      continue;
-    }
-    if (question.kind === "matching") {
-      for (const prompt of question.prompts) {
-        coveredByBoard.add(prompt.unitId);
-      }
-    }
-    // The task this exercise came from, for the pin control and the edit
-    // route. A derived exercise has no authored task, so it borrows the
-    // unit's first task that references the item — which is what both of
-    // those surfaces actually want: somewhere in this unit to act on.
-    const taskId =
-      unit.taskIds.find((id) => {
-        const task = taskById.get(id);
-        return task !== undefined && task.itemIds.includes(item.id);
-      }) ??
-      unit.taskIds[0] ??
-      unit.id;
-    built.push({ question, taskId });
+  coveredByBoard: ReadonlySet<string> = new Set(),
+): { question: Question; taskId: string } | null {
+  const item = content.items.find((candidate) => candidate.id === visit.unitId);
+  if (item === undefined) {
+    return null;
   }
-  return built;
+
+  let available = availableExercises(item, content);
+  if (coveredByBoard.has(visit.unitId)) {
+    available = available.filter((exercise) => exercise !== "matching");
+  }
+  // `levelOffset` is how far this word has slipped *within* the session: a
+  // miss brings it back one lower, so the draw sees the lowered level.
+  const level = Math.max(levelOf(visit.unitId) + visit.levelOffset, 0);
+  const exercise = drawExercise(level, visit.slot, available, rng);
+  if (exercise === null) {
+    return null;
+  }
+  const question = buildExerciseQuestion(
+    { id: item.id, item },
+    exercise,
+    content,
+    rng,
+  );
+  if (question === null) {
+    return null;
+  }
+
+  // The task this exercise came from, for the pin control and the edit
+  // route. A derived exercise has no authored task, so it borrows the unit's
+  // first task that references the item — which is what both of those
+  // surfaces actually want: somewhere in this unit to act on.
+  const taskById = new Map(content.tasks.map((task) => [task.id, task]));
+  const taskId =
+    unit.taskIds.find((id) => {
+      const task = taskById.get(id);
+      return task !== undefined && task.itemIds.includes(item.id);
+    }) ??
+    unit.taskIds[0] ??
+    unit.id;
+  return { question, taskId };
 }
 
 export function countUnitQuestions(unit: Unit, content: Content): number {

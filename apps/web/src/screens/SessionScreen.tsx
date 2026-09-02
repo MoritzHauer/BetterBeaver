@@ -11,7 +11,20 @@ import { Sheet } from "../components/Sheet";
 import { SKIP_DAYS, getLearning, type SkipLength } from "../learning";
 import { SWIPE_THRESHOLD } from "./UnitScreen";
 import { renderInteraction } from "./session/interactions";
-import { useSessionQueue } from "./session/useSessionQueue";
+import {
+  useSessionQueue,
+  type SessionOutcome,
+} from "./session/useSessionQueue";
+
+/** How a caller drives a session whose questions are decided as it goes. */
+export interface SessionDrill {
+  /** Extends the session after `outcomes`; true if a question was appended. */
+  extend: (outcomes: SessionOutcome[]) => boolean;
+  /** Correct answers still owed — the number the learner is shown. */
+  remaining: number;
+  /** Correct answers given so far. */
+  answered: number;
+}
 import {
   SummaryPanel,
   emptySummary,
@@ -102,7 +115,7 @@ export function SessionScreen({
   nextAction,
   onExit,
   onSwipeBack,
-  requeueOnAgain,
+  drill,
   loadStreak,
 }: {
   title: string;
@@ -150,21 +163,36 @@ export function SessionScreen({
    * there must go through Done/`nextAction`, which is what advances the
    * lesson. */
   onSwipeBack?: () => void;
-  /** Re-show a failed card later in this same session (plan 0022 §4).
-   * **Daily Review only.** Unit practice drives `onTaskAnswered` and plan
-   * 0020's lesson chaining off its answer counts, and its own completion is
-   * what unlocks the next unit — a queue that grows under it would be
-   * reasoning about a moving target. Pedagogically the restriction costs
-   * little: a unit session already drills each item across several task
-   * types, whereas Daily Review shows each scheduling unit exactly once,
-   * which is where a failure genuinely disappears for a day. */
-  requeueOnAgain?: boolean;
+  /**
+   * Drives a session whose questions are decided as it goes (plan 0025 §6),
+   * rather than one that knows them all before it starts. Absent for review
+   * and ad-hoc study, which are one card per due scheduling unit.
+   *
+   * This is what replaced plan 0022 §4's same-session requeue (§11): a
+   * missed word comes back at an expanding gap *and a level lower*, in every
+   * session type rather than Daily Review alone.
+   */
+  drill?: SessionDrill;
   /** Fetches the current streak for the summary panel (plan 0003). */
   loadStreak?: () => Promise<Streak | null>;
 }) {
   const [summary, setSummary] = useState<SessionSummary>(emptySummary);
-  const { question, source, done, advance, requeueCurrent, position, length } =
-    useSessionQueue(questions, requeueOnAgain);
+  /**
+   * What the current question graded, collected as its outcomes land and
+   * handed to the drill when the card is done with. A matching board reports
+   * several; every other kind reports one.
+   */
+  const pending = useRef<SessionOutcome[]>([]);
+  const { question, source, done, advance, position, length } = useSessionQueue(
+    questions,
+    drill === undefined
+      ? undefined
+      : () => {
+          const outcomes = pending.current;
+          pending.current = [];
+          return drill.extend(outcomes);
+        },
+  );
   const [skipSheetOpen, setSkipSheetOpen] = useState(false);
   const touchStartX = useRef<number | null>(null);
 
@@ -191,11 +219,11 @@ export function SessionScreen({
   async function applyAuto(unitId: string, correct: boolean) {
     try {
       tallyAuto([correct]);
+      pending.current.push({ unitId, correct });
       if (correct) {
         playCorrect();
       } else {
         playWrong();
-        requeueCurrent();
       }
       await onGrade(unitId, recognizeQuality(correct));
     } catch {
@@ -205,9 +233,7 @@ export function SessionScreen({
 
   async function applySelf(unitId: string, grade: SelfGrade) {
     try {
-      if (grade === "again") {
-        requeueCurrent();
-      }
+      pending.current.push({ unitId, correct: grade === "good" });
       setSummary((s) => ({
         ...s,
         recallCounts: {
@@ -226,6 +252,15 @@ export function SessionScreen({
       tallyAuto(
         outcomes.map(([, quality]) => quality === recognizeQuality(true)),
       );
+      for (const [unitId, quality] of outcomes) {
+        // A board answers for every word on it, and the drill credits each
+        // one (plan 0025 §6) — dropping the others would throw four answers
+        // away and ask them again.
+        pending.current.push({
+          unitId,
+          correct: quality === recognizeQuality(true),
+        });
+      }
       for (const [unitId, quality] of outcomes) {
         await onGrade(unitId, quality);
       }
@@ -258,6 +293,14 @@ export function SessionScreen({
     currentUnitIds.length > 0 &&
     currentUnitIds.every((id) => pinnedUnitIds?.has(id));
 
+  // One place decides what the bar reads: a drill counts *correct answers
+  // owed*, which stalls on a miss instead of growing (plan 0025 §6); a
+  // fixed session counts cards.
+  const barMax =
+    drill === undefined ? length : drill.answered + drill.remaining;
+  const barValue =
+    drill === undefined ? (done ? length : position) : drill.answered;
+
   /** Pushes the current card out and moves on. Skipping is not an answer, so
    * nothing is tallied and nothing is graded — `advance()` alone. */
   async function skipCurrent(skip: SkipLength) {
@@ -288,13 +331,13 @@ export function SessionScreen({
           className="progress-track"
           role="progressbar"
           aria-valuemin={0}
-          aria-valuemax={length}
-          aria-valuenow={done ? length : position}
+          aria-valuemax={barMax}
+          aria-valuenow={barValue}
         >
           <div
             className="progress-fill"
             style={{
-              width: `${((done ? length : position) / Math.max(length, 1)) * 100}%`,
+              width: `${(barValue / Math.max(barMax, 1)) * 100}%`,
             }}
           />
         </div>

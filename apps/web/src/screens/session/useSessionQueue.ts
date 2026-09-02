@@ -10,6 +10,12 @@
 import { useEffect, useRef, useState } from "react";
 import type { Question } from "@betterbeaver/engine";
 
+/** One question's outcome, as the drill needs to hear it (plan 0025 §6). */
+export interface SessionOutcome {
+  unitId: string;
+  correct: boolean;
+}
+
 export interface SessionQueue {
   /** The question on screen, or `undefined` when there is nothing to show. */
   question: Question | undefined;
@@ -19,8 +25,6 @@ export interface SessionQueue {
   done: boolean;
   /** Moves to the next question, or ends the session. */
   advance: () => void;
-  /** Re-shows the current card later in this same session. */
-  requeueCurrent: () => void;
   /** How many questions have been answered, for the progress bar. */
   position: number;
   /** How many the session holds as of now — a requeue lengthens it. */
@@ -29,25 +33,29 @@ export interface SessionQueue {
 
 export function useSessionQueue(
   questions: Question[],
-  requeueOnAgain: boolean | undefined,
+  /**
+   * Extends a session whose questions are decided as it goes (plan 0025 §6):
+   * called when the last question has been answered, and returns true when
+   * it appended another to `questions`. Absent for a session that knows
+   * every question before it starts — review and ad-hoc study.
+   */
+  extend?: () => boolean,
 ): SessionQueue {
   const [index, setIndex] = useState(0);
   const [done, setDone] = useState(false);
 
   /**
-   * The live queue (plan 0022 §4), as positions into `questions` rather than
-   * copies of them: a failed card in Daily Review is re-inserted three cards
-   * later, so the same question can occupy two positions, and the session is
-   * not over until the second one is answered.
+   * The live queue, as positions into `questions` rather than copies of
+   * them. Positions, not copies, because `questions` is a live prop — the
+   * scoped `✎` sheet re-derives it from the draft mid-session, and a
+   * snapshot would freeze the session on the pre-edit text.
    *
-   * Positions, not copies, because `questions` is a live prop — the scoped
-   * `✎` sheet re-derives it from the draft mid-session, and a snapshot would
-   * freeze the session on the pre-edit text. `repeat` marks the re-inserted
-   * visit, which never requeues again: "answered again" ends it, however it
-   * went, so a card the learner keeps failing cannot extend the session
-   * forever.
+   * Re-showing a missed card is no longer done here (plan 0025 §11 retired
+   * plan 0022 §4's same-session requeue): the drill decides that, and its
+   * replacement comes back a level lower and in every session type rather
+   * than Daily Review alone. This queue only ever walks forward.
    */
-  const [queue, setQueue] = useState<{ source: number; repeat?: true }[]>(() =>
+  const [queue, setQueue] = useState<{ source: number }[]>(() =>
     questions.map((_, source) => ({ source })),
   );
 
@@ -91,6 +99,15 @@ export function useSessionQueue(
   const question = source === undefined ? undefined : questions[source];
 
   function advance() {
+    // Asked at the end, not on every answer: a drill decides whether there
+    // is more to do only once the current card is done with. `queueLength`
+    // is bumped for the same reason the requeue used to bump it — this runs
+    // in the closure where `questions` is still the pre-append array.
+    if (extend !== undefined && index + 1 >= queueLength.current) {
+      if (extend()) {
+        queueLength.current += 1;
+      }
+    }
     if (index + 1 >= queueLength.current) {
       setDone(true);
     } else {
@@ -100,37 +117,11 @@ export function useSessionQueue(
     }
   }
 
-  /**
-   * Re-inserts the current card three cards later (plan 0022 §4):
-   * `min(index + 4, queue.length)` is one expression with no branch — with
-   * at least three cards left it lands exactly three later, with fewer it
-   * lands at the end. Nothing is persisted and nothing needs to be: Again
-   * already put the card at rung 0 due tomorrow, so a closed app loses only
-   * a same-day drill, and the requeued answer has no grading effect anyway
-   * (`applyGrade` returns null for a card that is no longer due).
-   */
-  function requeueCurrent() {
-    if (!requeueOnAgain || entry === undefined || entry.repeat === true) {
-      return;
-    }
-    const position = Math.min(index, queue.length - 1);
-    queueLength.current += 1;
-    setQueue((current) => {
-      const next = [...current];
-      next.splice(Math.min(position + 4, current.length), 0, {
-        source: entry.source,
-        repeat: true,
-      });
-      return next;
-    });
-  }
-
   return {
     question,
     source,
     done,
     advance,
-    requeueCurrent,
     position: index,
     length: queue.length,
   };

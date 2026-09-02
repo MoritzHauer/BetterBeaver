@@ -22,7 +22,11 @@ import {
   buildRecallSession,
   buildReviewSession,
   buildTaskSession,
-  buildDrillSession,
+  advanceDrill,
+  buildVisitQuestion,
+  nextVisit,
+  shuffle,
+  startDrill,
   collectUnitProgress,
   dueDomainUnits,
   dueUnits,
@@ -34,7 +38,12 @@ import {
   skipItem,
   symmetricLinks,
 } from "@betterbeaver/engine";
-import type { Question, UnitProgress } from "@betterbeaver/engine";
+import type {
+  DrillState,
+  PlannedVisit,
+  Question,
+  UnitProgress,
+} from "@betterbeaver/engine";
 import type { Quality } from "@betterbeaver/srs";
 import { recallQuality, wordLevel } from "@betterbeaver/srs";
 import type { TapLookup } from "./components/TappableText";
@@ -61,6 +70,7 @@ import { BookScreen } from "./screens/BookScreen";
 import { LessonScreen } from "./screens/LessonScreen";
 import { UnitScreen } from "./screens/UnitScreen";
 import { SessionScreen } from "./screens/SessionScreen";
+import type { SessionOutcome } from "./screens/session/useSessionQueue";
 import {
   ADHOC_MODE_LABELS,
   VocabularyScreen,
@@ -360,23 +370,105 @@ function UnitSession({
     };
   }, [unit.id, store]);
 
-  const pairs = useMemo(
-    () =>
-      levels === null
-        ? []
-        : buildDrillSession(
-            unit,
-            content,
-            (id) => levels.get(id) ?? 0,
-            repetitionsPerWord(),
-            rngFor(unit.id),
-          ),
-    // Same seeded-rebuild rule as TaskSession, plus the levels the plan
-    // reads: they arrive once and do not change while the session runs.
-    [unit.id, content, levels],
-  );
-  const questions = useMemo(() => pairs.map((pair) => pair.question), [pairs]);
-  const taskIds = useMemo(() => pairs.map((pair) => pair.taskId), [pairs]);
+  /**
+   * The drill (plan 0025 §6), and the visits it has handed out so far.
+   *
+   * **Visits, not questions.** What the drill decides is *which word, at
+   * which slot, how far down* — the card itself is a pure function of that
+   * plus the content, so it is derived below rather than stored. Storing
+   * built cards would freeze the session on the pre-edit text the moment the
+   * scoped `✎` sheet re-derives `content`, which is that sheet's whole
+   * point.
+   *
+   * Refs alongside the state because `extend` runs inside the session's
+   * `advance()` — an event handler, where reading state would see the value
+   * from the render that installed the callback.
+   */
+  const drillRef = useRef<DrillState | null>(null);
+  const answeredRef = useRef(0);
+  const [visits, setVisits] = useState<PlannedVisit[]>([]);
+  const [remaining, setRemaining] = useState(0);
+  const [answered, setAnswered] = useState(0);
+
+  /**
+   * The cards for those visits, rebuilt from current content.
+   *
+   * Seeded from the unit id and replayed from the start each time, so a
+   * rebuild produces the cards it produced before — the same seeded-rebuild
+   * rule `TaskSession` uses. Board coverage accumulates across the replay: a
+   * word a matching board already answered for draws its next exercise up
+   * rather than summoning an identical board.
+   */
+  const cards = useMemo(() => {
+    if (levels === null) {
+      return [];
+    }
+    const rng = rngFor(unit.id);
+    const covered = new Set<string>();
+    const built: { question: Question; taskId: string }[] = [];
+    for (const visit of visits) {
+      const card = buildVisitQuestion(
+        visit,
+        unit,
+        content,
+        (id) => levels.get(id) ?? 0,
+        rng,
+        covered,
+      );
+      if (card === null) {
+        continue;
+      }
+      if (card.question.kind === "matching") {
+        for (const prompt of card.question.prompts) {
+          covered.add(prompt.unitId);
+        }
+      }
+      built.push(card);
+    }
+    return built;
+  }, [visits, unit, content, levels]);
+
+  // Opens the session once the levels are in: the whole plan is known — its
+  // length included — but only the first visit is handed out.
+  useEffect(() => {
+    if (levels === null) {
+      return;
+    }
+    const state = startDrill(
+      shuffle([...unit.itemIds], rngFor(unit.id)),
+      repetitionsPerWord(),
+    );
+    drillRef.current = state;
+    answeredRef.current = 0;
+    const first = nextVisit(state);
+    setVisits(first === null ? [] : [first]);
+    setRemaining(state.remaining);
+    setAnswered(0);
+    // `content` is deliberately absent: only the unit and the learner's
+    // levels reopen a session, or every mid-session edit would restart it.
+  }, [unit.id, levels]);
+
+  const questions = useMemo(() => cards.map((c) => c.question), [cards]);
+  const taskIds = useMemo(() => cards.map((c) => c.taskId), [cards]);
+
+  /** Tells the drill how the card went and hands out the next visit (§6). */
+  const extend = (outcomes: SessionOutcome[]): boolean => {
+    const state = drillRef.current;
+    if (state === null) {
+      return false;
+    }
+    const next = advanceDrill(state, outcomes);
+    drillRef.current = next;
+    answeredRef.current += state.remaining - next.remaining;
+    setRemaining(next.remaining);
+    setAnswered(answeredRef.current);
+    const visit = nextVisit(next);
+    if (visit === null) {
+      return false;
+    }
+    setVisits((current) => [...current, visit]);
+    return true;
+  };
 
   async function handleGrade(unitId: string, quality: Quality) {
     await recordGrade(
@@ -444,6 +536,7 @@ function UnitSession({
       nextAction={nextAction}
       onExit={onDone}
       onSwipeBack={onSwipeBack}
+      drill={{ extend, remaining, answered }}
       loadStreak={() => store.getStreak(domainId)}
     />
   );
@@ -679,10 +772,6 @@ function ReviewSession({
       onSkip={handleSkip}
       onFinished={onDone}
       onExit={onDone}
-      // Daily Review is the one session that re-shows a failed card (plan
-      // 0022 §4): it shows each scheduling unit exactly once, so a failure
-      // here is the one that would otherwise vanish for a whole day.
-      requeueOnAgain
       loadStreak={() => store.getStreak(domainId)}
     />
   );
