@@ -27,6 +27,11 @@ jobs:
           node-version: 22
       - run: corepack enable
       - run: corepack pnpm install --frozen-lockfile
+      # `pnpm check` now includes a real-browser suite (the "e2e" vitest
+      # project). Locally the browser is a once-per-machine step; a runner is
+      # a fresh machine every time, so it has to be installed here or the
+      # gate fails on a missing executable rather than on the code.
+      - run: corepack pnpm exec playwright install --with-deps chromium
       - run: corepack pnpm check
         env:
           # Mapped from the public build vars; unset → the guardrail test skips.
