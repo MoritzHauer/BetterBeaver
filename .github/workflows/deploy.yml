@@ -1,7 +1,12 @@
-name: Deploy to GitHub Pages
+name: Check and deploy
 
 on:
   push:
+    branches: [main]
+  # The check job is the only gate this repo has, and until now it ran after
+  # merge — a red `main` was how you found out. Running it on the PR is what
+  # `docs/design.md` said was missing.
+  pull_request:
     branches: [main]
 
 permissions:
@@ -10,11 +15,14 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
+  # Per-ref: a PR's check run must never cancel a deploy already running on
+  # `main`, which one shared `pages` group would have let it do.
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  # Quality gate: the same `pnpm check` run locally, now enforced on push.
+  # Quality gate: the same `pnpm check` run locally, enforced on every pull
+  # request and again on the push that merges it.
   # With Supabase vars set it also runs the published-catalog guardrail
   # (packages/engine/src/publishedCatalog.test.ts) — a live-backend vs
   # deployed-bundle divergence blocks the deploy instead of reaching learners.
@@ -40,6 +48,9 @@ jobs:
 
   deploy:
     needs: check
+    # Pull requests get the gate, not the deploy: betterbeaver.de is served
+    # from `main` only.
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
