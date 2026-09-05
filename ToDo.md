@@ -36,8 +36,10 @@
       back from inside the app walked off the app's own history entry to
       `about:blank`. The trap now re-arms on any screen that has a back action.
       Regression test: `apps/web/src/App.back-nav.test.tsx`.
-- [ ] the android back button returns to an empty page — **attempt 6: the app
-      has URLs now.** Every screen is a fragment route (`#/books/demo`), and
+- [x] the android back button returns to an empty page — **fixed by attempt 6,
+      confirmed on the device 2026-09-03: the nav diary shows `back` lines.**
+      Six attempts; the one that held is the app having URLs. Every screen is
+      a fragment route (`#/books/demo`), and
       navigation is a fragment navigation the browser performs rather than a
       `pushState` entry the app fabricates — which is the exact thing the
       back-trapping intervention skips. Deep links and reload-keeps-your-place
@@ -68,8 +70,17 @@
       drops the gate entirely (two trap entries, every screen, every display
       mode, no pop released) and adds the instrumentation the first two lacked:
       an error boundary, a boot-failure screen, and an on-device nav diary
-      under About → Diagnostics. **Leave this open until the phone confirms
-      it** — and if it is still black, the diary says which of the three it is.
+      under About → Diagnostics. **The phone confirmed it 2026-09-03** — the
+      diary finally carries `back` lines, so a real press now reaches the page
+      instead of jumping past a script-inserted entry into another document.
+      **No automated test guards this.** Five green verifications meant
+      nothing for the same reason (docs/STATUS.md): Playwright's `goBack()`
+      and CDP's mouse-back are programmatic traversals, the exact path the
+      back-trapping heuristic exempts. Re-confirmed 2026-09-03 by mutation —
+      reverting `history-nav.ts` to the `pushState` shape leaves
+      `App.back-nav.e2e.test.ts` green. Only the device can tell the two
+      apart, so a regression here is silent until someone presses back on a
+      phone.
 - [x] add a link to the GitHub repo — About screen and the Settings → About
       card.
 - [x] info / about button including the app version — `AboutScreen`, reached
