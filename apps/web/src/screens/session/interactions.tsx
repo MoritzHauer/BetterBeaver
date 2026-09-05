@@ -462,6 +462,16 @@ function ScrambleInteraction({
   applyAuto: (unitId: string, correct: boolean) => Promise<void>;
   advance: () => void;
 }) {
+  // Copied into state because the learner moves these between bank and
+  // answer. That copy is why both call sites key this component on
+  // `question.tokens`: the session re-derives in place when the `✎` sheet
+  // edits its content (`key={position}` on the question div deliberately
+  // keeps the position), and without the remount the bank would still show
+  // the text the author just fixed while the prompt above it showed the fix.
+  // Content-keyed rather than always-remounting, so a half-built answer
+  // survives a sheet the author opened and closed without typing: an
+  // unedited re-derive reshuffles nothing, which is what the sheet test's
+  // byte-for-byte `.question` comparison across open/close holds.
   const [pool, setPool] = useState(
     question.tokens.map((token, key) => ({ token, key })),
   );
@@ -769,6 +779,7 @@ export function renderInteraction(
     case "scramble":
       return (
         <ScrambleInteraction
+          key={question.tokens.join("\u0000")}
           question={question}
           lookup={lookup}
           applyAuto={applyAuto}
@@ -780,6 +791,7 @@ export function renderInteraction(
         <>
           <HintReveal text={question.prompt} />
           <ScrambleInteraction
+            key={question.tokens.join("\u0000")}
             question={question}
             lookup={lookup}
             applyAuto={applyAuto}

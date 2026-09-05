@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { CONTENT_SCHEMA_VERSION } from "@betterbeaver/schema";
 import type { BookDocument, DomainDocument } from "@betterbeaver/schema";
@@ -178,12 +179,11 @@ describe("session Edit button", () => {
     // Scoped (decision 13): the tapped entity's own fields, and none of the
     // navigable document tree the form editor put here. Awaited, not read
     // once: the Book's slot settles before the lexicon's, so a word's fields
-    // arrive a commit after the sheet does.
-    const field = await waitFor(() => {
-      const found = sheet.querySelector<HTMLInputElement>('input[type="text"]');
-      expect(found).not.toBeNull();
-      return found!;
-    });
+    // arrive a commit after the sheet does. By role, not by tag: which kind
+    // the draw lands on decides whether those fields are inputs or textareas.
+    const fields =
+      await within(sheet).findAllByRole<HTMLInputElement>("textbox");
+    const field = fields[0]!;
     expect(
       screen.queryByRole("button", { name: "Validate & publish" }),
     ).toBeNull();
@@ -202,15 +202,14 @@ describe("session Edit button", () => {
 
     screen.getByRole("button", { name: /Edit/ }).click();
     const sheet = await screen.findByRole("dialog");
-    // The card's Term, which is what this question kind puts on screen as
-    // its answer choices — a `picture` question prompts with the image and
-    // answers in the target language (plan 0025 §2), so the Definition in
-    // the textarea below never reaches the board.
-    const field = await waitFor(() => {
-      const found = sheet.querySelector<HTMLInputElement>('input[type="text"]');
-      expect(found).not.toBeNull();
-      return found!;
-    });
+    // The kind's first field, which is the one the board renders from
+    // whichever kind the draw landed on: a `concept`'s Term, a `sentence`'s
+    // Text, a `lexeme`'s Script. By role rather than by tag, because whether
+    // it is an input or a textarea is the kind's business — a `sentence` has
+    // no text input at all, both of its fields are textareas.
+    const fields =
+      await within(sheet).findAllByRole<HTMLInputElement>("textbox");
+    const field = fields[0]!;
     fireEvent.change(field, { target: { value: "ZZ-EDITED" } });
 
     // Closing the sheet is the moment that used to lose it: `sessionEdit`
