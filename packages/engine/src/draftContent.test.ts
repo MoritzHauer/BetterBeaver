@@ -275,4 +275,52 @@ describe("draftContent: the Book's optional display fields", () => {
     expect("icon" in without).toBe(false);
     expect("hasCoverArt" in without).toBe(false);
   });
+
+  it("carries a lexeme's exampleGenerated flag through the draft", () => {
+    // The whole point of the flag: it survives a round trip through the
+    // editor's working document. `draftLexemePayload` rebuilds the payload
+    // field by field, so an unlisted key is dropped the first time an author
+    // opens the entry — and the learner-facing "AI example" marker with it.
+    const entries = [
+      {
+        id: "d-a",
+        kind: "lexeme",
+        payload: {
+          script: "s",
+          transliteration: "t",
+          gloss: "g",
+          example: { text: "e", translation: "x" },
+          exampleGenerated: true,
+        },
+        sourceRef: "d-resource-1",
+      },
+      { id: "d-b", kind: "lexeme", payload: { script: "s2" }, sourceRef: "r" },
+    ];
+    const { parsed } = draftContent(
+      {
+        topic: { id: "b", code: "b", domainId: "d" },
+        lessons: [],
+        units: [],
+        items: [],
+        tasks: [],
+        resources: [],
+        notes: [],
+      },
+      {
+        domain: { id: "d", code: "d", kind: "language" },
+        entries,
+        families: [],
+      },
+      emptyAssets,
+    );
+    const [flagged, plain] = parsed.entries;
+    expect(flagged?.kind === "lexeme" && flagged.payload.exampleGenerated).toBe(
+      true,
+    );
+    // Absent stays absent — never widened to `false`, which would read as
+    // "a human wrote this" on every untouched entry.
+    expect(
+      plain?.kind === "lexeme" && "exampleGenerated" in plain.payload,
+    ).toBe(false);
+  });
 });

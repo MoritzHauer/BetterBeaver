@@ -1,0 +1,291 @@
+{
+  "_readme": "entryId is resolved by headword (lexicon/ky/entries[].payload.script, unique across all 232). src=manual means taken from the Peace Corps manual / Competencies text in ~/vault/sources/kyrgyz, OCR diacritics restored (ө ү ң) where the scan dropped them. src=generated means written by Claude Opus 5 on 2026-09-07 and NOT reviewed by a native speaker — these set payload.exampleGenerated=true and render as '· AI example' in the entry popup.",
+
+  "Ага": {
+    "text": "Менин агам мугалим.",
+    "translation": "My older brother is a teacher.",
+    "src": "generated"
+  },
+  "Байке": {
+    "text": "Байкем айдоочу, эжем тигүүчү.",
+    "translation": "My older brother is a driver, my older sister is a seamstress.",
+    "src": "manual"
+  },
+  "Ини": {
+    "text": "Менин иним окуучу.",
+    "translation": "My younger brother is a student.",
+    "src": "generated"
+  },
+  "Карындаш": {
+    "text": "Байкем айдоочу, карындашым окуучу.",
+    "translation": "My older brother is a driver, my younger sister is a pupil.",
+    "src": "manual"
+  },
+  "Синди": {
+    "text": "Менин синдим бала бакчага барат.",
+    "translation": "My younger sister goes to kindergarten.",
+    "src": "generated"
+  },
+  "Жээн": {
+    "text": "Бул менин жээним.",
+    "translation": "This is my nephew.",
+    "src": "generated"
+  },
+  "Жезде": {
+    "text": "Эжем инженер, жездем тилчи.",
+    "translation": "My older sister is an engineer, my brother-in-law is a linguist.",
+    "src": "manual"
+  },
+  "Жеңе": {
+    "text": "Агам менен жеңем мугалим.",
+    "translation": "My older brother and his wife are teachers.",
+    "src": "manual"
+  },
+  "Кайната": {
+    "text": "Кайнатам пенсияда.",
+    "translation": "My father-in-law is retired.",
+    "src": "generated"
+  },
+  "Кайнэне": {
+    "text": "Кайнэнем таттуу тамак жасайт.",
+    "translation": "My mother-in-law makes tasty food.",
+    "src": "generated"
+  },
+  "Күйө": {
+    "text": "Кызымдын күйөсү дарыгер.",
+    "translation": "My daughter's husband is a doctor.",
+    "src": "generated"
+  },
+  "Күйөө": {
+    "text": "Менин күйөөм заводдо иштейт.",
+    "translation": "My husband works at a factory.",
+    "src": "generated"
+  },
+  "Аял": {
+    "text": "Бул сенин аялыңбы?",
+    "translation": "Is this your wife?",
+    "src": "manual"
+  },
+  "Тайата": {
+    "text": "Жондун тайатасы фирмада иштейт.",
+    "translation": "John's maternal grandfather works at a firm.",
+    "src": "manual"
+  },
+  "Тайэне": {
+    "text": "Жондун тайэнеси иштейт.",
+    "translation": "John's maternal grandmother works.",
+    "src": "manual"
+  },
+  "Тайаке": {
+    "text": "Менин тайакем Бишкекте жашайт.",
+    "translation": "My maternal uncle lives in Bishkek.",
+    "src": "generated"
+  },
+  "Тайэже": {
+    "text": "Тайэжем ырчы.",
+    "translation": "My maternal aunt is a singer.",
+    "src": "generated"
+  },
+  "Чоң ата": {
+    "text": "Чоң атам менен чоң апам айылда жашайт.",
+    "translation": "My grandfather and grandmother live in the village.",
+    "src": "generated"
+  },
+  "Чоң апа": {
+    "text": "Чоң апам таттуу нан жасайт.",
+    "translation": "My grandmother makes sweet bread.",
+    "src": "generated"
+  },
+  "Бала": {
+    "text": "Балам бала бакчага барат.",
+    "translation": "My child goes to kindergarten.",
+    "src": "manual"
+  },
+  "Кыз": {
+    "text": "Менин кызым окуучу.",
+    "translation": "My daughter is a pupil.",
+    "src": "generated"
+  },
+  "Дос": {
+    "text": "Досум менен базарга барам.",
+    "translation": "I am going to the bazaar with my friend.",
+    "src": "generated"
+  },
+  "Ынтымактуу": {
+    "text": "Ооба, менин үй-бүлөм чоң жана ынтымактуу.",
+    "translation": "Yes, my family is big and close-knit.",
+    "src": "manual"
+  },
+
+  "Айдоочу": {
+    "text": "Байкем окуучу эмес, ал айдоочу.",
+    "translation": "My older brother is not a student, he is a driver.",
+    "src": "manual"
+  },
+  "Тигүүчү": {
+    "text": "Тигүүчү кийим тигет.",
+    "translation": "A seamstress sews clothes.",
+    "src": "manual"
+  },
+  "Жазуучу": {
+    "text": "Атам жазуучу, апам ырчы.",
+    "translation": "My father is a writer, my mother is a singer.",
+    "src": "manual"
+  },
+  "Ырчы": {
+    "text": "Апам ырчы, ал жакшы ырдайт.",
+    "translation": "My mother is a singer, she sings well.",
+    "src": "generated"
+  },
+  "Кызматчы": {
+    "text": "Атам кызматчы, апам дүкөнчү.",
+    "translation": "My father is an office worker, my mother is a shopkeeper.",
+    "src": "manual"
+  },
+  "Дүкөнчү": {
+    "text": "Дүкөнчү дүкөндө иштейт.",
+    "translation": "A shopkeeper works in a shop.",
+    "src": "generated"
+  },
+  "Мугалим": {
+    "text": "Бул ким? — Бул мугалим.",
+    "translation": "Who is this? — This is a teacher.",
+    "src": "manual"
+  },
+  "Окуучу": {
+    "text": "Мен окуучумун, мен мектепте окуймун.",
+    "translation": "I am a pupil, I study at school.",
+    "src": "generated"
+  },
+  "Дарыгер": {
+    "text": "Дарыгерди чакырдыңызбы?",
+    "translation": "Did you call the doctor?",
+    "src": "manual"
+  },
+  "Белгилүү": {
+    "text": "Менин тайакем белгилүү жазуучу.",
+    "translation": "My maternal uncle is a well-known writer.",
+    "src": "generated"
+  },
+  "Пенсия": {
+    "text": "Чоң атам пенсиясын алды.",
+    "translation": "My grandfather received his pension.",
+    "src": "generated"
+  },
+  "Пенсияда": {
+    "text": "Жок, алар иштебейт, алар пенсияда.",
+    "translation": "No, they do not work, they are retired.",
+    "src": "manual"
+  },
+
+  "бир": {
+    "text": "Мага бир белет бериңиз.",
+    "translation": "Give me one ticket, please.",
+    "src": "generated"
+  },
+  "эки": {
+    "text": "Менде эки бала бар.",
+    "translation": "I have two children.",
+    "src": "generated"
+  },
+  "үч": {
+    "text": "Үч литри алтымыш беш сом турат.",
+    "translation": "Three litres cost sixty-five som.",
+    "src": "manual"
+  },
+  "төрт": {
+    "text": "Бүгүн төрт сабак.",
+    "translation": "Today there are four lessons.",
+    "src": "manual"
+  },
+  "беш": {
+    "text": "Нан беш сом турат.",
+    "translation": "The bread costs five som.",
+    "src": "generated"
+  },
+  "алты": {
+    "text": "Мен алты сом төлөдүм.",
+    "translation": "I paid six som.",
+    "src": "generated"
+  },
+  "жети": {
+    "text": "Мен саат жетиде турам.",
+    "translation": "I get up at seven o'clock.",
+    "src": "generated"
+  },
+  "сегиз": {
+    "text": "Мен он сегиз жаштамын.",
+    "translation": "I am eighteen years old.",
+    "src": "manual"
+  },
+  "тогуз": {
+    "text": "Асан саат тогузда турду.",
+    "translation": "Asan got up at nine o'clock.",
+    "src": "manual"
+  },
+  "он": {
+    "text": "Тогуздан он мүнөт өттү.",
+    "translation": "It is ten past nine.",
+    "src": "manual"
+  },
+  "жыйырма": {
+    "text": "Бул көйнөк жыйырма сом.",
+    "translation": "This dress is twenty som.",
+    "src": "generated"
+  },
+  "отуз": {
+    "text": "Менин агам отуз жашта.",
+    "translation": "My older brother is thirty years old.",
+    "src": "generated"
+  },
+  "кырк": {
+    "text": "Мен кырк беш жаштамын.",
+    "translation": "I am forty-five years old.",
+    "src": "manual"
+  },
+  "элүү": {
+    "text": "Эт элүү сом турат.",
+    "translation": "The meat costs fifty som.",
+    "src": "generated"
+  },
+  "алтымыш": {
+    "text": "Үч литрин алтымыш беш сомго бересизби?",
+    "translation": "Will you give me three litres of it for sixty-five som?",
+    "src": "manual"
+  },
+  "жетимиш": {
+    "text": "Мейли, жетимиш сомго берейин!",
+    "translation": "All right, I will give it for seventy som!",
+    "src": "manual"
+  },
+  "сексен": {
+    "text": "Чоң атам сексен жашта.",
+    "translation": "My grandfather is eighty years old.",
+    "src": "generated"
+  },
+  "токсон": {
+    "text": "Бул дары токсон сом турат.",
+    "translation": "This medicine costs ninety som.",
+    "src": "generated"
+  },
+  "жүз": {
+    "text": "Мага жүз америкалык долларды алмаштырып бериңиз.",
+    "translation": "Please change a hundred American dollars for me.",
+    "src": "manual"
+  },
+  "миң": {
+    "text": "Бир айда бир жарым миң сом алам.",
+    "translation": "I earn one and a half thousand som a month.",
+    "src": "manual"
+  },
+  "сом": {
+    "text": "Белет он сом турат.",
+    "translation": "The ticket costs ten som.",
+    "src": "generated"
+  },
+  "акча": {
+    "text": "Рахмат, акчаңызды алыңыз.",
+    "translation": "Thank you, take your money.",
+    "src": "manual"
+  }
+}

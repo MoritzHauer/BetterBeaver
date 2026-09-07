@@ -65,6 +65,7 @@ function draftLexemePayload(p: Record<string, unknown>): LexemePayload {
           },
         }
       : {}),
+    ...(p.exampleGenerated === true ? { exampleGenerated: true } : {}),
     ...(typeof p.usageNote === "string" && p.usageNote !== ""
       ? { usageNote: p.usageNote }
       : {}),

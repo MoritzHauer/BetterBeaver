@@ -1,0 +1,170 @@
+{
+  "Ал": {
+    "text": "Ал студент. Ал англисче сүйлөйт.",
+    "translation": "He is a student. He speaks English.",
+    "src": "manual"
+  },
+  "Алар": {
+    "text": "Алар иштебейт, алар пенсияда.",
+    "translation": "They do not work, they are retired.",
+    "src": "manual"
+  },
+  "Биз": {
+    "text": "Биз Америкадан келдик.",
+    "translation": "We came from America.",
+    "src": "manual"
+  },
+  "Силер": {
+    "text": "Силер кайдан келдиңер?",
+    "translation": "Where did you all come from?",
+    "src": "manual"
+  },
+  "сен": {
+    "text": "Менин атым Асан, сенин атың ким?",
+    "translation": "My name is Asan, what is your name?",
+    "src": "manual"
+  },
+  "сиз": {
+    "text": "«Сиз» деген сылык сөз.",
+    "translation": "\"Siz\" is the polite word.",
+    "src": "manual"
+  },
+  "Бул": {
+    "text": "Бул эмне? — Бул китеп.",
+    "translation": "What is this? — This is a book.",
+    "src": "manual"
+  },
+  "Булар": {
+    "text": "Булар окуучулар.",
+    "translation": "These are pupils.",
+    "src": "manual"
+  },
+  "Ким?": {
+    "text": "Бул ким? — Бул Сагын.",
+    "translation": "Who is this? — This is Sagyn.",
+    "src": "manual"
+  },
+  "Эмне?": {
+    "text": "Бул эмне? — Бул калем.",
+    "translation": "What is this? — This is a pen.",
+    "src": "manual"
+  },
+
+  "Ач": {
+    "text": "Терезени аччы, класс ысып кетти.",
+    "translation": "Open the window, the classroom has got hot.",
+    "src": "manual"
+  },
+  "Жап": {
+    "text": "Эшикти жапчы, угулбай жатат.",
+    "translation": "Close the door, I cannot hear.",
+    "src": "manual"
+  },
+  "Бер": {
+    "text": "Мага китепти бер.",
+    "translation": "Give me the book.",
+    "src": "generated"
+  },
+  "Ук": {
+    "text": "Мугалимди ук.",
+    "translation": "Listen to the teacher.",
+    "src": "manual"
+  },
+  "Айт": {
+    "text": "Өзүңдүн атыңды айт.",
+    "translation": "Say your name.",
+    "src": "manual"
+  },
+  "Бол": {
+    "text": "Эртең даяр бол.",
+    "translation": "Be ready tomorrow.",
+    "src": "generated"
+  },
+  "Оку": {
+    "text": "Китепти оку.",
+    "translation": "Read the book.",
+    "src": "generated"
+  },
+  "Сүйлө": {
+    "text": "Кыргызча сүйлө.",
+    "translation": "Speak Kyrgyz.",
+    "src": "generated"
+  },
+  "Көргөз": {
+    "text": "Мага белетиңди көргөз.",
+    "translation": "Show me your ticket.",
+    "src": "generated"
+  },
+
+  "агай": {
+    "text": "Саламатсызбы, агай!",
+    "translation": "Hello, teacher!",
+    "src": "manual"
+  },
+  "эжеке": {
+    "text": "Саламатсызбы, эжеке!",
+    "translation": "Hello, older sister!",
+    "src": "generated"
+  },
+  "аксакал": {
+    "text": "Ассалом алейкум, аксакал! Кирүүгө мүмкүнбү?",
+    "translation": "Peace be with you, elder! May I come in?",
+    "src": "manual"
+  },
+
+  "Рахмат": {
+    "text": "Иштер кандай? — Рахмат, жакшы.",
+    "translation": "How are things? — Thanks, fine.",
+    "src": "manual"
+  },
+  "жакшы": {
+    "text": "Иштерим жакшы.",
+    "translation": "Things are going well for me.",
+    "src": "manual"
+  },
+  "Жаман эмес": {
+    "text": "Иштериңиз кандай? — Жаман эмес.",
+    "translation": "How are things? — Not bad.",
+    "src": "manual"
+  },
+  "Саламатчылык!": {
+    "text": "Саламатсызбы! — Саламатчылык!",
+    "translation": "Hello! — I am well!",
+    "src": "manual"
+  },
+  "Албетте": {
+    "text": "Албетте болот! Келиңиз!",
+    "translation": "Of course you may! Come in!",
+    "src": "manual"
+  },
+  "Кечиресиз": {
+    "text": "Кечиресиз, бул Кант шаарыбы?",
+    "translation": "Excuse me, is this the town of Kant?",
+    "src": "manual"
+  },
+  "Көрүшкөнчө": {
+    "text": "Жакшы кал, көрүшкөнчө!",
+    "translation": "Goodbye, see you again!",
+    "src": "generated"
+  },
+  "Тойдум": {
+    "text": "Дагы тамак аласызбы? — Рахмат, тойдум.",
+    "translation": "Will you have some more? — Thank you, I am full.",
+    "src": "generated"
+  },
+  "Бойдокмун": {
+    "text": "Үйлөнгөнсүңбү? — Жок, мен бойдокмун.",
+    "translation": "Are you married? — No, I am single.",
+    "src": "manual"
+  },
+  "Американыкпыз": {
+    "text": "Биз Америкадан келдик, биз американыкпыз.",
+    "translation": "We came from America, we are Americans.",
+    "src": "generated"
+  },
+  "Айтыңызчы": {
+    "text": "Айтыңызчы, бүгүн канча сабак болот?",
+    "translation": "Tell me please, how many lessons are there today?",
+    "src": "manual"
+  }
+}
