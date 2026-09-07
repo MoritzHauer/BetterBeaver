@@ -16,17 +16,39 @@ a separate job, and the same one the 90 skipped phrase entries want.
 
 ## Publish
 
-The tree edited is `scratch.local/ky-0023` (`topic:kyrgyz` v13, `domain:ky` v7 —
-pulled 2026-08-30, the day plan 0023 §7 republished). Pull fresh before publishing
-and re-run the merge, so nothing published since is lost:
+**Published 2026-09-07: `domain:ky` v8 -> v9, schema version 2; `topic:kyrgyz`
+unchanged.** Verified by re-pulling the live document — 142 entries carry an
+example, 54 flagged.
+
+The authoring was done against a 2026-08-30 checkout, which was `domain:ky` **v7**
+— one version behind, because plan 0023 §7's script -> text republish landed later
+the same evening. Publishing from it would have silently reverted §7. The pull
+below is what caught that, and the reason the mapping is a re-runnable merge
+rather than 139 edits: pull fresh, re-merge, audit the delta, then publish.
 
     BB_CONTENT_DIR=/tmp/bb-ky node scripts/pull-book.ts kyrgyz
     python3 scripts/merge-examples.py /tmp/bb-ky/lexicon/ky/entries
     BB_CONTENT_DIR=/tmp/bb-ky corepack pnpm exec vitest run packages/schema/src/content.test.ts
     BB_CONTENT_DIR=/tmp/bb-ky SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... node scripts/republish-content.ts
 
-`merge.py` never overwrites an example that is already there, so it is safe to
-re-run.
+The merge added `example` to 85 entries and `example` + `exampleGenerated` to 54,
+changed no existing field, and left the Book tree byte-identical — worth
+re-checking the same way on any future re-run.
+
+`schema_version` deliberately stays at **2**. `exampleGenerated` is a new optional
+field and zod strips unknown keys, so an app that predates it reads v9 fine and
+merely does not draw the "· AI example" marker. Bumping to 3 would lock every
+un-updated learner out of Kyrgyz entirely to fix a missing label.
+
+Superseded steps, kept because the shape is what matters:
+
+    BB_CONTENT_DIR=/tmp/bb-ky node scripts/pull-book.ts kyrgyz
+    python3 scripts/merge-examples.py /tmp/bb-ky/lexicon/ky/entries
+    BB_CONTENT_DIR=/tmp/bb-ky corepack pnpm exec vitest run packages/schema/src/content.test.ts
+    BB_CONTENT_DIR=/tmp/bb-ky SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... node scripts/republish-content.ts
+
+`merge-examples.py` never overwrites an example that is already there, so it is
+safe to re-run.
 
 ## AI-generated — 54 entries, need a native pass
 
