@@ -88,6 +88,8 @@ Three placements carry their own justification:
 
 **`picture` moves to the production direction** (image → the foreign word). Today its choices are display texts, so "see the image → pick the English gloss" involves no foreign form anywhere and tests nothing about the language.
 
+**The table is extended by [plan 0027](0027-authored-questions-and-exam-mode.md)**, which adds `choice` at level 2 and `assign` at level 3 — recorded there, in the plan that adds the types, because slice 2 made this table exhaustive over `TaskType` precisely so that a new type cannot compile without placing itself. 0027's §2a carries the reasoning; the placement rule it follows is this section's.
+
 ### 3. The level table: interval, and the speed preset
 
 The level indexes the interval. Difficulty climbs through the first four levels while the word is still being met daily; spacing takes over once it can be produced.
@@ -329,7 +331,17 @@ The session engine, the ceiling draw and the two derived exercises, landed toget
 
 ## Open questions
 
-1. **Does the Fast preset's two-level streak jump need a floor on evidence?** Two levels a day means a word can reach `write` in five days. That may be right for a learner who is genuinely fast and wrong for one who is guessing well on four-option MCQs.
-2. **What replaces the unit card's question count when a unit's words are at wildly different levels?** The count is computable, but "10 questions" over words at levels 1 and 9 describes two very different sittings.
-3. **Who sets `extraChars` on the live Kyrgyz domain, and when?** It rides plan 0023's suffix-table content pass, which has not started.
-4. **Does `minimal-pair` at level 3 make sense for a word that also has a `pair` item?** The pair is its own scheduling unit with its own level, so a word and its minimal pair climb independently — probably right, but untested against real content.
+**All four answered by the owner on 2026-09-07.** Answers recorded in place; the questions are kept because the reasoning that raised them is what makes each answer legible.
+
+1. ~~**Does the Fast preset's two-level streak jump need a floor on evidence?** Two levels a day means a word can reach `write` in five days. That may be right for a learner who is genuinely fast and wrong for one who is guessing well on four-option MCQs.~~ — **No floor.** Fast ships as designed. The guessing risk is real but bounded: the two-level jump requires a clean streak, a wrong answer costs two levels (§5), and the preset is the learner's own choice about their own pace. Adding an evidence gate would be the app second-guessing a setting the learner deliberately picked. **The implementation gap stands and is not this question**: the Fast variant is still unbuilt (the preset exists, the two-level jump does not), and that remains the one unlanded piece of this plan.
+2. ~~**What replaces the unit card's question count when a unit's words are at wildly different levels?** The count is computable, but "10 questions" over words at levels 1 and 9 describes two very different sittings.~~ — **Nothing. The count stays.** "10 tasks" is the useful number, and level is irrelevant to it: what the card promises is how long the sitting is, not how hard. Plan 0011's decision that the card shows a real question count survives untouched. This matters beyond this plan — [plan 0026](0026-generated-exercises.md)'s amended open question 1 closes by pointing at §6's fixed length, so §6 is now the sole answer to "how long is this session".
+3. ~~**Who sets `extraChars` on the live Kyrgyz domain, and when?** It rides plan 0023's suffix-table content pass, which has not started.~~ — **Not blocking: on Android the system Kyrgyz keyboard is the fix, and it works** (owner-confirmed 2026-09-07). §10 predicted this — "the platform keyboard is the real fix, so the row defaults to off" — and it is what actually happened. `extraChars` for Kyrgyz can ride 0023's content pass whenever it runs; nothing waits on it. **But the answer exposes a case §10 got wrong**, see below.
+4. ~~**Does `minimal-pair` at level 3 make sense for a word that also has a `pair` item?**~~ — **Yes, as designed.** A word and its minimal pair climb independently, each as its own scheduling unit.
+
+## Amendment: the desktop case §10 does not cover (2026-09-07)
+
+§10's `extraChars` row exists because "the Russian layout is what learners have; the Kyrgyz alphabet is that layout's 33 letters plus exactly three it cannot produce". That premise is a **mobile** premise, and it is why the answer to question 3 is only half an answer.
+
+On a desktop browser the learner has a physical QWERTZ or QWERTY keyboard and **no Cyrillic at all** — not 30 of 33 letters, zero. Three extra keys above the field are useless to them, and so is the keyboard setup card, which walks through adding a mobile layout. So every typed exercise — `cloze`, `dictation`, and this plan's own level-9 `write` — is unanswerable on desktop web for a Kyrgyz learner, for a different reason than the one §10 fixed and with a different fix.
+
+**The candidate answer is a full virtual Kyrgyz keyboard on the web build** (owner, 2026-09-07: "for pc website there could be a full virtual kyrgyz keyboard"), not an extension of the three-key row. Scoped as a backlog item rather than designed here: it needs a decision about whether the layout is derived from the domain (`extraChars` cannot express a whole alphabet), whether it shows only on coarse-pointer-absent devices, and whether it is per-domain content or a per-script app capability. Recorded in [STATUS.md](../STATUS.md)'s backlog.

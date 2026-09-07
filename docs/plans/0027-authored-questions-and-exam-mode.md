@@ -43,7 +43,7 @@ What 0026 must **not** do is construct authored questions from nothing: options 
 
 **The exam-reference seam, restated under the amendment.** §3 has an exam list `taskId`s. 0026's amended §2 no longer materialises constructed exercises at all, so there are no generated task ids for an exam to reference by accident — every `taskId` in the content is authored by construction. The validator rule §7 (ae) already states is therefore sufficient on its own, and the "whichever plan lands second owns it" hand-off is resolved: nothing extra is needed on either side. Should 0026's phase 2 ever run (now cosmetic — see its §9), an exam-referenced task is authored and stays in `taskIds` regardless.
 
-**0025 touches this through its level table, and that is still an open cell.** `choice` and `assign` need a level like every other exercise type, and this plan deliberately does not assign one: the ladder is 0025's to define, and guessing here would put a second source of truth beside it. Two hints for whoever does place them, from this plan's own material rather than from taste — a `choice` question shows every option on screen, which puts it near `recognize` at level 2 in the comprehension direction; an `assign` question requires a judgement on every row with no elimination help, which puts it higher. Both are recognition, not production, so neither belongs above the level-4 production boundary 0025 §5's day guard is built around.
+**0025 touches this through its level table, and that cell is now filled** — `choice` at 2, `assign` at 3, decided 2026-09-07 with the reasoning in §2a. 0025 §2 carries a pointer back. This is a hard dependency in one direction: 0025's table is exhaustive over `TaskType`, so this plan's slice 1 cannot compile without it.
 
 **One gap neither plan closes**, recorded in 0026's open questions as well: hand-picked distractors for a **lexeme** have no home. A `question` item is the natural one, but it is its own scheduling unit, so суу-the-word and суу-the-question would carry separate SRS state and both come due — against plan 0006's "one word, one SRS state". The minimal shape is probably an optional link letting an authored question grade an existing scheduling unit rather than minting its own. Nothing in this plan depends on it; the exam use case has stand-alone questions throughout.
 
@@ -96,6 +96,22 @@ A `question` is **book-owned**, like `sentence` and `pair` — not a lexicon ent
 | `TASK_NEEDS_DISTRACTORS` | `false` | `false` |
 
 `TASK_NEEDS_DISTRACTORS: false` is the load-bearing one: options are authored, so the MCQ sampler must not run and classes (g)/(r) must not demand same-kind siblings. Precedent is `build`, which already constructs its own word bank from the payload rather than sampling.
+
+### 2a. Where the two types sit on plan 0025's ladder
+
+Decided 2026-09-07 (owner: "you decide"). [Plan 0025](0025-progression-engine.md) slice 2 made its level table exhaustive over `TaskType` so that a new type cannot compile without a level, so this is a required part of adding one, not an optional extra.
+
+| Level | Exercise | Why here |
+| --- | --- | --- |
+| 2 | `choice` | Every option is on screen: comprehension, not production, so it belongs in 0025's 1–3 band, which its §5 day guard exempts. Level 2 is where `recognize` · comprehend already sits, and `choice` is the same act with better distractors. |
+| 3 | `assign` | Every row must be judged independently and **elimination never helps** — the exact inverse of the reason 0025 §2 puts `matching` at 1 ("elimination carries the last pair for free"). Harder than a single MCQ, still recognition. |
+
+Two consequences worth stating, because neither is obvious:
+
+- **Authored quality is delivered as a better level-2 exercise, not as a higher level.** A hand-written multiple-response question with plausible distractors is genuinely harder than a sampled four-option MCQ — but the level scale measures the learner's relationship to the item, and everything being on screen caps how much retrieval any format can demand. 0026's amended §3 is what cashes the quality in: the authored question wins the (item, level 2) cell, so the learner gets the better exercise at the same rung. Same logic 0025 already applies to `matching`, whose placement reflects the mechanics of the format rather than the care taken over its content.
+- **`assign` at 3 fixes a hole in the ladder for text-only Books.** Level 3 currently holds `listen` and `minimal-pair`, both of which need audio — so a `general` domain with no recordings, which is every software-architecture or mushroom Book, has nothing at level 3 at all and skips it under 0025 §4's "a missing level is skipped, not waited for". `assign` gives those Books a real level-3 exercise. That is a reason to prefer 3 over any other placement, not a coincidence to note afterwards.
+
+Neither type is placed above 3, which keeps 0025 §5's guard meaning what it says: the day guard starts at 4 because production starts at 4, and a question whose answers are all on screen is not production however hard it is.
 
 ### 3. The `exam` entity (`packages/schema`)
 
@@ -215,7 +231,7 @@ Deliberately not solved here: 0017 non-goal "no publishing path" still stands, s
 
 ## Schema changes (`packages/schema`)
 
-- `entities.ts`: `questionOptionSchema`/`questionPayloadSchema` (incl. `generated`), `questionItemSchema` into `itemSchema`'s union; `choice`/`assign` in `TASK_TYPES` and the three contract records; `question` cases in the four presentation helpers (throwing, per `pair`); `examRulesetSchema`/`examSchema`; `bookSchema.examIds` (**optional**, per §3).
+- `entities.ts`: `questionOptionSchema`/`questionPayloadSchema` (incl. `generated`), `questionItemSchema` into `itemSchema`'s union; `choice`/`assign` in `TASK_TYPES`, the three contract records **and plan 0025's exercise level table (2 and 3, per §2a — it is exhaustive over `TaskType`, so this does not compile without them)**; `question` cases in the four presentation helpers (throwing, per `pair`); `examRulesetSchema`/`examSchema`; `bookSchema.examIds` (**optional**, per §3).
 - `documents.ts`: `BookDocument.exams`; `CONTENT_SCHEMA_VERSION` → 3 with the reason in its comment, and a line noting why private content needs no migration.
 - `validate.ts`: `Content.exams`, `ValidateContentInput.exams`, classes (ac)/(ad)/(ae), class (h) exclusion.
 
