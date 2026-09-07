@@ -2,6 +2,12 @@
 
 Status: **drafted** · Owner: Moe · Date: 2026-08-31 · Prerequisite: [plan 0025](0025-progression-engine.md) (generation is only principled once exercises carry a level) · Origin: owner proposal, 2026-08-31 — "remove all standard exercise questions and just let them be generated based on the content; specific task creation should still be possible"
 
+> **Amended 2026-09-07**, owner question during the [plan 0027](0027-authored-questions-and-exam-mode.md) design — "should the tasks be in the unit already for every format or should it be auto generated depending on the difficulty needed right now? Often the tasks will be hand crafted with the wrong answers as well."
+>
+> One change, and everything else follows from it: **the generator produces a question for one item at one level, not a task set for a unit** (§1). Plan 0025 §4 asks for exactly that — the early slot at `{level−1, level}`, the later slot at `level+1` — and a task set would have to be filtered back down to a level to serve it.
+>
+> Consequences, each recorded in place: constructed exercises are never materialised and so need no ids (§2, rewritten); authored content wins per **(item, level)** rather than per type, and authored wrong answers turn out to be item data rather than task data (§3, amended); phase 2's schema bump drops from deferred to cosmetic (§9); open questions 1 and 3 close. Nothing about the level table, item targets (§5), completion (§4) or the validation posture (§7) changes.
+
 ## Purpose
 
 A `Task` carries no authored decision. Checked against the shipped seed, all thirteen tasks are `{id, type, itemIds, instructions}` and every one of those four fields is either mechanical or boilerplate:
@@ -39,31 +45,59 @@ This plan derives the index from the item set and 0025's ladder, and keeps autho
 
 ### 1. The generator
 
-Pure function over content: unit items (kinds, asset refs, cloze markup) + the domain lexicon + 0025's exercise level table + optional targets (§5) + a question budget → a task set. No `Rng`; shuffling stays where it is, in session building.
+**Amended 2026-09-07** (see the amendment note above): the signature below replaces "→ a task set". The rest of this section is unchanged and was always right; only the thing being produced moved.
+
+Pure function over content: one item (kind, asset refs, cloze markup) + the domain lexicon + 0025's exercise level table + optional targets (§5) + a level →
+
+```
+exerciseAtLevel(item, level, content) → Question | null
+```
+
+No `Rng`; shuffling stays where it is, in session building. `null` means the content cannot build that level for that item — no audio for `listen`, too few same-kind siblings for an MCQ — which is exactly what 0025 §4's "a missing level is skipped, not waited for" already consumes.
+
+**Why one item and one level, rather than a unit and a task set.** 0025 §4 asks the session engine for an exercise *at a specific level* for a *specific word*: the early slot draws from `{level−1, level}`, the later slot is `level+1`. A generator that returns a unit's task set would then have to be filtered back down to a level — an indirection with no consumer. Nothing in the app wants a list of generated tasks; the session wants the next question, and the author wants a coverage grid (§8), which is this same function run over every (item, level) cell.
 
 Its objective is **per-item level coverage**, not per-type presence — the distinction that keeps it from maximising:
 
 - Every item is reachable across the level range, not clustered at one end: something at the recognition end, something at the production end, and the middle where its kind allows. Two exercises at the same level gain nothing, since 0025 §4 draws one of them anyway.
-- One task per type per unit, so the knob is which types, not how many.
-- Redundant levels collapse: two exercises sharing a level are interchangeable to the draw — generate one, not both.
-- The budget is counted in **questions** (`countUnitQuestions`), not tasks, because that is what the learner experiences. Plan 0011's review already named question-count inflation; the restraint that answered it lives today as a prose guideline in the `/ingest` skill, which a generator either encodes or industrialises.
-- Floors are **gates, not errors**: a unit with three same-kind items simply does not get an MCQ (§7).
+- ~~One task per type per unit, so the knob is which types, not how many.~~ **Retired by the amendment** — there are no generated tasks to count. The knob is which (item, level) cells construction covers, which is the coverage grid itself.
+- Redundant levels collapse: two exercises sharing a level are interchangeable to the draw — build one, not both.
+- ~~The budget is counted in **questions** (`countUnitQuestions`), not tasks~~ — **retired**; see open question 1, now closed. 0025 §6 fixes session length at word count × the Progression preset, so there is no set to size. The question-count-inflation concern plan 0011 raised is answered by that, not by a budget here.
+- Floors are **gates, not errors**: a unit with three same-kind items simply does not get an MCQ (§7). Under the amended signature this is literally `null`, not a suppressed task.
 
 Of these, the two with actual evidence behind them are 0025's comprehension-before-production ordering and spacing; the rest are defensible design heuristics and are labelled as such rather than dressed up as findings.
 
-### 2. Generated task ids are derived and stable
+### 2. Constructed exercises have no ids, because they are never materialised
 
-`${unit.id}::${type}`, plus `::${n}` for a chunked matching board. Precedent and safety both exist: derived scheduling-unit ids already use `::`, and `slugPattern` forbids `:`, so a generated id can never collide with an authored one (plan 0002's argument, reused).
+**Rewritten 2026-09-07.** The original section minted derived task ids — `${unit.id}::${type}`, plus `::${n}` for a chunked board — and argued they could not collide with authored ones because `slugPattern` forbids `:`. That argument was sound and is no longer needed: under §1's signature nothing is materialised, so there is nothing to name.
 
-Stability matters because `buildUnitSession` returns `{question, taskId}` pairs that drive `onTaskAnswered` and the question screen's ✎ route. Pinning is unaffected — it has stored scheduling-unit ids, not task ids, since 2026-07-25. Completion is the one real dependency, and §4 removes it.
+A constructed exercise is built at draw time and discarded, exactly as `build`'s word bank is today. **Nothing new is stored** — not in content, not in the backend, not on the device.
 
-### 3. Authored tasks win, per type
+That leaves three consumers of `taskId` to account for, and all three already resolve:
 
-`unit.taskIds` keeps working exactly as today. Where a unit authors a task of type T, generation of T for that unit is suppressed; every other type still generates.
+- **`onTaskAnswered` / completion** — §4 moves completion to items, so nothing needs a task id to record progress.
+- **Pinning** — has stored scheduling-unit ids, not task ids, since 2026-07-25. Unaffected.
+- **The question screen's ✎ route** — `design.md` already specifies it as "routing to the specific item/lexicon-entry, **or to the owning task for matching questions**". So the app's own editing rule already treats the item as the thing you edit and the task as the exception. A constructed exercise routes to its item; an authored matching board routes to its task. No change of rule, and no id to invent.
 
-Per-type rather than all-or-nothing on purpose: an author who wants one specific matching board — five deliberately confusable words rather than five arbitrary ones — should not lose generation for everything else as the price. The demo Book keeps its full authored set, because proving all eleven types remain playable is its job (plan 0002, still normative).
+`buildUnitSession`'s `{question, taskId}` pair keeps its shape; `taskId` is simply absent for a constructed exercise. `SessionScreen` already handles an absent task id — review sessions pass none today.
 
-`instructions` survives on authored tasks. Generated tasks take a per-type constant, which is a small copy regression: "Pick the fact that matches each term" reads better than a generic string, and only the override buys it back.
+### 3. Authored tasks win, per (item, level)
+
+**Amended 2026-09-07 — the axis changed from type to (item, level).** The original rule was per type: authoring a task of type T suppressed generation of T for that whole unit.
+
+That is too coarse once the draw is level-indexed. One authored `matching` board would switch off constructed matching for **every item in the unit**, including the items the board never names — so an author who hand-picks five confusable words silently costs the unit's other fifteen words their level-1 exercise.
+
+**The rule:** an authored task covers the (item, level) cells it actually covers — its own `itemIds`, at its own type's level — and construction fills the rest. `unit.taskIds` keeps working exactly as today.
+
+Finer is also what makes hand-authored content win *where it exists* without costing coverage everywhere else, which matters because most units will be partly hand-written. It preserves the original section's intent — the author who wants one specific board should not lose everything else as the price — and extends it from "everything else" meaning other types to meaning other items as well.
+
+**Corollary, and it is the more important half: authored wrong answers are item data, not task data.** The plan's own opening table already concedes the pattern — `cloze`'s decision is markup on the item, `minimal-pair`'s pair *is* the item, `build`'s bank is constructed. Plan 0027 completes it: a `question` item carries its stem, its options and their correctness, and its two labels, and its task type is derivable from the payload. So a hand-crafted question with authored distractors needs **no authored task at all** to be playable, and it wins by being the item, not by suppressing anything.
+
+Matching-board membership — which five words sit on a board together — is the one decision that genuinely cannot live on an item, and it is the one this section's override exists for.
+
+The demo Book keeps its full authored set, because proving all eleven types remain playable is its job (plan 0002, still normative).
+
+`instructions` survives on authored tasks. Constructed exercises take a per-type constant, which is a small copy regression: "Pick the fact that matches each term" reads better than a generic string, and only the override buys it back.
 
 ### 4. Completion moves from tasks to items
 
@@ -98,9 +132,11 @@ Stated plainly, because the escape hatch in §3 is the only thing that buys any 
 - **Copy.** Per-type boilerplate instead of per-unit phrasing (§3).
 - **Loud content errors.** See §7.
 
+**The 2026-09-07 amendment recovers part of the first two.** Under the per-type rule, one authored board bought back matching for the unit and lost construction for that type everywhere in it; under per-(item, level), an authored task keeps its cells and construction fills only the gaps. So flavour and groupings survive wherever an author actually authored them, at no coverage cost. The other two items stand unchanged.
+
 ### 7. Validation: errors become gates, and one new error appears
 
-Classes (e), (f), (o), (g)/(r), (p), (q) and (n) are all task-shaped. For an authored task every one of them still applies, unchanged. For a generated set they become **generator preconditions** — the generator cannot emit a task that violates them, so the condition is unrepresentable rather than validated. That is strictly the better shape, and it is the same argument 0021 §9 already made for the Exercises page.
+Classes (e), (f), (o), (g)/(r), (p), (q) and (n) are all task-shaped. For an authored task every one of them still applies, unchanged. For a constructed exercise they become **constructor preconditions** — `exerciseAtLevel` returns `null` rather than an exercise that violates them, so the condition is unrepresentable rather than validated. That is strictly the better shape, and it is the same argument 0021 §9 already made for the Exercises page. _(Amended 2026-09-07: "the generator cannot emit a task" → the constructor returns `null`. Same posture, and now the same value 0025 §4's "a missing level is skipped, not waited for" already consumes.)_
 
 The cost is that a content problem goes quiet. Today "your unit has three items, so this MCQ is invalid" fails the build; generated, it is a silently missing exercise. Two compensating controls, and they are load-bearing rather than nice-to-have:
 
@@ -109,7 +145,7 @@ The cost is that a content problem goes quiet. Today "your unit has three items,
 
 ### 8. Where the author sees it
 
-0021 §9's Exercises page stops being a list of things to add and becomes a **preview with overrides**: what will be generated, with the highest level each item can reach; and a control to pin an authored task where the generated one is not what you want. The wizard sketched in the ladder plan's first draft largely dissolves here — with nothing to keep in sync, there is nothing to recommend, only budget and targets to tune.
+0021 §9's Exercises page stops being a list of things to add and becomes a **preview with overrides**: an (item × level) coverage grid — literally §1's function run over every cell — showing which levels each item can reach, which cells an authored task already covers, and which the constructor fills; plus a control to author a task where the constructed exercise is not what you want. The wizard sketched in the ladder plan's first draft largely dissolves here — with nothing to keep in sync, there is nothing to recommend, only targets to tune. _(Amended 2026-09-07: "budget" struck from that last clause with open question 1; and the grid is now the primary surface rather than a derived display, since it is the same function the session calls.)_
 
 Generated tasks appear in Preview but **not in Diff**: they are derived from content already in the diff, so showing them would double-count every item change as an exercise change too.
 
@@ -124,10 +160,14 @@ So the plan splits:
 
 **The free ride is already gone.** Plan 0023's `components` reshape took `CONTENT_SCHEMA_VERSION` 1 → 2, and §7 republished `domain:ky` at version 2 on 2026-08-30 — so phase 2 would be a standalone 2 → 3 and pays its own rollout wait. That is an argument for phase 1 carrying its weight alone (it does: coverage, the end of index rot, and item targets, all without touching a document), and for phase 2 waiting until another bump-worthy change wants to travel with it.
 
+**Amended 2026-09-07: phase 2 drops from deferred to cosmetic, and may never be worth doing.** The reason phase 2 existed was to stop content listing tasks it does not care about. Under §1's per-item construction, index rot is already fixed without emptying anything — an item added to a unit is reachable at every level its kind allows the moment it is added, because construction is keyed on the item, not on a list that has to mention it. So `taskIds` can stay required forever, holding only the exercises someone deliberately authored, and class (i) never has to be relaxed.
+
+What is left of phase 2 is tidiness: deleting boilerplate task entries from Books whose authors do not want them. That is a per-Book content edit with no behavioural effect, and it is not worth a `CONTENT_SCHEMA_VERSION` bump on its own. If a bump-worthy change comes along later — [plan 0027](0027-authored-questions-and-exam-mode.md) carries one — phase 2 can ride it for free. Otherwise it can simply not happen.
+
 ## Slices
 
-1. **The generator** (`packages/engine`, pure) + the coverage query. Nothing consumes it yet beyond tests: same content in, same task set out, floors respected, budget respected.
-2. **Supplement mode**, opt-in per Book — unit sessions become authored ∪ generated-for-missing-types, with 0025's ceiling draw choosing each question. The opt-in flag is what keeps this from silently lengthening every existing unit's session on the day it ships.
+1. **The constructor** (`packages/engine`, pure) — `exerciseAtLevel(item, level, content)` + the coverage query over it. Nothing consumes it yet beyond tests: same content and level in, same question out, floors returning `null` rather than an invalid exercise.
+2. **Wire it into the level draw**, opt-in per Book — 0025 §4 asks for a level, an **authored task covering that (item, level) cell answers if one exists, and the constructor answers otherwise**. _(Amended 2026-09-07: this slice previously read "unit sessions become authored ∪ generated-for-missing-types". That was a session-construction rule, and under 0025 §6 there is no set to union — the engine is a queue asked for the next question, and session length is already fixed at word count × the Progression preset. A union would have lengthened every session, which is what the original open question 3 was worried about. It is a **lookup** rule, not a construction rule.)_ The opt-in flag stays, because it is what keeps a Book's exercise mix from changing on the day this ships.
 3. **Completion moves to items** (§4) with the legacy grandfather. Independent of 1–2 and worth landing on its own: it fixes the one-of-five bug today.
 4. **Item targets** (§5) — the optional map, the validator rule, generation reading it.
 5. **Exercises page becomes preview + override** (§8), including the promoted coverage display and the new unreachable-item error (§7).
@@ -137,15 +177,18 @@ So the plan splits:
 
 - A unit with items and zero authored tasks produces a full, ladder-ordered session.
 - Adding an item to a unit puts it in the session with no other edit.
-- A unit authoring one `matching` task gets that board and generated everything else.
+- A unit authoring one `matching` task over five of its twenty items gets that board for those five, **and constructed level-1 exercises for the other fifteen** — the per-(item, level) rule of §3, and the case the retired per-type rule got wrong.
+- A `question` item with authored options is playable with no authored task at all.
+- Session length is identical whether a Book is opted in or not — only which exercise fills a slot changes.
 - Answering one question of a five-item unit no longer marks the unit complete; a unit completed under the old rule stays complete after upgrading.
 - A unit item that no exercise reaches is a validation error.
 - Phase 1: `pnpm check` green, no `CONTENT_SCHEMA_VERSION` change, no content edited, every existing Book behaves exactly as before until opted in.
 
 ## Open questions
 
-1. **The budget number.** Questions per unit session is currently whatever content happens to author. Picking a target changes every generated unit at once, and it interacts with 0022's review-pace setting — possibly it belongs in `bb.learning` beside it.
-2. **Matching board chunking.** A 12-item unit needs boards of 4, 5, or 3+4+5; the rule is arbitrary and visible. Deliberate groupings are exactly what §3's override exists for, but the default still has to pick something.
-3. **Does opting a Book in change session length noticeably?** A unit that authored three types would gain five. The budget should absorb it; that needs measuring on the live Kyrgyz Book before phase 2, not reasoning about.
+1. ~~**The budget number.**~~ **Closed 2026-09-07 by the amendment.** There is no generated set to size. 0025 §6 fixes session length at word count × the Progression preset, and that is already a setting in `bb.learning`, which is where this question was heading anyway.
+2. **Matching board chunking.** A 12-item unit needs boards of 4, 5, or 3+4+5; the rule is arbitrary and visible. Deliberate groupings are exactly what §3's override exists for, but the default still has to pick something. **Still open**, and now the sharpest remaining question in this plan: matching-board membership is the one decision the amendment leaves genuinely task-shaped.
+3. ~~**Does opting a Book in change session length noticeably?**~~ **Closed 2026-09-07 by the amendment.** It cannot: length comes from 0025 §6's word count × preset, not from how many exercises exist. Opting in changes *which* exercise fills a slot, never how many slots there are. The original worry was real against the "authored ∪ generated" reading of slice 2, which the amendment removes.
+4. **Where a hand-picked distractor set for a _lexeme_ lives.** Raised by the 0027 design, 2026-09-07, and not answered by either plan. Authored wrong answers are item data (§3), and plan 0027's `question` item is the natural home — but a `question` item is its own scheduling unit, so суу-the-word and суу-the-question would carry separate SRS state and both come due, breaking plan 0006's "one word, one SRS state". The minimal shape is probably an optional link letting an authored question grade an **existing** scheduling unit instead of minting its own. Nothing above depends on it; it is the one real gap the amendment opened.
 4. **Do generated tasks need `instructions` per domain?** A per-type constant reads worse than the seed's current copy (§3). A per-domain override table is cheap; a per-task one re-invents the field this plan is removing.
 5. **Does 0025 §10 survive?** Most of its wizard dissolves into §8's preview. The part that does not is the cloze-blank suggester — but that authors *item* markup, not tasks, so it may belong with the editor work rather than with either plan.
