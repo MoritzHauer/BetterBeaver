@@ -1,0 +1,252 @@
+{
+  "автобус": {
+    "text": "Бул аялдамага кайсы автобус келет?",
+    "translation": "Which bus comes to this stop?",
+    "src": "manual"
+  },
+  "троллейбус": {
+    "text": "Ооба, троллейбустар да келет.",
+    "translation": "Yes, trolleybuses come too.",
+    "src": "manual"
+  },
+  "аялдама": {
+    "text": "Бул аялдамага он эки, жыйырма сегиз автобустар келет.",
+    "translation": "Buses twelve and twenty-eight come to this stop.",
+    "src": "manual"
+  },
+  "автобекет": {
+    "text": "Кечиресиз, автобекет кайсы жакта?",
+    "translation": "Excuse me, which way is the bus station?",
+    "src": "manual"
+  },
+  "темир жол вокзалы": {
+    "text": "Темир жол вокзалы базардын жанында.",
+    "translation": "The railway station is next to the bazaar.",
+    "src": "manual"
+  },
+  "белет": {
+    "text": "Кечиресиз, белет канча турат?",
+    "translation": "Excuse me, how much is a ticket?",
+    "src": "manual"
+  },
+  "көчө": {
+    "text": "Бул көчө таза жана кооз.",
+    "translation": "This street is clean and beautiful.",
+    "src": "manual"
+  },
+  "жанында": {
+    "text": "Менин үйүм мектептин жанында.",
+    "translation": "My house is next to the school.",
+    "src": "manual"
+  },
+  "кесилишинде": {
+    "text": "Дүкөн эки көчөнүн кесилишинде.",
+    "translation": "The shop is at the crossing of two streets.",
+    "src": "generated"
+  },
+
+  "нан": {
+    "text": "Дүкөндө нан барбы?",
+    "translation": "Is there bread in the shop?",
+    "src": "generated"
+  },
+  "чай": {
+    "text": "Келиңиз, ысык чай ичиңиз.",
+    "translation": "Come in, have some hot tea.",
+    "src": "manual"
+  },
+  "сүт": {
+    "text": "Киоскто сүт сатабы?",
+    "translation": "Do they sell milk at the kiosk?",
+    "src": "manual"
+  },
+  "суу": {
+    "text": "Мага суу бериңиз.",
+    "translation": "Give me some water, please.",
+    "src": "generated"
+  },
+  "эт": {
+    "text": "Дүкөндө эт, сүт бар.",
+    "translation": "There is meat and milk in the shop.",
+    "src": "manual"
+  },
+  "тамак": {
+    "text": "Тамагыңыз таттуу болсун!",
+    "translation": "Enjoy your meal!",
+    "src": "manual"
+  },
+  "таттуу": {
+    "text": "Айран таттуу.",
+    "translation": "The airan is sweet.",
+    "src": "manual"
+  },
+  "кашык": {
+    "text": "Мага кашык бериңизчи.",
+    "translation": "Please give me a spoon.",
+    "src": "generated"
+  },
+
+  "аба-ырайы": {
+    "text": "Бишкекте аба-ырайы кандай?",
+    "translation": "What is the weather like in Bishkek?",
+    "src": "manual"
+  },
+  "жаз": {
+    "text": "Жазында аба-ырайы жылуу болот.",
+    "translation": "In spring the weather is warm.",
+    "src": "manual"
+  },
+  "жай": {
+    "text": "Жайында күн узун жана ысык болот.",
+    "translation": "In summer the day is long and hot.",
+    "src": "manual"
+  },
+  "күз": {
+    "text": "Күзүндө бат-бат жаан жаайт.",
+    "translation": "In autumn it rains often.",
+    "src": "manual"
+  },
+  "кыш": {
+    "text": "Кышында абдан суук, кар көп болот.",
+    "translation": "In winter it is very cold and there is a lot of snow.",
+    "src": "manual"
+  },
+  "ысык": {
+    "text": "Бүгүн аба-ырайы ысык.",
+    "translation": "The weather is hot today.",
+    "src": "generated"
+  },
+  "суук": {
+    "text": "Бүгүн суук, пальто кийиңиз.",
+    "translation": "It is cold today, put on a coat.",
+    "src": "generated"
+  },
+  "жылуу": {
+    "text": "Бизде күз жылуу жана кооз болот.",
+    "translation": "Our autumn is warm and beautiful.",
+    "src": "manual"
+  },
+  "салкын": {
+    "text": "Жай кээде ысык, кээде салкын болот.",
+    "translation": "The summer is sometimes hot, sometimes cool.",
+    "src": "manual"
+  },
+  "кар": {
+    "text": "Кышында кар көп жаайт.",
+    "translation": "In winter a lot of snow falls.",
+    "src": "manual"
+  },
+  "жамгыр": {
+    "text": "Жамгыр жаады.",
+    "translation": "It rained.",
+    "src": "manual"
+  },
+
+  "бүгүн": {
+    "text": "Бүгүн канча сабак? — Бүгүн төрт сабак.",
+    "translation": "How many lessons are there today? — Four lessons today.",
+    "src": "manual"
+  },
+  "эртең": {
+    "text": "Эртең Асан кайда барат?",
+    "translation": "Where is Asan going tomorrow?",
+    "src": "manual"
+  },
+  "Кечээ": {
+    "text": "Мен кечээ түшүнбөй калдым.",
+    "translation": "Yesterday I did not understand.",
+    "src": "manual"
+  },
+  "күн": {
+    "text": "Дүкөндөр жекшемби күнү ачык болобу?",
+    "translation": "Are the shops open on Sunday?",
+    "src": "manual"
+  },
+  "түн": {
+    "text": "Түнүңүз бейкут болсун.",
+    "translation": "Good night.",
+    "src": "manual"
+  },
+  "Эртең менен": {
+    "text": "Эртең менен мен эрте турам.",
+    "translation": "In the morning I get up early.",
+    "src": "manual"
+  },
+  "Түшкө чейин": {
+    "text": "Түшкө чейин мен мектепте окуймун.",
+    "translation": "Before noon I study at school.",
+    "src": "generated"
+  },
+  "Түштө": {
+    "text": "Түштө биз тамак ичебиз.",
+    "translation": "At midday we have a meal.",
+    "src": "generated"
+  },
+  "Түштөн кийин": {
+    "text": "Түштөн кийин мен дүкөнгө барам.",
+    "translation": "In the afternoon I go to the shop.",
+    "src": "generated"
+  },
+  "Кечинде": {
+    "text": "Кечинде мен эс алам.",
+    "translation": "In the evening I rest.",
+    "src": "manual"
+  },
+  "Түндө": {
+    "text": "Түндө мен уктайм.",
+    "translation": "At night I sleep.",
+    "src": "generated"
+  },
+  "күнүгө": {
+    "text": "Мен күнүгө эрте турамын.",
+    "translation": "I get up early every day.",
+    "src": "manual"
+  },
+  "такай": {
+    "text": "Ал такай базарга барат.",
+    "translation": "He usually goes to the bazaar.",
+    "src": "generated"
+  },
+
+  "оору": {
+    "text": "Апамдын оорусу оор эмес.",
+    "translation": "My mother's illness is not serious.",
+    "src": "generated"
+  },
+  "дары": {
+    "text": "Дарыгер мага дары берди.",
+    "translation": "The doctor gave me medicine.",
+    "src": "generated"
+  },
+  "температура": {
+    "text": "Температурам көтөрүлүп, башым катуу ооруп жатат.",
+    "translation": "My temperature has gone up and my head aches badly.",
+    "src": "manual"
+  },
+  "тез жардам": {
+    "text": "Тез жардам чакырыңыз!",
+    "translation": "Call an ambulance!",
+    "src": "generated"
+  },
+
+  "базар": {
+    "text": "Кечиресиз, базарга кантип барса болот?",
+    "translation": "Excuse me, how can I get to the bazaar?",
+    "src": "manual"
+  },
+  "дүкөн": {
+    "text": "Дүкөн темир жол вокзалынын жанында.",
+    "translation": "The shop is next to the railway station.",
+    "src": "generated"
+  },
+  "арзан": {
+    "text": "Кымбат экен. Арзаны барбы?",
+    "translation": "That is expensive. Do you have a cheaper one?",
+    "src": "manual"
+  },
+  "кымбат": {
+    "text": "Бул кымбат экен, арзаны барбы?",
+    "translation": "This is expensive, do you have a cheaper one?",
+    "src": "manual"
+  }
+}

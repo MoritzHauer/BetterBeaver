@@ -180,6 +180,13 @@ const lexemePayloadSchema = z.object({
   transliteration: z.string(),
   gloss: z.string(),
   example: z.object({ text: z.string(), translation: z.string() }).optional(),
+  /** The `example` above was model-generated, not taken from a source, and
+   * has not had a native-speaker pass. Top-level rather than a third key
+   * inside `example` on purpose: `inPlace.ts`'s `withPayload` deletes a
+   * nested object once its last key is cleared, and a leftover flag would
+   * turn "author cleared the example" into `{generated: true}`, which the
+   * schema rejects with no control left to clear it. */
+  exampleGenerated: z.boolean().optional(),
   usageNote: z.string().optional(),
   audioRef: slugSchema.optional(),
   imageRef: slugSchema.optional(),

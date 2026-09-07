@@ -22,6 +22,11 @@ function ExampleLine({ entry }: { entry: Item }) {
     return (
       <p className="usage-note">
         {entry.payload.example.text} — {entry.payload.example.translation}
+        {/* Provenance, not decoration: a generated example has had no
+            native-speaker pass, and a learner copying it deserves to know. */}
+        {entry.payload.exampleGenerated === true && (
+          <span className="status"> · AI example</span>
+        )}
       </p>
     );
   }
