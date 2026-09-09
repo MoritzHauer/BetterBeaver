@@ -149,10 +149,25 @@ export type ReviewPace = keyof typeof REVIEW_PACES;
  * directly and leaves the level and interval untouched). */
 export interface SchedulingConfig {
   pace: ReviewPace;
+  /**
+   * How many levels one correct answer is worth **once the word has reached
+   * `PRODUCTION_LEVEL`** — 2 on the Fast practice depth, 1 otherwise (plan
+   * 0025 §3). Optional so that a caller who only cares about the pace, and
+   * every test written before it existed, still compiles; absent reads as 1.
+   *
+   * Below the production level this does nothing: that band is unguarded
+   * (§5) and a word climbs it as fast as the session asks it, so a second
+   * step there would only let a word cross into production without ever
+   * arriving at it.
+   */
+  levelsPerDay?: 1 | 2;
 }
 
-/** Balanced — what a learner who never opens Settings gets. */
-export const DEFAULT_SCHEDULING: SchedulingConfig = { pace: "balanced" };
+/** Balanced, one level a day — what a learner who never opens Settings gets. */
+export const DEFAULT_SCHEDULING: SchedulingConfig = {
+  pace: "balanced",
+  levelsPerDay: 1,
+};
 
 /**
  * Migration by interval (plan 0025 §11): the level whose interval is closest
@@ -210,7 +225,8 @@ export function wordLevel(
  * The next state for a scheduling unit, given its previous state (`null` if
  * new), the quality of this grading and the time it was graded.
  *
- * Good (quality >= 4) advances one level, subject to the day guard; Hard
+ * Good (quality >= 4) advances one level — two at and above the production
+ * level when `config.levelsPerDay` is 2 — subject to the day guard; Hard
  * (quality 3) steps back one; Again and every wrong auto-graded answer
  * (quality < 3) steps back two, floored at 0. Hard stepping back rather than
  * holding is plan 0022's rule kept: it cannot then be used as a promotion
@@ -240,7 +256,13 @@ export function schedule(
   } else if (quality === 3) {
     next = Math.max(level - 1, 0);
   } else {
-    const wanted = Math.min(level + 1, MAX_WORD_LEVEL);
+    // Fast is worth two levels per answer, but only for a word already at
+    // the production levels: the step is what the preset changes, and the
+    // guard below is what keeps it to one advance a day either way. So the
+    // cap plan 0025 §5 states — one level a day, two on Fast — holds however
+    // many times the word is answered, with no per-day counter to store.
+    const step = level >= PRODUCTION_LEVEL ? (config.levelsPerDay ?? 1) : 1;
+    const wanted = Math.min(level + step, MAX_WORD_LEVEL);
     // The guard refuses a second *arrival* at or above the production
     // levels on the same day, however many times the word is answered.
     next =
