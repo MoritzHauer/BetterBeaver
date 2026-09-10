@@ -205,6 +205,115 @@ const emptyAssets: AssetStems = {
   imageByDomain: new Map(),
 };
 
+describe("createDocumentContentSource: exams (plan 0027 §3)", () => {
+  /** `makeBook` plus a `question` item, its `choice` task and an exam that
+   * lists it — the smallest Book that exercises the whole document path. */
+  function withExam() {
+    const built = makeBook({
+      bookId: "book-x",
+      domainId: "domain-x",
+      domainCode: "code-x",
+      itemIds: [
+        "book-x-item-1",
+        "book-x-item-2",
+        "book-x-item-3",
+        "book-x-item-4",
+      ],
+    });
+    const question = {
+      id: "book-x-item-q",
+      kind: "question",
+      payload: {
+        stem: "Which of these are layers?",
+        options: [
+          { text: "Presentation", correct: true },
+          { text: "Tuesday", correct: false },
+        ],
+      },
+      sourceRef: "book-x-resource",
+    };
+    const task = {
+      id: "book-x-task-choice",
+      type: "choice",
+      itemIds: [question.id],
+    };
+    const exam = {
+      id: "book-x-exam-1",
+      topicId: "book-x",
+      title: "Mock exam",
+      description: "Source: someone",
+      questions: [{ taskId: task.id, points: 2 }],
+      ruleset: {
+        passPercent: 60,
+        timeLimitMinutes: 75,
+        partialCredit: true,
+        negativeMarking: true,
+      },
+    };
+    built.bookDoc.items.push(question);
+    built.bookDoc.tasks.push(task);
+    built.bookDoc.exams = [exam];
+    (
+      built.bookDoc.units[0] as { itemIds: string[]; taskIds: string[] }
+    ).itemIds.push(question.id);
+    (built.bookDoc.units[0] as { taskIds: string[] }).taskIds.push(task.id);
+    (built.bookDoc.topic as { examIds?: string[] }).examIds = [exam.id];
+    return built;
+  }
+
+  it("passes the document's exams to the validator", async () => {
+    // The regression this exists for: the field was threaded through
+    // `Content` and `ValidateContentInput` but not through the one call site
+    // that reads a real document, so a Book that carried exams validated
+    // against an empty list and every `topic.examIds` entry dangled. It
+    // reached the browser as "This Book can't be loaded."
+    const { bookDoc, domainDoc } = withExam();
+    const built = createDocumentContentSource(
+      new Map([["book-x", bookDoc]]),
+      new Map([["domain-x", domainDoc]]),
+      emptyAssets,
+    );
+    expect(built.broken).toEqual([]);
+    const content = await built.source.loadBook("book-x");
+    expect(content.exams.map((exam) => exam.id)).toEqual(["book-x-exam-1"]);
+  });
+
+  it("loads a Book with no exams key at all", async () => {
+    // Every published document lacks it until the republish runs, and a
+    // private Book no republish can reach lacks it forever.
+    const { bookDoc, domainDoc } = makeBook({
+      bookId: "book-y",
+      domainId: "domain-y",
+      domainCode: "code-y",
+      itemIds: [
+        "book-y-item-1",
+        "book-y-item-2",
+        "book-y-item-3",
+        "book-y-item-4",
+      ],
+    });
+    expect(bookDoc.exams).toBeUndefined();
+    const built = createDocumentContentSource(
+      new Map([["book-y", bookDoc]]),
+      new Map([["domain-y", domainDoc]]),
+      emptyAssets,
+    );
+    expect(built.broken).toEqual([]);
+    expect((await built.source.loadBook("book-y")).exams).toEqual([]);
+  });
+
+  it("reports a non-array exams field as malformed rather than throwing", () => {
+    const { bookDoc, domainDoc } = withExam();
+    (bookDoc as { exams: unknown }).exams = "nope";
+    const built = createDocumentContentSource(
+      new Map([["book-x", bookDoc]]),
+      new Map([["domain-x", domainDoc]]),
+      emptyAssets,
+    );
+    expect(built.broken[0]?.errors[0]).toMatch(/"exams" must be an array/);
+  });
+});
+
 describe("createDocumentContentSource: broken", () => {
   it("reports a per-Book validation failure without affecting the other Book", async () => {
     const a = makeBook({

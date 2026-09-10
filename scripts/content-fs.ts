@@ -74,6 +74,11 @@ export function loadContentDocuments(): {
       units: readJsonFilesIn(join(dir, "units")),
       items: readJsonFilesIn(join(dir, "items")),
       tasks: readJsonFilesIn(join(dir, "tasks")),
+      // One file per exam, like every other entity dir (plan 0027 §3).
+      // `readJsonFilesIn` returns `[]` for a Book with no `exams/` dir,
+      // which is every Book today — and `exams` is optional, so an empty
+      // list and an absent key mean the same thing to the validator.
+      exams: readJsonFilesIn(join(dir, "exams")),
       resources: readJson(join(dir, "resources.json")) as unknown[],
       notes: readNotes(join(dir, "notes")),
     });
@@ -124,6 +129,7 @@ export function writeBookDocument(id: string, doc: BookDocument): void {
   writeEntityDir(join(dir, "units"), doc.units);
   writeEntityDir(join(dir, "items"), doc.items);
   writeEntityDir(join(dir, "tasks"), doc.tasks);
+  writeEntityDir(join(dir, "exams"), doc.exams ?? []);
   const notesDir = join(dir, "notes");
   rmSync(notesDir, { recursive: true, force: true });
   if (doc.notes.length > 0) {

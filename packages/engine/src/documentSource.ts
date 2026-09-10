@@ -135,6 +135,9 @@ function bookDocumentShapeError(doc: BookDocument): string | undefined {
       return `malformed book document: "${field}" must be an array`;
     }
   }
+  if (doc.exams !== undefined && !Array.isArray(doc.exams)) {
+    return 'malformed book document: "exams" must be an array';
+  }
   for (const note of doc.notes) {
     if (
       typeof note !== "object" ||
@@ -199,6 +202,12 @@ export function createDocumentContentSource(
       units: doc.units,
       items: doc.items,
       tasks: doc.tasks,
+      // Optional on the document (plan 0027 §3): every published document
+      // lacks the key until the republish runs, and a private Book no
+      // republish can reach lacks it forever. Absent reads as none — but it
+      // must still be *passed*, or a Book that does carry exams validates
+      // against an empty list and every `topic.examIds` entry dangles.
+      exams: doc.exams,
       resources: doc.resources,
       noteStems: doc.notes.map((note) => note.stem),
       audioStems: assets.audioByBook.get(key) ?? [],
