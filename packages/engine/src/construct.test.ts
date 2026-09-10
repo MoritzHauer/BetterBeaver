@@ -55,7 +55,11 @@ function pair(n: number): Item {
   };
 }
 
-function contentWith(items: Item[], tasks: Task[] = []): Content {
+function contentWith(
+  items: Item[],
+  tasks: Task[] = [],
+  generatedExercises?: boolean,
+): Content {
   const unit: Unit = {
     id: "t-unit-1",
     lessonId: "t-lesson-1",
@@ -66,14 +70,22 @@ function contentWith(items: Item[], tasks: Task[] = []): Content {
     noteIds: [],
   };
   return {
-    topics: [],
+    topic: {
+      id: "t",
+      code: "t",
+      title: "Book",
+      description: "",
+      lessonIds: ["t-lesson-1"],
+      domainId: "t",
+      ...(generatedExercises !== undefined && { generatedExercises }),
+    },
     lessons: [],
     units: [unit],
     items,
     tasks,
     notes: [],
     resources: [],
-  } as unknown as Content;
+  };
 }
 
 /** Four same-kind concepts: the MCQ floor exactly met. */

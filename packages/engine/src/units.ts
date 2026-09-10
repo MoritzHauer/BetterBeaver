@@ -3,8 +3,9 @@ import { parseClozeMarkup } from "@betterbeaver/schema";
 
 /**
  * One schedulable unit of SRS progress. For `lexeme`/`concept`/`pair` items,
- * and for a `sentence` item referenced by a non-cloze task, the unit is the
- * whole item (`id` equals the item id). For a `sentence` item referenced by
+ * and for a `sentence` item referenced by a non-cloze task — or owned by any
+ * unit of a Book that opted into generated exercises (plan 0026 §9) — the
+ * unit is the whole item (`id` equals the item id). For a `sentence` item referenced by
  * a cloze task, each blank is its own unit (`id` is `<itemId>::c<n>`,
  * `blankNumber` is `n`). A sentence referenced by both a cloze and a
  * non-cloze task contributes both kinds of unit, independently. A note
@@ -42,6 +43,14 @@ export function itemIdFromUnitId(unitId: string): string {
  * cloze task references it, and `<itemId>` itself iff some non-cloze task
  * references it; all other kinds always contribute `<itemId>`. Blank ids
  * can't collide with item ids (slugs forbid `:`).
+ *
+ * **In a Book that opted into generated exercises** (plan 0026 §9) every
+ * sentence a unit owns contributes `<itemId>` whether a task references it
+ * or not: the constructor can ask it, so it carries a level, and a word the
+ * session drills but progress cannot see would make the unit bar and the
+ * completion rule lie. Cloze blanks are unchanged — a blank id is minted by
+ * an *authored* cloze task alone, and a constructed cloze grades the item
+ * (§2: nothing new is stored).
  */
 export function schedulingUnits(content: Content): SchedulingUnit[] {
   const clozeItemIds = new Set<string>();
@@ -50,6 +59,13 @@ export function schedulingUnits(content: Content): SchedulingUnit[] {
     const target = task.type === "cloze" ? clozeItemIds : nonClozeItemIds;
     for (const itemId of task.itemIds) {
       target.add(itemId);
+    }
+  }
+  if (content.topic.generatedExercises === true) {
+    for (const unit of content.units) {
+      for (const itemId of unit.itemIds) {
+        nonClozeItemIds.add(itemId);
+      }
     }
   }
 

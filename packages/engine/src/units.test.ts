@@ -380,3 +380,41 @@ describe("itemIdFromUnitId", () => {
     expect(itemIdFromUnitId(lexeme.id)).toBe(lexeme.id);
   });
 });
+
+describe("schedulingUnits in a Book that opted into generated exercises", () => {
+  /** The same content, with plan 0026 §9's opt-in ticked. */
+  const optedIn: Content = {
+    ...content,
+    topic: { ...content.topic, generatedExercises: true },
+  };
+
+  it("gives a sentence no task mentions its own scheduling unit", () => {
+    // Without this the constructor would drill the sentence while progress
+    // could not see it, and the unit bar and completion rule would lie.
+    const orphanSentence: Item = {
+      id: "t-item-untasked",
+      kind: "sentence",
+      payload: { text: "Nobody asked me yet.", translation: "translation" },
+      sourceRef: "t-resource-1",
+    };
+    const widened: Content = {
+      ...optedIn,
+      units: [{ ...unit, itemIds: [...unit.itemIds, orphanSentence.id] }],
+      items: [...optedIn.items, orphanSentence],
+    };
+    expect(schedulingUnits(widened).map((u) => u.id)).toContain(
+      orphanSentence.id,
+    );
+    expect(schedulingUnits(content).map((u) => u.id)).not.toContain(
+      orphanSentence.id,
+    );
+  });
+
+  it("still mints a blank id only for an authored cloze task", () => {
+    // A constructed cloze grades the item (§2: nothing new is stored), so
+    // opting in must not multiply a sentence into blanks nobody authored.
+    const ids = schedulingUnits(optedIn).map((u) => u.id);
+    expect(ids).toContain(`${sharedSentence.id}::c1`);
+    expect(ids).not.toContain(`${plainSentence.id}::c1`);
+  });
+});

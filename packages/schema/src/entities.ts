@@ -57,6 +57,22 @@ export const bookSchema = z.object({
    * web app's public assets (same convention/location the one-off Kyrgyz
    * watermark already used); this field only toggles whether it's shown. */
   hasCoverArt: z.boolean().optional(),
+  /**
+   * Whether this Book's exercises may be **constructed** from its items
+   * where no authored task covers the (item, level) cell (plan 0026 §9,
+   * phase 1).
+   *
+   * Opt-in per Book, and the reason phase 1 costs no
+   * `CONTENT_SCHEMA_VERSION` bump: the field is additive and optional, so an
+   * older client drops it and plays the Book exactly as it plays it today.
+   * Absent or `false` means authored tasks only — which is what keeps every
+   * shipped Book's exercise mix from changing on the day this lands.
+   *
+   * It never changes how *many* questions a session asks: length is word
+   * count times the Progression preset (plan 0025 §6). It changes only which
+   * exercise fills a slot.
+   */
+  generatedExercises: z.boolean().optional(),
 });
 export type Book = z.infer<typeof bookSchema>;
 

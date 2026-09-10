@@ -12,7 +12,11 @@ import {
   MIN_EXERCISE_LEVEL,
   TASK_EXERCISES,
 } from "@betterbeaver/schema";
-import { owningUnit, promptIsUnique } from "./construct.js";
+import {
+  constructibleExercises,
+  owningUnit,
+  promptIsUnique,
+} from "./construct.js";
 import { shuffle, type Rng } from "./rng.js";
 
 /**
@@ -23,14 +27,13 @@ import { shuffle, type Rng } from "./rng.js";
 export type Slot = "repetition" | "new";
 
 /**
- * Every exercise `item` can actually be asked as: the ones its unit's tasks
- * authorize, plus the two this plan derives from content that never authored
- * them (§9).
+ * The exercises `item`'s own unit **authored** a task for, plus the two
+ * derived from content that never authored them (plan 0025 §9).
  *
  * Unranked exercises are excluded — `shadowing` checks nothing, so it can
  * neither be drawn to advance a word nor stand in for one that would.
  */
-export function availableExercises(
+export function authoredExercises(
   item: Item,
   content: Content,
 ): readonly Exercise[] {
@@ -61,6 +64,33 @@ export function availableExercises(
   }
 
   return [...found].filter((exercise) => EXERCISE_LEVEL[exercise] !== null);
+}
+
+/**
+ * Every exercise `item` can actually be asked as — what the draw chooses
+ * from.
+ *
+ * For a Book that has opted into generated exercises (plan 0026 §9), that is
+ * the authored set **union** what the constructor can build; for every other
+ * Book it is the authored set alone, so nothing about a shipped Book's
+ * exercise mix changes on the day this lands.
+ *
+ * The union is a *lookup* rule, not a session-construction rule (§ slice 2):
+ * it widens which exercise can fill a slot, never how many slots there are —
+ * length is still word count times the Progression preset (0025 §6). Which
+ * of the two answers a given cell is settled per (item, level) in
+ * `buildExerciseQuestion`, where an authored task wins over a constructed
+ * one at the same level (§3).
+ */
+export function availableExercises(
+  item: Item,
+  content: Content,
+): readonly Exercise[] {
+  const authored = authoredExercises(item, content);
+  if (content.topic.generatedExercises !== true) {
+    return authored;
+  }
+  return [...new Set([...authored, ...constructibleExercises(item, content)])];
 }
 
 /** The subset of `available` sitting at exactly `level`. */
