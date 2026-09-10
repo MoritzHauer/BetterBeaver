@@ -29,6 +29,7 @@ import { ADHOC_MODES, type AdhocMode } from "@betterbeaver/engine";
  *   #/books/demo/lessons/l1/units/u1/recall/u2
  *   #/books/demo/lessons/l1/units/u1/tasks/t1
  *   #/books/demo/lessons/l1/summary
+ *   #/books/demo/exams/dx-exam-mock       an exam  (?q=…, ?end=1)
  *   #/domains/demo/review | /vocab | /study?mode=recall&items=a,b
  *   #/library #/author #/settings #/stats #/about #/impressum #/privacy
  *
@@ -97,6 +98,24 @@ export type Screen =
       unitId: string; // the linking unit, for onDone back-nav
       recallUnitId: string; // the linked unit whose tasks are sampled
       editing?: boolean;
+    }
+  // An exam (plan 0027 §6). A sibling of a lesson, one level under the Book,
+  // so the route is the sibling of `/lessons/<lessonId>` and needs no special
+  // case. One screen with three phases rather than three routes: `?q=<n>` is
+  // the runner on question n, `?end=1` the report, neither the intro.
+  | {
+      screen: "exam";
+      bookId: string;
+      examId: string;
+      /** Zero-based question index; the runner, when present. */
+      questionIndex?: number;
+      /** The report for the last submitted attempt. */
+      atEnd?: boolean;
+      /** The report's "practise what you missed" action (plan 0027 §6): an
+       * ordinary practice session over exactly these tasks, grading into SRS
+       * normally. In the URL because it is a screen the back button has to
+       * be able to leave and return to, like every other session. */
+      practiceTaskIds?: string[];
     }
   // Lesson summary (plan 0020 §5): shown after the unit session that
   // completed the lesson. Derived tiles only — nothing is persisted for it.
@@ -177,6 +196,15 @@ export function toPath(view: View): string {
       return `/books/${screen.bookId}/lessons/${screen.lessonId}/units/${screen.unitId}/recall/${screen.recallUnitId}${flags({ edit: e(screen.editing), sheet })}`;
     case "lesson-summary":
       return `/books/${screen.bookId}/lessons/${screen.lessonId}/summary`;
+    case "exam":
+      return `/books/${screen.bookId}/exams/${screen.examId}${flags({
+        q:
+          screen.questionIndex === undefined
+            ? undefined
+            : String(screen.questionIndex),
+        end: on(screen.atEnd),
+        practice: screen.practiceTaskIds?.join(","),
+      })}`;
     case "review":
       return `/domains/${screen.domainId}/review${flags({ sheet })}`;
     case "vocab":
@@ -237,6 +265,25 @@ export function fromPath(path: string): View | null {
         bookId,
         editing,
         atSettings: query.get("settings") === "1" ? true : undefined,
+      });
+    }
+    if (rest[1] === "exams" && rest[2] !== undefined && rest.length === 3) {
+      const q = query.get("q");
+      const parsed = q === null ? Number.NaN : Number(q);
+      const practice = query.get("practice");
+      return view({
+        screen: "exam",
+        bookId,
+        examId: rest[2],
+        ...(practice === null || practice === ""
+          ? {}
+          : { practiceTaskIds: practice.split(",") }),
+        // A non-numeric or negative `?q=` is no question at all: the intro
+        // is the safe reading of a link this build cannot make sense of,
+        // and it is one tap from the runner.
+        questionIndex:
+          Number.isInteger(parsed) && parsed >= 0 ? parsed : undefined,
+        atEnd: query.get("end") === "1" ? true : undefined,
       });
     }
     if (rest[1] !== "lessons" || rest[2] === undefined) {

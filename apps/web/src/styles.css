@@ -2268,3 +2268,77 @@ textarea {
   background: var(--card-bg-translucent);
   font-weight: 600;
 }
+
+/* The exam run (plan 0027 §6). Deliberately plain: an exam is a sitting, not
+ * a game screen, and the only thing on it that must catch the eye is the
+ * clock running out. */
+main.exam {
+  padding: 1rem;
+  padding-bottom: 4rem;
+}
+
+.badge-generated {
+  color: var(--locked-fg);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.exam-clock {
+  font-variant-numeric: tabular-nums;
+  font-size: 1.5rem;
+  margin: 0;
+  text-align: right;
+}
+
+.exam-clock.urgent {
+  color: var(--incorrect-border);
+}
+
+/* The question navigator: answered/unanswered at a glance, and a jump to
+ * any of them — free movement in both directions is the point of grading
+ * nothing until Submit. */
+.exam-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 1rem 0;
+}
+
+.exam-nav-cell {
+  min-width: 2.25rem;
+  min-height: 2.25rem;
+  border: 1px solid var(--card-border);
+  border-radius: 0.4rem;
+  background: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.exam-nav-cell.answered {
+  background: var(--card-bg-translucent);
+  font-weight: 600;
+}
+
+.exam-nav-cell.current {
+  border-color: var(--primary);
+  border-width: 2px;
+}
+
+.exam-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.exam-verdict {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 0.5rem 0;
+  color: var(--incorrect-border);
+}
+
+.exam-verdict.passed {
+  color: var(--correct-border);
+}

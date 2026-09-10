@@ -8,8 +8,51 @@
  * credit on a 2-point question is not a `Quality`. Missed questions reach SRS
  * only through the ordinary practice session the report offers.
  */
-import type { Exam, ExamRuleset } from "@betterbeaver/schema";
+import type { Content, Exam, ExamRuleset, Item } from "@betterbeaver/schema";
 import type { AssignQuestion, ChoiceQuestion } from "./session.js";
+
+/**
+ * The `question` item one exam entry asks, resolved through its task.
+ *
+ * Validated content guarantees the chain — class (ag) proves every `taskId`
+ * resolves to a one-item `choice`/`assign` task — so `undefined` means a
+ * draft or a half-broken document, and every caller degrades rather than
+ * throwing.
+ */
+export function examQuestionItem(
+  taskId: string,
+  content: Content,
+): Extract<Item, { kind: "question" }> | undefined {
+  const task = content.tasks.find((t) => t.id === taskId);
+  const itemId = task?.itemIds[0];
+  if (itemId === undefined) {
+    return undefined;
+  }
+  const item = content.items.find((i) => i.id === itemId);
+  return item?.kind === "question" ? item : undefined;
+}
+
+/**
+ * Whether every one of this exam's questions is model-written (plan 0027
+ * §6): the condition for the "KI-generiert" badge.
+ *
+ * **Derived, never stored twice.** The flag lives on the question, where a
+ * generated question outside any exam needs it just as much; an exam-level
+ * copy would be a second truth to keep in step. An exam with a single
+ * expert-reviewed question is not a generated exam, and an exam with no
+ * resolvable questions at all is not one either.
+ */
+export function examIsGenerated(exam: Exam, content: Content): boolean {
+  const items = exam.questions.flatMap((entry) => {
+    const item = examQuestionItem(entry.taskId, content);
+    return item === undefined ? [] : [item];
+  });
+  return (
+    items.length === exam.questions.length &&
+    items.length > 0 &&
+    items.every((item) => item.payload.generated === true)
+  );
+}
 
 /**
  * One question's answer as the runner holds it.

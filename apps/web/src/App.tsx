@@ -75,6 +75,7 @@ import { BookScreen } from "./screens/BookScreen";
 import { LessonScreen } from "./screens/LessonScreen";
 import { UnitScreen } from "./screens/UnitScreen";
 import { SessionScreen } from "./screens/SessionScreen";
+import { ExamScreen } from "./screens/ExamScreen";
 import type { SessionOutcome } from "./screens/session/useSessionQueue";
 import {
   ADHOC_MODE_LABELS,
@@ -295,6 +296,66 @@ function TaskSession({
       onFinished={onDone}
       onExit={onDone}
       loadStreak={() => store.getStreak(domainId)}
+    />
+  );
+}
+
+/**
+ * The exam report's "practise what you missed" (plan 0027 §6): an ordinary
+ * practice session over the tasks whose questions were not fully right.
+ *
+ * Deliberately the ordinary path and not a variant of one — the same
+ * `buildTaskSession`, the same `recordGrade`, the same `SessionScreen`. The
+ * exam run writes no SRS state at all, so this is where a missed question
+ * finally becomes a repetition, and it should behave exactly as practising it
+ * from its unit would.
+ */
+function ExamPracticeSession({
+  content,
+  lookup,
+  taskIds,
+  onDone,
+}: {
+  content: Content;
+  lookup: TapLookup;
+  taskIds: string[];
+  onDone: () => void;
+}) {
+  const domainId = content.topic.domainId;
+  // Keyed by the joined ids, as `TaskSession` is keyed by its one id: the
+  // questions rebuild when the set changes and never reshuffle otherwise
+  // (the array itself is a fresh reference on every render).
+  const taskKey = taskIds.join(",");
+  const questions = useMemo(
+    () =>
+      taskKey.split(",").flatMap((taskId) => {
+        const task = content.tasks.find((t) => t.id === taskId);
+        return task === undefined
+          ? []
+          : buildTaskSession(task, content, rngFor(task.id));
+      }),
+    [taskKey, content],
+  );
+  async function handleGrade(unitId: string, quality: Quality) {
+    await recordGrade(
+      progressStore,
+      unitId,
+      quality,
+      new Date(),
+      domainId,
+      schedulingConfig(),
+    );
+  }
+  return (
+    <SessionScreen
+      title="Falsche Fragen üben"
+      questions={questions}
+      bookId={content.topic.id}
+      lookup={lookup}
+      onGrade={handleGrade}
+      onFinished={onDone}
+      onExit={onDone}
+      loadStreak={() => progressStore.getStreak(domainId)}
     />
   );
 }
@@ -1668,7 +1729,10 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
       screen.screen === "task" ||
       screen.screen === "unit-session" ||
       screen.screen === "recall-session" ||
-      screen.screen === "lesson-summary";
+      screen.screen === "lesson-summary" ||
+      // An exam is a lesson-level sibling under the Book (plan 0027 §3), so
+      // it loads its Book's content exactly as a lesson does.
+      screen.screen === "exam";
     const contentPromise = isBookFamilyScreen
       ? loadBookOrBroken(contentSourceResult.source, screen.bookId)
       : undefined;
@@ -2138,7 +2202,8 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     screen.screen === "task" ||
     screen.screen === "unit-session" ||
     screen.screen === "recall-session" ||
-    screen.screen === "lesson-summary"
+    screen.screen === "lesson-summary" ||
+    screen.screen === "exam"
   ) {
     // domainContent is gated here too (not just content): unit notes and
     // task-session post-answer reveals need the domain's merged entry pool
@@ -2288,6 +2353,9 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           }
           onVocabulary={() =>
             setScreen({ screen: "vocab", domainId: shown.topic.domainId })
+          }
+          onSelectExam={(examId) =>
+            setScreen({ screen: "exam", bookId: screen.bookId, examId })
           }
           // Cannot reject — see the My Books call site.
           onPlay={() => void playBook(screen.bookId)}
@@ -2561,6 +2629,71 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
               lessonId: target.lessonId,
               unitId: target.unitId,
             })
+          }
+          onBack={onBack}
+        />
+      );
+    }
+
+    if (screen.screen === "exam") {
+      const exam = shown.exams.find((e) => e.id === screen.examId);
+      if (exam === undefined) {
+        return (
+          <main>
+            <p>Unknown exam: {screen.examId}</p>
+          </main>
+        );
+      }
+      const onBack = () => goToBook(screen.bookId);
+      // The report's "practise what you missed" (plan 0027 §6): an ordinary
+      // practice session over exactly those tasks, grading into SRS
+      // normally. This is the ONLY path by which anything an exam touched
+      // reaches the scheduler — the exam run itself writes no SM-2 state, no
+      // `bb.attempted` entry and no streak day.
+      if (screen.practiceTaskIds !== undefined) {
+        const known = screen.practiceTaskIds.filter((taskId) =>
+          shown.tasks.some((task) => task.id === taskId),
+        );
+        if (known.length === 0) {
+          return (
+            <main>
+              <p>Those questions are no longer in this Book.</p>
+            </main>
+          );
+        }
+        return (
+          <ExamPracticeSession
+            content={shown}
+            lookup={lookup}
+            taskIds={known}
+            onDone={() => {
+              reloadUnitProgress();
+              setScreen({ ...screen, practiceTaskIds: undefined });
+            }}
+          />
+        );
+      }
+      return (
+        <ExamScreen
+          content={shown}
+          exam={exam}
+          questionIndex={screen.questionIndex}
+          atEnd={screen.atEnd}
+          onOpenQuestion={(index) =>
+            setScreen({ ...screen, questionIndex: index, atEnd: undefined })
+          }
+          onOpenIntro={() =>
+            setScreen({
+              screen: "exam",
+              bookId: screen.bookId,
+              examId: screen.examId,
+            })
+          }
+          onOpenReport={() =>
+            setScreen({ ...screen, questionIndex: undefined, atEnd: true })
+          }
+          onPracticeMissed={(taskIds) =>
+            setScreen({ ...screen, practiceTaskIds: taskIds })
           }
           onBack={onBack}
         />

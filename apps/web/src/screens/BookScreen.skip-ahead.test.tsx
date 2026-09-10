@@ -91,6 +91,7 @@ function renderBookScreen(onSelectLesson: (lessonId: string) => void) {
       onPlay={() => {}}
       onReview={() => {}}
       onVocabulary={() => {}}
+      onSelectExam={() => undefined}
       onBack={() => {}}
     />,
   );

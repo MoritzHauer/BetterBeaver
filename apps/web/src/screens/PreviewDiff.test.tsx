@@ -171,6 +171,7 @@ function renderBook(
       onPlay={() => {}}
       onReview={() => {}}
       onVocabulary={() => {}}
+      onSelectExam={() => undefined}
       onBack={() => {}}
     />
   );

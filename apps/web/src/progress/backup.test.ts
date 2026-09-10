@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import { importBackup } from "./backup";
+import { examKey, readExamRecord } from "./exam-attempts";
 
 /**
  * The localStorage half of restore, which is where the `privateBooks` key
@@ -27,6 +28,26 @@ describe("importBackup", () => {
     expect(localStorage.getItem("bb.stale")).toBeNull();
     expect(localStorage.getItem("privateBooks")).toBeNull();
     expect(localStorage.getItem("notBb")).toBeNull();
+  });
+
+  it("carries an in-flight exam attempt through a restore", async () => {
+    // Plan 0027 §6 requires the `bb.exam.<examId>` key to ride the backup:
+    // an in-flight attempt is learner state, and learner state on-device
+    // with export/import is the durability floor. It needs no code — the
+    // sweep is over every `bb.*` key — so this pins that it stays that way.
+    const attempt = JSON.stringify({
+      attempt: { startedAt: 1, deadlineAt: 2, answers: {} },
+    });
+    const file = new File(
+      [JSON.stringify({ [examKey("t-exam-1")]: attempt })],
+      "backup.json",
+    );
+    await importBackup(file);
+    expect(readExamRecord("t-exam-1").attempt).toEqual({
+      startedAt: 1,
+      deadlineAt: 2,
+      answers: {},
+    });
   });
 
   it("restores a backup file written before privateBooks existed", async () => {

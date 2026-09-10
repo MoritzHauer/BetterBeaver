@@ -51,7 +51,12 @@ function exam(
   };
 }
 
-const map = <T>(entries: [string, T][]) => new Map(entries);
+const map = <T>(entries: [string, T][]): Map<string, T> => new Map(entries);
+/** The mixed map `scoreExam` actually takes — inference over a literal list
+ * would otherwise fix it to whichever kind came first. */
+const questionMap = (
+  entries: [string, ChoiceQuestion | AssignQuestion][],
+): Map<string, ChoiceQuestion | AssignQuestion> => new Map(entries);
 
 describe("scoreExam (plan 0027 §4)", () => {
   it("scores a wrong single-answer question 0, not −1", () => {
@@ -208,7 +213,7 @@ describe("scoreExam (plan 0027 §4)", () => {
         { taskId: "t-task-p", points: 2 }, // 3 marks, 2 right 1 wrong -> 2/3
         { taskId: "t-task-k", points: 3 }, // 3 rows, 3 right -> 3
       ]),
-      map([
+      questionMap([
         ["t-task-a", choice("qa", 1, 4)],
         ["t-task-p", choice("qp", 3, 5)],
         ["t-task-k", assign("qk", [0, 1, 0])],

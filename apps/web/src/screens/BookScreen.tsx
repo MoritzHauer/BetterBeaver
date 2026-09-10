@@ -3,6 +3,7 @@ import type { Content, Lesson } from "@betterbeaver/schema";
 import type { ProgressStore, Streak, UnitProgress } from "@betterbeaver/engine";
 import {
   dueCountsByLesson,
+  examIsGenerated,
   dueCountsByUnit,
   dueUnits,
   isLessonComplete,
@@ -71,6 +72,7 @@ export function BookScreen({
   onPlay,
   onReview,
   onVocabulary,
+  onSelectExam,
   onEdit,
   onBack,
   unpublishedChanges = false,
@@ -94,6 +96,9 @@ export function BookScreen({
   onPlay: () => void;
   onReview: () => void;
   onVocabulary: () => void;
+  /** Opens an exam (plan 0027 §6). Exams are siblings of lessons, listed
+   * after them, outside the unlock chain in both directions. */
+  onSelectExam: (examId: string) => void;
   /** Authors only (plan 0012): opens this book's document in the editor. */
   onEdit?: () => void;
   onBack: () => void;
@@ -105,6 +110,7 @@ export function BookScreen({
   const lessonById = new Map(
     content.lessons.map((lesson) => [lesson.id, lesson]),
   );
+  const examById = new Map(content.exams.map((exam) => [exam.id, exam]));
   const [dueCount, setDueCount] = useState<number | null>(null);
   // Per-lesson due counts (plan 0022 §7), bucketed from the same sweep the
   // Daily Review badge above already runs — no second query, no new state to
@@ -546,6 +552,41 @@ export function BookScreen({
             </li>
           );
         })}
+        {/* Exams (plan 0027 §6), after the lessons and in `examIds` order.
+            No lock, no progress bar, no completion tick: an exam is not part
+            of the unlock chain and has no effect on it in either direction,
+            so borrowing the lesson card's chrome would say otherwise.
+
+            Not rendered in edit mode: this plan ships no editor for exams
+            (its Non-goals), and an uneditable card among editable ones would
+            read as a bug rather than a gap. */}
+        {edit === null &&
+          diff === null &&
+          (content.topic.examIds ?? []).map((examId) => {
+            const exam = examById.get(examId);
+            if (exam === undefined) {
+              return null;
+            }
+            const maxPoints = exam.questions.reduce(
+              (sum, question) => sum + question.points,
+              0,
+            );
+            return (
+              <li key={exam.id} className="card">
+                <button onClick={() => onSelectExam(exam.id)}>
+                  <strong>{exam.title}</strong>
+                  {examIsGenerated(exam, content) ? (
+                    <span className="badge-generated"> KI-generiert</span>
+                  ) : null}
+                  <p>{exam.description}</p>
+                  <p className="status">
+                    {exam.questions.length} Fragen · {maxPoints} Punkte ·{" "}
+                    {exam.ruleset.timeLimitMinutes} Minuten
+                  </p>
+                </button>
+              </li>
+            );
+          })}
       </ul>
       {edit !== null && (
         <>
