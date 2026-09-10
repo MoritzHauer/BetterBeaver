@@ -14,6 +14,8 @@ import {
   nextUnit,
   reviewQueue,
   applyGrade,
+  itemLevels,
+  itemLevelUnitIds,
 } from "./progress.js";
 import type { SchedulingUnit } from "./units.js";
 
@@ -950,5 +952,110 @@ describe("due counts per unit and lesson (plan 0022 §7)", () => {
       { id: "t-item-elsewhere", item: { ...lexeme, id: "t-item-elsewhere" } },
     ];
     expect(dueCountsByUnit(stranger, [unitA, unitB]).size).toBe(0);
+  });
+});
+
+/**
+ * The level the exercise draw sees per word (plan 0026's implementation
+ * notes, backlog 12). An item is not always one scheduling unit.
+ */
+describe("itemLevels", () => {
+  const water: Item = {
+    id: "t-item-water",
+    kind: "lexeme",
+    payload: { script: "суу", transliteration: "suu", gloss: "water" },
+    sourceRef: "t-resource-1",
+  };
+  const sentence: Item = {
+    id: "t-item-sentence",
+    kind: "sentence",
+    payload: {
+      text: "Мен {{c1::суу}} {{c2::ичем}}",
+      translation: "I drink water",
+    },
+    sourceRef: "t-resource-1",
+  };
+  const unit = makeUnit({
+    id: "t-unit-a",
+    itemIds: [water.id, sentence.id],
+    taskIds: ["t-task-recall", "t-task-cloze"],
+  });
+  const content: Content = {
+    ...makeContent({
+      lessonIds: ["t-lesson-a"],
+      lessons: [makeLesson({ id: "t-lesson-a", unitIds: [unit.id] })],
+      units: [unit],
+    }),
+    items: [water, sentence],
+    tasks: [
+      { id: "t-task-recall", type: "recall", itemIds: [water.id] },
+      { id: "t-task-cloze", type: "cloze", itemIds: [sentence.id] },
+    ],
+  };
+
+  function at(level: number): SrsState {
+    return {
+      due: "2026-07-05T00:00:00.000Z",
+      intervalDays: 1,
+      ease: 2.5,
+      reps: level,
+      levelDay: "2026-07-04",
+    };
+  }
+
+  it("reads a plain item's level from its own state", () => {
+    const levels = itemLevels(unit, content, new Map([[water.id, at(4)]]));
+    expect(levels.get(water.id)).toBe(4);
+  });
+
+  it("reads a cloze sentence's level from its blanks, not its item id", () => {
+    // The bug this exists for: nothing ever writes state under the sentence's
+    // own id, so reading it alone pinned the sentence at 0 for ever and every
+    // session opened it at the bottom of the ladder.
+    const levels = itemLevels(
+      unit,
+      content,
+      new Map([
+        [`${sentence.id}::c1`, at(6)],
+        [`${sentence.id}::c2`, at(3)],
+      ]),
+    );
+    expect(levels.get(sentence.id)).toBe(3);
+  });
+
+  it("takes the weakest blank, not the strongest", () => {
+    // The number says how hard the next exercise may be, and a sentence
+    // whose second blank is still new is not one to ask at level 10.
+    const levels = itemLevels(
+      unit,
+      content,
+      new Map([[`${sentence.id}::c1`, at(9)]]),
+    );
+    expect(levels.get(sentence.id)).toBe(0);
+  });
+
+  it("gives an unanswered word level 0, and covers every item of the unit", () => {
+    const levels = itemLevels(unit, content, new Map());
+    expect([...levels.keys()].sort()).toEqual([water.id, sentence.id].sort());
+    expect([...levels.values()]).toEqual([0, 0]);
+  });
+
+  it("names every scheduling unit its caller has to fetch", () => {
+    expect(itemLevelUnitIds(unit, content).sort()).toEqual(
+      [water.id, `${sentence.id}::c1`, `${sentence.id}::c2`].sort(),
+    );
+  });
+
+  it("never counts a note as a word", () => {
+    const withNote: Content = {
+      ...content,
+      units: [{ ...unit, noteIds: ["t-note-1"] }],
+      notes: [{ id: "t-note-1", stem: "n1" }],
+    };
+    expect(
+      itemLevelUnitIds(withNote.units[0]!, withNote).some((id) =>
+        id.startsWith("note:"),
+      ),
+    ).toBe(false);
   });
 });

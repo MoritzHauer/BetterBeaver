@@ -1,7 +1,14 @@
+/// <reference types="node" />
 import { describe, expect, it } from "vitest";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+import { validateContent } from "@betterbeaver/schema";
 import type { Content, Item, Task, Unit } from "@betterbeaver/schema";
 import { advanceDrill, nextVisit, startDrill } from "./drill.js";
 import { buildVisitQuestion } from "./session.js";
+import { availableExercises } from "./draw.js";
+import { itemIdFromUnitId } from "./units.js";
 import type { Question } from "./session.js";
 import type { Rng } from "./rng.js";
 
@@ -117,7 +124,12 @@ function play(
             correct: true,
           }))
         : [{ unitId: card.question.unitId, correct: true }];
-    state = advanceDrill(state, credited);
+    // `App.tsx` maps outcomes into the id space the drill planned over — a
+    // cloze blank grades `<itemId>::c1`, the queue holds the item id.
+    state = advanceDrill(
+      state,
+      credited.map((c) => ({ ...c, unitId: itemIdFromUnitId(c.unitId) })),
+    );
   }
   return { cards, owed: state.remaining, answered };
 }
@@ -209,6 +221,33 @@ describe("plan 0026 done-criteria", () => {
     expect(play(on.content, on.unit).owed).toBe(0);
   });
 
+  it("an authored cloze task's answers pay off the count too", () => {
+    // Backlog 12, fixed 2026-09-10. An authored cloze grades the blank's own
+    // scheduling unit, which the drill never planned — the visit was
+    // consumed, the count was not, and the session ended still owing.
+    const sentence: Item = {
+      id: "t-item-s2",
+      kind: "sentence",
+      payload: {
+        text: "Кундуздар {{c1::бөгөт}} курушат бул жерде",
+        translation: "Beavers build dams here",
+      },
+      sourceRef: "t-resource-1",
+    };
+    const cloze: Task = {
+      id: "t-task-cloze",
+      type: "cloze",
+      itemIds: [sentence.id],
+    };
+    const { content, unit } = bookOf([sentence], [cloze], false);
+    const { cards, owed } = play(content, unit, new Map(), 2);
+    expect(cards[0]?.kind).toBe("cloze");
+    // Still the blank's own id — an authored cloze keeps minting those, and
+    // that is what the SRS schedules. Only the drill's credit is mapped.
+    expect(cards[0]?.kind === "cloze" && cards[0].unitId).toBe("t-item-s2::c1");
+    expect(owed).toBe(0);
+  });
+
   it("a constructed cloze credits the word the drill planned", () => {
     // The stall this plan had to avoid: a cloze question that graded
     // `<itemId>::c1` would leave the session owing answers forever.
@@ -227,5 +266,133 @@ describe("plan 0026 done-criteria", () => {
     expect(cards[0]?.kind).toBe("cloze");
     expect(cards[0]?.kind === "cloze" && cards[0].unitId).toBe(sentence.id);
     expect(owed).toBe(0);
+  });
+});
+
+/**
+ * The onboarding Book, as it is actually shipped, played with generation on.
+ *
+ * `content/` is a frozen mirror of the backend's published catalog, refreshed
+ * by `scripts/export-content.ts` and never hand-edited, so the opt-in itself
+ * has to be published there — this is the check that says it is safe to,
+ * before anyone does. Plan 0002 is still normative for the demo Book: its job
+ * is proving all eleven types remain playable, and §3 keeps its full authored
+ * set, so generation must only ever *fill* cells here, never displace one.
+ */
+describe("the demo Book with generated exercises on", () => {
+  const CONTENT_DIR = fileURLToPath(
+    new URL("../../../content", import.meta.url),
+  );
+
+  const readJson = (path: string): unknown =>
+    JSON.parse(readFileSync(path, "utf-8"));
+  const readDir = (dir: string): unknown[] =>
+    existsSync(dir)
+      ? readdirSync(dir)
+          .filter((name) => name.endsWith(".json"))
+          .map((name) => readJson(join(dir, name)))
+      : [];
+  const stemsIn = (dir: string): string[] =>
+    existsSync(dir)
+      ? readdirSync(dir).map((name) => name.replace(/\.[^.]+$/, ""))
+      : [];
+
+  /** The shipped demo Book, optionally with plan 0026 §9's opt-in ticked. */
+  function demoContent(generatedExercises: boolean): Content {
+    const dir = join(CONTENT_DIR, "demo");
+    const domainDir = join(CONTENT_DIR, "lexicon", "demo");
+    const topic = readJson(join(dir, "topic.json")) as Record<string, unknown>;
+    const result = validateContent({
+      topic: generatedExercises ? { ...topic, generatedExercises } : topic,
+      lessons: readDir(join(dir, "lessons")),
+      units: readDir(join(dir, "units")),
+      items: readDir(join(dir, "items")),
+      tasks: readDir(join(dir, "tasks")),
+      resources: readJson(join(dir, "resources.json")) as unknown[],
+      noteStems: existsSync(join(dir, "notes"))
+        ? readdirSync(join(dir, "notes"))
+            .filter((name) => name.endsWith(".md"))
+            .map((name) => name.slice(0, -3))
+        : [],
+      noteImageRefs: [],
+      audioStems: stemsIn(join(dir, "assets", "audio")),
+      imageStems: stemsIn(join(dir, "assets", "img")),
+      domain: readJson(join(domainDir, "domain.json")),
+      entries: readDir(join(domainDir, "entries")),
+      families: readDir(join(domainDir, "families")),
+      lexiconAudioStems: stemsIn(join(domainDir, "assets", "audio")),
+      lexiconImageStems: stemsIn(join(domainDir, "assets", "img")),
+    });
+    if ("errors" in result) {
+      throw new Error(`demo failed validation:\n${result.errors.join("\n")}`);
+    }
+    return result.content;
+  }
+
+  it("still validates with the opt-in ticked", () => {
+    expect(demoContent(true).topic.generatedExercises).toBe(true);
+  });
+
+  it("plays every unit to completion, opted in", () => {
+    const content = demoContent(true);
+    for (const unit of content.units) {
+      const { owed } = play(content, unit);
+      expect(`${unit.id}: ${owed} owed`).toBe(`${unit.id}: 0 owed`);
+    }
+  });
+
+  it("asks every word of every unit, opted in", () => {
+    const content = demoContent(true);
+    for (const unit of content.units) {
+      const { cards } = play(content, unit);
+      for (const itemId of unit.itemIds) {
+        expect(`${unit.id}/${itemId}`).toBe(
+          wordsAsked(cards).has(itemId) ? `${unit.id}/${itemId}` : "not asked",
+        );
+      }
+    }
+  });
+
+  it("still plays every unit to completion with the opt-in off", () => {
+    // The phase-1 promise, checked against real content rather than a
+    // fixture: nothing about the Book changes until someone ticks it.
+    const content = demoContent(false);
+    for (const unit of content.units) {
+      expect(`${unit.id}: ${play(content, unit).owed} owed`).toBe(
+        `${unit.id}: 0 owed`,
+      );
+    }
+  });
+
+  it("gains exactly the rungs its own floors allow, and no more", () => {
+    // What opting the shipped demo Book in actually buys, item by item —
+    // pinned rather than described, because it is both smaller and more
+    // pointed than "generation fills the ladder" sounds. Nothing is gained
+    // where a floor bites (`make-your-own` holds three concepts, one short of
+    // class (g)/(r)'s MCQ floor, so construction adds it nothing) and nothing
+    // where the author already covered the rung. What is left is exactly the
+    // index rot the plan's Purpose describes: an item with an `imageRef` the
+    // picture task never named, and two sentences each missing the
+    // presentations the other one's task happened to author.
+    const off = demoContent(false);
+    const on = demoContent(true);
+    const gained = new Map<string, string[]>();
+    for (const item of on.items) {
+      const before = new Set(availableExercises(item, off));
+      const added = availableExercises(item, on).filter(
+        (exercise) => !before.has(exercise),
+      );
+      if (added.length > 0) {
+        gained.set(item.id, [...added].sort());
+      }
+    }
+    expect(Object.fromEntries(gained)).toEqual({
+      // An image nobody put in the picture task.
+      "dx-con-scent-mound": ["picture"],
+      // A scramble sentence that could always have been built and matched.
+      "dx-item-sentence-breath": ["build", "matching", "recall"],
+      // A cloze/dictation/build sentence never offered as a scramble.
+      "dx-item-sentence-gnaw": ["matching", "recall", "scramble"],
+    });
   });
 });

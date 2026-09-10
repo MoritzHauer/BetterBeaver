@@ -28,6 +28,8 @@ import {
   shuffle,
   startDrill,
   collectUnitProgress,
+  itemLevelUnitIds,
+  itemLevels,
   dueDomainUnits,
   dueUnits,
   isLessonComplete,
@@ -44,8 +46,8 @@ import type {
   Question,
   UnitProgress,
 } from "@betterbeaver/engine";
-import type { Quality } from "@betterbeaver/srs";
-import { recallQuality, wordLevel } from "@betterbeaver/srs";
+import type { Quality, SrsState } from "@betterbeaver/srs";
+import { recallQuality } from "@betterbeaver/srs";
 import type { TapLookup } from "./components/TappableText";
 import { NewBookSheet } from "./components/Sheet";
 import type { ContentInit, ContentUpdate } from "./content/source";
@@ -357,17 +359,25 @@ function UnitSession({
   useEffect(() => {
     let live = true;
     const read = async () => {
+      // Read every scheduling unit these items own, not the item ids alone:
+      // a sentence with an authored cloze task carries its level per blank
+      // and none under its own id, so `itemLevels` folds the blanks back
+      // onto the word the draw asks about.
+      const ids = itemLevelUnitIds(unit, content);
       const entries = await Promise.all(
-        unit.itemIds.map(async (itemId) => {
-          const state = await store?.getItemState(itemId);
-          return [
-            itemId,
-            wordLevel(state ?? null, schedulingConfig().pace),
-          ] as const;
-        }),
+        ids.map(async (id): Promise<[string, SrsState | null]> => [
+          id,
+          (await store?.getItemState(id)) ?? null,
+        ]),
       );
+      const states = new Map<string, SrsState>();
+      for (const [id, state] of entries) {
+        if (state !== null) {
+          states.set(id, state);
+        }
+      }
       if (live) {
-        setLevels(new Map(entries));
+        setLevels(itemLevels(unit, content, states, schedulingConfig().pace));
       }
     };
     void read().catch(() => {
@@ -467,7 +477,22 @@ function UnitSession({
     if (state === null) {
       return false;
     }
-    const next = advanceDrill(state, outcomes);
+    // Two id spaces meet here. An outcome names the **scheduling unit** the
+    // answer graded, because that is what `onGrade` schedules; the drill's
+    // queue is planned over `unit.itemIds`, because that is what a unit owns.
+    // They differ for exactly one thing — a cloze blank, `<itemId>::c1` —
+    // and without this the drill would look up a word it never planned:
+    // the visit is consumed, the owed count is not, and the session ends
+    // still showing answers to go. Found 2026-09-10; plan 0026 §2 removed
+    // the constructed half of it by minting no scheduling unit, and this is
+    // the authored half.
+    const next = advanceDrill(
+      state,
+      outcomes.map((outcome) => ({
+        ...outcome,
+        unitId: itemIdFromUnitId(outcome.unitId),
+      })),
+    );
     drillRef.current = next;
     answeredRef.current += state.remaining - next.remaining;
     setRemaining(next.remaining);
