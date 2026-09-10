@@ -323,4 +323,79 @@ describe("draftContent: the Book's optional display fields", () => {
       plain?.kind === "lexeme" && "exampleGenerated" in plain.payload,
     ).toBe(false);
   });
+
+  it("carries the generated-exercises opt-in and item targets through the draft", () => {
+    // Both are edited in place (plan 0026 §§8-9), so dropping them here
+    // would revert the author's own toggle on the next keystroke — the trap
+    // `icon` and `hasCoverArt` already recorded.
+    const { parsed } = draftContent(
+      {
+        topic: {
+          id: "b",
+          code: "b",
+          domainId: "d",
+          generatedExercises: true,
+        },
+        lessons: [],
+        units: [
+          {
+            id: "b-u1",
+            lessonId: "b-l1",
+            title: "U",
+            goal: "G",
+            itemIds: ["b-i1"],
+            taskIds: [],
+            noteIds: [],
+            itemTargets: { "b-i1": 2, "b-i2": "not a level" },
+          },
+        ],
+        items: [],
+        tasks: [],
+        resources: [],
+        notes: [],
+      },
+      {
+        domain: { id: "d", code: "d", kind: "language" },
+        entries: [],
+        families: [],
+      },
+      emptyAssets,
+    );
+    expect(parsed.book.generatedExercises).toBe(true);
+    // A half-typed value degrades rather than throwing: the draft is the
+    // author's working copy, not a validated document.
+    expect(parsed.units[0]?.itemTargets).toEqual({ "b-i1": 2 });
+  });
+
+  it("leaves both absent rather than widening them to a default", () => {
+    const { parsed } = draftContent(
+      {
+        topic: { id: "b", code: "b", domainId: "d" },
+        lessons: [],
+        units: [
+          {
+            id: "b-u1",
+            lessonId: "b-l1",
+            title: "U",
+            goal: "G",
+            itemIds: [],
+            taskIds: [],
+            noteIds: [],
+          },
+        ],
+        items: [],
+        tasks: [],
+        resources: [],
+        notes: [],
+      },
+      {
+        domain: { id: "d", code: "d", kind: "language" },
+        entries: [],
+        families: [],
+      },
+      emptyAssets,
+    );
+    expect("generatedExercises" in parsed.book).toBe(false);
+    expect("itemTargets" in (parsed.units[0] ?? {})).toBe(false);
+  });
 });

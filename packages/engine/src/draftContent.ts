@@ -219,7 +219,32 @@ function draftUnit(raw: unknown): Unit {
     ...(Array.isArray(e.recallUnitIds)
       ? { recallUnitIds: ids(e.recallUnitIds) }
       : {}),
+    // Edited in place like `icon`/`hasCoverArt` below, and dropped here for
+    // the same reason it must not be: edit mode renders *this* unit, so a
+    // target the author sets would revert on the next keystroke.
+    ...(itemTargets(e.itemTargets) ?? {}),
   };
+}
+
+/** Coerces a draft `itemTargets` map, dropping any entry whose value is not
+ * a level — the document is the author's working copy, so a half-typed
+ * value must degrade rather than throw. `undefined` when there is nothing
+ * to carry, so the key stays absent the way the schema wants it. */
+function itemTargets(
+  raw: unknown,
+): { itemTargets: Record<string, number> } | undefined {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    return undefined;
+  }
+  const targets: Record<string, number> = {};
+  for (const [id, level] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof level === "number" && Number.isInteger(level)) {
+      targets[id] = level;
+    }
+  }
+  return Object.keys(targets).length === 0
+    ? undefined
+    : { itemTargets: targets };
 }
 
 function draftTask(raw: unknown): Task {
@@ -263,6 +288,7 @@ function draftBook(raw: unknown): Book {
       ? { icon: e.icon as Book["icon"] }
       : {}),
     ...(e.hasCoverArt === true ? { hasCoverArt: true } : {}),
+    ...(e.generatedExercises === true ? { generatedExercises: true } : {}),
   };
 }
 

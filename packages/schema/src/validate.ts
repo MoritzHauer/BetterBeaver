@@ -15,8 +15,11 @@ import {
   sentenceTokens,
   RECOGNIZE_DISTRACTOR_COUNT,
   TASK_ALLOWED_ITEM_KINDS,
+  TASK_EXERCISES,
   TASK_NEEDS_DISTRACTORS,
   TASK_REQUIRED_ASSET,
+  TASK_TYPES,
+  EXERCISE_LEVEL,
   DOMAIN_ENTRY_KIND,
   DOMAIN_LINK_TYPES,
   type Book,
@@ -682,6 +685,50 @@ export function checkReferences(parsed: ParsedSet): string[] {
       if (!unit.itemIds.includes(itemId)) {
         errors.push(
           `${unit.id}: itemTargets references item "${itemId}", which the unit does not own`,
+        );
+      }
+    }
+  }
+
+  // --- class (ad): a unit item that no exercise — authored or constructed
+  // — reaches at all (plan 0026 §7). The rot the plan's Purpose describes:
+  // before generation, "in no task" was a legitimate authoring choice;
+  // now it means the item is simply never asked.
+  //
+  // Reach, not floors. A floor is a *gate* under this plan — a unit with
+  // three same-kind items has no MCQ rather than an invalid one — so the
+  // question here is only whether any ranked exercise accepts the kind at
+  // all. `shadowing` does not count: it checks no answer, so an item only a
+  // shadowing task names is never really asked either.
+  //
+  // For today's four item kinds nothing can trip this, and deliberately so:
+  // `recall` accepts every kind but `pair`, and `minimal-pair` is what a
+  // `pair` *is*, so construction reaches everything. That is §7's "the
+  // condition is unrepresentable rather than validated" written down as the
+  // check that keeps it that way — it starts biting on the first item kind
+  // that can fail to build. ---
+  const rankedTaskTypes = TASK_TYPES.filter((type) =>
+    TASK_EXERCISES[type].some((exercise) => EXERCISE_LEVEL[exercise] !== null),
+  );
+  for (const unit of units) {
+    const unitTaskIds = new Set(unit.taskIds);
+    for (const id of unit.itemIds) {
+      const item = itemById.get(id);
+      if (item === undefined) {
+        continue; // dangling reference already reported under class (a).
+      }
+      const authored = tasks.some(
+        (task) =>
+          unitTaskIds.has(task.id) &&
+          task.itemIds.includes(id) &&
+          rankedTaskTypes.includes(task.type),
+      );
+      const constructible = rankedTaskTypes.some((type) =>
+        TASK_ALLOWED_ITEM_KINDS[type].includes(item.kind),
+      );
+      if (!authored && !constructible) {
+        errors.push(
+          `${unit.id}: item "${id}" is reached by no exercise, authored or constructed`,
         );
       }
     }

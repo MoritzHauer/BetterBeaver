@@ -222,12 +222,15 @@ export function constructibleExercises(
   item: Item,
   content: Content,
 ): readonly Exercise[] {
-  return capAtTarget(
-    RANKED_EXERCISES.filter((exercise) =>
-      canConstruct(exercise, item, content),
-    ),
-    item,
-    content,
+  return capAtTarget(buildable(item, content), item, content);
+}
+
+/** `constructibleExercises` before the target caps it — the raw question of
+ * what the content can build, which `itemCoverage` needs so it can cap the
+ * union rather than each half (see `availableExercises`). */
+function buildable(item: Item, content: Content): readonly Exercise[] {
+  return RANKED_EXERCISES.filter((exercise) =>
+    canConstruct(exercise, item, content),
   );
 }
 
@@ -285,24 +288,37 @@ export function itemCoverage(
   content: Content,
   authoredExercises: readonly Exercise[],
 ): readonly LevelCoverage[] {
-  const constructible = constructibleExercises(item, content);
-  const capped = capAtTarget(authoredExercises, item, content);
+  // Capped over the union, exactly as `availableExercises` caps the draw —
+  // cap each half and the never-silence-a-word floor fires on the authored
+  // side alone, and the grid would show a level-9 `write` on a word the
+  // session actually asks at level 1.
+  //
+  // The floor itself is deliberately *not* mirrored here. Where a target is
+  // set that nothing can reach, the draw still asks the easiest exercise it
+  // has while this grid shows the word unreached — the more useful
+  // half-truth, since the author is looking at the one surface that exists
+  // to tell them they asked for the impossible.
+  const constructible = buildable(item, content);
+  const kept = new Set(
+    capAtTarget(
+      [...new Set([...authoredExercises, ...constructible])],
+      item,
+      content,
+    ),
+  );
   const target = targetLevel(item, content);
+  const at = (exercises: readonly Exercise[], level: number) =>
+    exercises.filter(
+      (exercise) => EXERCISE_LEVEL[exercise] === level && kept.has(exercise),
+    );
   const rows: LevelCoverage[] = [];
   for (let level = MIN_EXERCISE_LEVEL; level <= MAX_EXERCISE_LEVEL; level++) {
-    const authored = capped.filter(
-      (exercise) => EXERCISE_LEVEL[exercise] === level,
-    );
+    const authored = at(authoredExercises, level);
     rows.push({
       level,
       authored,
       // An authored task owns its cells; construction fills only the gaps.
-      constructed:
-        authored.length > 0
-          ? []
-          : constructible.filter(
-              (exercise) => EXERCISE_LEVEL[exercise] === level,
-            ),
+      constructed: authored.length > 0 ? [] : at(constructible, level),
       beyondTarget: level > target,
     });
   }

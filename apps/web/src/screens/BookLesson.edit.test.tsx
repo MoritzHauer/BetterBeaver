@@ -198,6 +198,20 @@ describe("BookScreen", () => {
     expect(screen.queryByLabelText("Cover art")).toBeNull();
   });
 
+  it("offers the generated-exercises opt-in, and writes it as a key or none", () => {
+    // Plan 0026 §9, phase 1: opting in is per Book and stays the author's
+    // decision, so nothing shipped changes behaviour until it is ticked.
+    const { session, books } = makeSession();
+    renderBook(session);
+    fireEvent.click(screen.getByRole("button", { name: "Book settings" }));
+
+    const toggle = screen.getByLabelText("Generated exercises");
+    expect((toggle as HTMLInputElement).checked).toBe(false);
+    fireEvent.click(toggle);
+
+    expect(books.at(-1)?.topic).toMatchObject({ generatedExercises: true });
+  });
+
   it("creates a lesson with the right topicId and appends it to lessonIds", () => {
     const { session, books } = makeSession();
     renderBook(session);

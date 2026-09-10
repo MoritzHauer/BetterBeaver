@@ -1133,6 +1133,43 @@ describe("validateContent", () => {
     ).toBe(true);
   });
 
+  it("(ad) accepts every item kind the app has today", () => {
+    // Deliberately unfireable, and that is the point (plan 0026 §7):
+    // `recall` accepts every kind but `pair`, and `minimal-pair` is what a
+    // `pair` is, so construction reaches all four. The check is what keeps
+    // the condition unrepresentable as kinds are added.
+    const { input, unit, taskRecognize, taskRecall } = makeFixture();
+    unit.taskIds = [taskRecognize.id, taskRecall.id];
+
+    const result = validateContent(input);
+
+    if ("errors" in result) {
+      expect(
+        result.errors.filter((e) => e.includes("reached by no exercise")),
+      ).toEqual([]);
+    }
+  });
+
+  it("(ad) does not fire for an item no task names, once anything can build it", () => {
+    // An item in no task is exactly the rot the plan's Purpose describes —
+    // but it is now *constructible*, so it is reached, and the check is
+    // silent rather than wrong.
+    const { input, unit, taskRecognize, taskRecall, itemD } = makeFixture();
+    taskRecognize.itemIds = taskRecognize.itemIds.filter(
+      (id) => id !== itemD.id,
+    );
+    taskRecall.itemIds = taskRecall.itemIds.filter((id) => id !== itemD.id);
+    expect(unit.itemIds).toContain(itemD.id);
+
+    const result = validateContent(input);
+
+    if ("errors" in result) {
+      expect(
+        result.errors.filter((e) => e.includes("reached by no exercise")),
+      ).toEqual([]);
+    }
+  });
+
   it("(ac) reports an itemTargets key the unit does not own", () => {
     const { input, unit } = makeFixture();
     unit.itemTargets = { "ky-item-nope": 2 };
