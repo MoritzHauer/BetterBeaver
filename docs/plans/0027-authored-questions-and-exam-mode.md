@@ -1,6 +1,6 @@
 # Plan 0027: Authored-option questions and exam mode
 
-Status: **designed** 2026-09-07 · **slices 1-6 implemented 2026-09-10** (step 7, the owner's bump procedure, and the browser verification pass are outstanding; see `docs/STATUS.md` for what shipped and what was decided while building) · Owner: Moe · Date: 2026-09-07 · Direction pinned by four owner decisions this session (two task types, not one; an exam is its own entity, run in one sitting, timed; exams sit at the same level as lessons; licence-encumbered questions ship as a private Book). Grilling deliberately skipped by the owner.
+Status: **designed** 2026-09-07 · **slices 1-6 implemented and browser-verified 2026-09-10** (step 7, the owner's bump procedure, is outstanding, as is the exam content of §8; see `docs/STATUS.md` for what shipped and what was decided while building) · Owner: Moe · Date: 2026-09-07 · Direction pinned by four owner decisions this session (two task types, not one; an exam is its own entity, run in one sitting, timed; exams sit at the same level as lessons; licence-encumbered questions ship as a private Book). Grilling deliberately skipped by the owner.
 
 ## Purpose
 
