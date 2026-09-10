@@ -109,20 +109,24 @@ The level indexes the interval. Difficulty climbs through the first four levels 
 Each appearance of a word in a session fills one of two slots:
 
 - **Repetition, early** — drawn at random from `{level − 1, level}`, clamped to at least 1: a level the word has already passed.
-- **New attempt, later** — exactly `level + 1`. Getting this right is the only thing that advances the level.
+- **New attempt, later** — exactly `level + 1`. Getting this right is the only thing that advances the level **at and above the production level**; below it every correct answer advances, which is what the next paragraph is about.
+
+**Corrected 2026-09-10, after measuring the built behaviour.** The table below reads as if it held for every learner. It holds at **Careful**, and the rule it leaves out is the one that makes the bottom of the ladder move: **below level 4 there is no due gate and no day guard (§5), so every correct answer is a level.** A word therefore climbs the recognition band at one level per repetition — three in a first sitting at Careful, two at Normal, one at Fast — and only from level 4 up does "one advance per day, whatever the depth" take over.
+
+That is the mechanism working as designed rather than a defect, and it is why the Practice depth preset is felt twice: as depth everywhere, and as speed only in levels 1–3. The measured cost is small and repaid — see the table in the slice 11 note below, where Fast reaches level 4 two days after Careful does and the top of the ladder 108 days sooner.
 
 <!-- prettier-ignore -->
-| Session | Level at start | Early slot | Later slot | Level after |
+| Session | Level at start | Early slot | Later slot | Level after (Careful) |
 | --- | --- | --- | --- | --- |
-| 1 | 0 — new word | — | 1, then 2, then 3 | 3 |
+| 1 | 0 — new word | — | 1, then 2, then 3 | 3 (Normal 2, Fast 1) |
 | 2 | 3 | random of {2, 3} | 4 | 4 |
 | 3 | 4 | random of {3, 4} | 5 | 5 |
 
-This replaces the weighted draw over everything at or below a ceiling, and it is better on three counts. **Advancement becomes unambiguous** — the level rises if and only if the `level + 1` exercise was answered correctly, rather than depending on which exercise a draw happened to produce. **The learner gets a win before the stretch**, which weighting only approximated. And the repetitions stop being arbitrary: one consolidates, one advances. Variety survives, because the early slot is random within its window and levels 3 and 4 each hold two exercises.
+This replaces the weighted draw over everything at or below a ceiling, and it is better on three counts. **Advancement becomes unambiguous** — from level 4 up, the level rises if and only if the `level + 1` exercise was answered correctly, rather than depending on which exercise a draw happened to produce. **The learner gets a win before the stretch**, which weighting only approximated. And the repetitions stop being arbitrary: one consolidates, one advances. Variety survives, because the early slot is random within its window and levels 3 and 4 each hold two exercises.
 
 Four rules complete it:
 
-- **A brand-new word runs the bottom levels in its first session** — 1, then 2, then 3 — rather than taking three sessions to become recognisable. This is why the day guard starts where it does (§5).
+- **A brand-new word runs the bottom levels in its first session** — 1, then 2, then 3 — rather than taking three sessions to become recognisable. This is why the day guard starts where it does (§5). **At Careful**: the band advances one level per repetition, so Normal reaches level 3 in two sittings and Fast in three (corrected 2026-09-10). Forcing all three on every preset was considered and rejected — a new word would need appearances the depth setting did not ask for, and session length would then depend on how many of a unit's words are new, which §6 exists to keep predictable.
 - **A missing level is skipped, not waited for.** If `level + 1` has no exercise the content can build — level 3 is `listen`, and no Book has recordings — the new attempt goes to the next level that does. This is what keeps every level reachable, and 100% attainable, on content with gaps.
 - **A failed repetition cancels the stretch.** The later slot becomes a second repetition instead. Pushing a learner who has just shown they are shaky is how a session goes bad.
 - **Daily Review has one slot, so it draws from `{level, level + 1}`** — sometimes consolidation, sometimes progression, and it keeps its variety without becoming a drill.
@@ -131,7 +135,7 @@ Four rules complete it:
 
 **Up, at most one level per UTC day — from level 4 onwards.** A correct answer at the new-attempt slot advances the level; `levelDay` records the day, and a second advance that day is refused.
 
-**Levels 1–3 are exempt, and the exemption is the point.** They are `matching`, `recognize` and `listen` — every one of them recognition, with the answer on screen. Recognising a word met a minute ago is a legitimate outcome of meeting it, so a new word climbs to level 3 in its first sitting (§4). The guard exists to stop a word reaching *production* on the strength of short-term memory, and production starts at level 4 — pick the foreign word — so that is where the guard starts.
+**Levels 1–3 are exempt, and the exemption is the point.** They are `matching`, `recognize` and `listen` — every one of them recognition, with the answer on screen. Recognising a word met a minute ago is a legitimate outcome of meeting it, so a new word climbs to level 3 in its first sitting at Careful — one level per repetition, so two sittings at Normal and three at Fast (§4, corrected 2026-09-10). The guard exists to stop a word reaching *production* on the strength of short-term memory, and production starts at level 4 — pick the foreign word — so that is where the guard starts.
 
 Above that the codebase has met this problem twice and answered it the same way both times: plan 0022's practice-only rule advances a rung at most once per day, and plan 0024's graduation counts three separate *days* "because the thing being tested is overnight retention".
 
@@ -343,7 +347,20 @@ The last unlanded piece of this plan, unblocked by the owner's answer to open qu
 
 **One thing worth flagging rather than fixing.** Settings deliberately renamed this control "Practice depth" (slice 4, above) because what a learner picks is how many repetitions they owe, not an abstract speed — and this slice bolts a genuine speed effect onto it. The copy now says so on both the pace and depth rows, but the honest position is that one control does two things, and the name only covers one. Splitting it into two controls would be the fix if it ever confuses anyone.
 
-Also note the inversion this makes visible: below production Fast is the *slowest* preset, because it asks one repetition per session where Careful asks three, and every repetition below level 4 is a level. Fast is faster only above the production line. That follows from §4 and §6 as designed and is not introduced here, but it is the kind of thing that reads as a bug in a support conversation.
+**Measured, 2026-09-10** — a perfectly-answered new word, Balanced pace, one sitting a day, simulated against the shipped scheduler:
+
+<!-- prettier-ignore -->
+| Practice depth | L3 | L4 | L6 | L8 | L10 |
+| --- | --- | --- | --- | --- | --- |
+| Careful (3) | day 1 | day 2 | day 9 | day 32 | **day 152** |
+| Normal (2) | day 2 | day 3 | day 10 | day 33 | **day 153** |
+| Fast (1) | day 3 | day 4 | day 6 | day 14 | **day 44** |
+
+Two things this settles, and one of them corrects the paragraph that stood here before.
+
+**The inversion is real but small, and the earlier wording overstated it.** Below production Fast *is* the slowest preset — one repetition per session where Careful asks three, and every correct answer down there is a level — but the lag is two days, and Fast then reaches the top of the ladder 108 days earlier. Calling it "the slowest preset" without that second half was misleading. It follows from §4 and §6 as designed, and §4 now states the rule rather than leaving the table to imply it.
+
+**Careful and Normal finish one day apart over 152 days.** So for two of the three presets the control does exactly what its name promises — depth, not speed — and Fast is the single outlier that also buys speed. That is a good argument for the name "Practice depth" surviving, which it has, and a fair warning that Normal buys a learner nothing over Careful except fewer questions.
 
 ## Open questions
 
