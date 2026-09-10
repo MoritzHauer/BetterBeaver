@@ -13,13 +13,17 @@
 import { useId, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import type {
+  AssignQuestion,
   BuildQuestion,
+  ChoiceQuestion,
   MatchingQuestion,
   Question,
   QuestionOutcome,
   ScrambleQuestion,
 } from "@betterbeaver/engine";
 import {
+  checkAssignAnswer,
+  checkChoiceAnswer,
   checkMatchingPair,
   checkScrambleAnswer,
   checkTypedAnswer,
@@ -41,6 +45,7 @@ import {
   keyboardPlatform,
 } from "../../components/KeyboardSetupCard";
 import { ActionBar, VerdictBar, type Verdict } from "./ActionBar";
+import { AssignBoard, ChoiceBoard } from "./questionInputs";
 
 function AudioPlayer({ bookId, stem }: { bookId: string; stem: string }) {
   const url = getAssetUrl(bookId, "audio", stem);
@@ -700,6 +705,90 @@ function MatchingBoard({
   );
 }
 
+/**
+ * The practice-session half of an authored question (plan 0027 §5): answer,
+ * Check, see the truth, move on.
+ *
+ * Grading here is the ordinary auto path — wrong is quality 2, correct is 4
+ * — and **partial correctness counts as wrong**, which is what
+ * `checkChoiceAnswer`/`checkAssignAnswer` implement. The exam's partial
+ * credit is a different calculation on a different surface (`scoreExam`),
+ * and it writes no SRS state at all.
+ *
+ * The board itself is shared with the exam runner; only this policy is not.
+ */
+function AuthoredQuestionView({
+  question,
+  applyAuto,
+  advance,
+}: {
+  question: ChoiceQuestion | AssignQuestion;
+  applyAuto: (unitId: string, correct: boolean) => Promise<void>;
+  advance: () => void;
+}) {
+  const [selected, setSelected] = useState<number[]>([]);
+  const [chosen, setChosen] = useState<(number | null)[]>(
+    question.kind === "assign" ? question.rows.map(() => null) : [],
+  );
+  const [checked, setChecked] = useState<boolean | null>(null);
+
+  // Answering every row / picking the full count is required before Check:
+  // in practice an incomplete answer grades as wrong, and letting a stray
+  // tap on Check spend the word's repetition on a half-filled board would
+  // punish the interaction rather than the recall.
+  const complete =
+    question.kind === "choice"
+      ? selected.length === question.selectCount
+      : chosen.every((row) => row !== null);
+
+  async function check() {
+    if (checked !== null || !complete) {
+      return;
+    }
+    const correct =
+      question.kind === "choice"
+        ? checkChoiceAnswer(question, selected)
+        : checkAssignAnswer(question, chosen);
+    setChecked(correct);
+    await applyAuto(question.unitId, correct);
+  }
+
+  return (
+    <>
+      {question.kind === "choice" ? (
+        <ChoiceBoard
+          question={question}
+          selected={selected}
+          onChange={setSelected}
+          reveal={checked !== null}
+          disabled={checked !== null}
+        />
+      ) : (
+        <AssignBoard
+          question={question}
+          chosen={chosen}
+          onChange={setChosen}
+          reveal={checked !== null}
+          disabled={checked !== null}
+        />
+      )}
+      {checked === null ? (
+        <ActionBar>
+          <button className="primary" disabled={!complete} onClick={check}>
+            Check
+          </button>
+        </ActionBar>
+      ) : (
+        <VerdictBar
+          verdict={checked ? "correct" : "incorrect"}
+          detail="Not quite — the correct answer is marked."
+          advance={advance}
+        />
+      )}
+    </>
+  );
+}
+
 /** Renders the interaction for one question, per the plan's per-kind table.
  * Views only render and forward answers; all checking/normalization is
  * engine code (`checkTypedAnswer`, `checkScrambleAnswer`,
@@ -891,6 +980,16 @@ export function renderInteraction(
             advance={advance}
           />
         </>
+      );
+    case "choice":
+    case "assign":
+      return (
+        <AuthoredQuestionView
+          key={question.unitId}
+          question={question}
+          applyAuto={applyAuto}
+          advance={advance}
+        />
       );
     default:
       question satisfies never;

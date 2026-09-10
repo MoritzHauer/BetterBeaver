@@ -58,8 +58,36 @@ type PairItemLike = {
   };
   sourceRef: string;
 };
+type QuestionItemLike = {
+  id: string;
+  kind: "question";
+  payload: {
+    stem: string;
+    options: { text: string; correct: boolean }[];
+    labels?: [string, string];
+    generated?: boolean;
+  };
+  sourceRef: string;
+};
 type ItemLike =
-  ConceptItemLike | LexemeItemLike | SentenceItemLike | PairItemLike;
+  | ConceptItemLike
+  | LexemeItemLike
+  | SentenceItemLike
+  | PairItemLike
+  | QuestionItemLike;
+type ExamLike = {
+  id: string;
+  topicId: string;
+  title: string;
+  description: string;
+  questions: { taskId: string; points: number }[];
+  ruleset: {
+    passPercent: number;
+    timeLimitMinutes: number;
+    partialCredit: boolean;
+    negativeMarking: boolean;
+  };
+};
 type DomainLike = {
   id: string;
   code: string;
@@ -187,7 +215,15 @@ function makeFixture() {
     unitIds: [unit.id],
   };
 
-  const book = {
+  const book: {
+    id: string;
+    code: string;
+    title: string;
+    description: string;
+    lessonIds: string[];
+    domainId: string;
+    examIds?: string[];
+  } = {
     id: "kyrgyz",
     code: "ky",
     title: "Kyrgyz",
@@ -196,7 +232,24 @@ function makeFixture() {
     domainId: domain.id,
   };
 
-  const input = {
+  const input: {
+    topic: typeof book;
+    lessons: unknown[];
+    units: unknown[];
+    items: ItemLike[];
+    tasks: TaskLike[];
+    exams?: ExamLike[];
+    resources: unknown[];
+    noteStems: string[];
+    audioStems: string[];
+    imageStems: string[];
+    noteImageRefs: { noteStem: string; stem: string }[];
+    domain: DomainLike;
+    entries: ItemLike[];
+    families: FamilyLike[];
+    lexiconAudioStems: string[];
+    lexiconImageStems: string[];
+  } = {
     topic: book,
     lessons: [lesson],
     units: [unit],
@@ -1324,5 +1377,236 @@ describe("bookSchema hasCoverArt (UI polish batch, 2026-07-25)", () => {
     if (result.success) {
       expect(result.data.hasCoverArt).toBeUndefined();
     }
+  });
+});
+
+/**
+ * Plan 0027: authored-option questions and exams — classes (ae) the payload,
+ * (af) the task/payload pairing, (ag) the exam.
+ *
+ * Every case seeds exactly one violation into the shared fixture, the way
+ * the classes above it do.
+ */
+describe("authored questions and exams (plan 0027)", () => {
+  /** Adds a `question` item, a task over it, and an exam listing that task —
+   * the smallest fully valid arrangement of the whole feature. Callers
+   * mutate one piece of it to seed a violation. */
+  function withExam() {
+    const fixture = makeFixture();
+    const question: QuestionItemLike = {
+      id: "ky-item-q1",
+      kind: "question",
+      payload: {
+        stem: "Which of these are layers?",
+        options: [
+          { text: "Presentation", correct: true },
+          { text: "Domain", correct: true },
+          { text: "Tuesday", correct: false },
+        ],
+      },
+      sourceRef: fixture.resource.id,
+    };
+    const rowQuestion: QuestionItemLike = {
+      id: "ky-item-q2",
+      kind: "question",
+      payload: {
+        stem: "Assign each statement",
+        options: [
+          { text: "A blackbox hides its internals", correct: true },
+          { text: "A whitebox hides its internals", correct: false },
+        ],
+        labels: ["Richtig", "Falsch"],
+      },
+      sourceRef: fixture.resource.id,
+    };
+    const choiceTask: TaskLike = {
+      id: "ky-task-choice-1",
+      type: "choice",
+      itemIds: [question.id],
+    };
+    const assignTask: TaskLike = {
+      id: "ky-task-assign-1",
+      type: "assign",
+      itemIds: [rowQuestion.id],
+    };
+    const exam: ExamLike = {
+      id: "ky-exam-1",
+      topicId: fixture.book.id,
+      title: "Mock exam",
+      description: "iSAQB CPSA-F, © iSAQB e.V.",
+      questions: [
+        { taskId: choiceTask.id, points: 2 },
+        { taskId: assignTask.id, points: 3 },
+      ],
+      ruleset: {
+        passPercent: 60,
+        timeLimitMinutes: 75,
+        partialCredit: true,
+        negativeMarking: true,
+      },
+    };
+    fixture.input.items.push(question, rowQuestion);
+    fixture.input.tasks.push(choiceTask, assignTask);
+    fixture.input.exams = [exam];
+    fixture.unit.itemIds.push(question.id, rowQuestion.id);
+    fixture.unit.taskIds.push(choiceTask.id, assignTask.id);
+    fixture.book.examIds = [exam.id];
+    return { ...fixture, question, rowQuestion, choiceTask, assignTask, exam };
+  }
+
+  it("accepts a book with question items and an exam", () => {
+    const { input } = withExam();
+    const result = validateContent(input);
+    expect("content" in result).toBe(true);
+    if ("content" in result) {
+      expect(result.content.exams).toHaveLength(1);
+      expect(result.content.exams[0]?.ruleset.passPercent).toBe(60);
+    }
+  });
+
+  it("accepts a book with no exams at all — examIds is optional", () => {
+    const result = validateContent(makeFixture().input);
+    expect("content" in result).toBe(true);
+    if ("content" in result) {
+      expect(result.content.exams).toEqual([]);
+      expect(result.content.topic.examIds).toBeUndefined();
+    }
+  });
+
+  // --- class (af): the pairing ---
+
+  it("rejects a choice task whose item carries labels", () => {
+    const { input, question } = withExam();
+    question.payload.labels = ["Richtig", "Falsch"];
+    expect(expectErrors(validateContent(input)).join("\n")).toContain(
+      'choice task item "ky-item-q1" has "labels"',
+    );
+  });
+
+  it("rejects an assign task whose item carries no labels", () => {
+    const { input, rowQuestion } = withExam();
+    delete rowQuestion.payload.labels;
+    expect(expectErrors(validateContent(input)).join("\n")).toContain(
+      'assign task item "ky-item-q2" has no "labels"',
+    );
+  });
+
+  // --- class (ae): the payload ---
+
+  it("rejects a choice question with every option correct", () => {
+    const { input, question } = withExam();
+    for (const option of question.payload.options) {
+      option.correct = true;
+    }
+    expect(expectErrors(validateContent(input)).join("\n")).toContain(
+      "has no incorrect option",
+    );
+  });
+
+  it("rejects a choice question with no correct option", () => {
+    const { input, question } = withExam();
+    for (const option of question.payload.options) {
+      option.correct = false;
+    }
+    expect(expectErrors(validateContent(input)).join("\n")).toContain(
+      "has no correct option",
+    );
+  });
+
+  it("rejects a blank assign label", () => {
+    const { input, rowQuestion } = withExam();
+    rowQuestion.payload.labels = ["Richtig", "   "];
+    expect(expectErrors(validateContent(input)).join("\n")).toContain(
+      "assign question label 2 is blank",
+    );
+  });
+
+  it("rejects a question with one option", () => {
+    const { input, question } = withExam();
+    question.payload.options = [{ text: "Only", correct: true }];
+    // Caught by the zod shape first (`.min(2)`), which is phase 1 — the
+    // point is that it never reaches content, not which phase says so.
+    expect(expectErrors(validateContent(input)).join("\n")).toContain(
+      "ky-item-q1",
+    );
+  });
+
+  // --- class (ag): the exam ---
+
+  it("rejects an exam referencing a task that is not choice/assign", () => {
+    const { input, exam, taskRecall } = withExam();
+    exam.questions[0] = { taskId: taskRecall.id, points: 1 };
+    expect(expectErrors(validateContent(input)).join("\n")).toContain(
+      'is of type "recall"',
+    );
+  });
+
+  it("rejects an exam referencing a dangling task id", () => {
+    const { input, exam } = withExam();
+    exam.questions[0] = { taskId: "ky-task-nope", points: 1 };
+    expect(expectErrors(validateContent(input)).join("\n")).toContain(
+      'dangling task reference "ky-task-nope"',
+    );
+  });
+
+  it("rejects an exam referencing a two-item task", () => {
+    const { input, choiceTask, question, rowQuestion } = withExam();
+    // Both questions in one task: legal for unit practice, ambiguous for an
+    // exam entry, which carries one question's points.
+    delete rowQuestion.payload.labels;
+    choiceTask.itemIds = [question.id, rowQuestion.id];
+    expect(expectErrors(validateContent(input)).join("\n")).toContain(
+      "holds 2 items (an exam question is exactly one)",
+    );
+  });
+
+  it("rejects a duplicate task id within one exam", () => {
+    const { input, exam, choiceTask } = withExam();
+    exam.questions[1] = { taskId: choiceTask.id, points: 1 };
+    expect(expectErrors(validateContent(input)).join("\n")).toContain(
+      'duplicate task reference "ky-task-choice-1"',
+    );
+  });
+
+  it("rejects an exam present in the document but absent from examIds", () => {
+    const { input, book } = withExam();
+    book.examIds = [];
+    expect(expectErrors(validateContent(input)).join("\n")).toContain(
+      "exam is not referenced in topic.examIds",
+    );
+  });
+
+  it("rejects an examIds entry with no exam behind it", () => {
+    const { input, book } = withExam();
+    book.examIds = [...(book.examIds ?? []), "ky-exam-ghost"];
+    expect(expectErrors(validateContent(input)).join("\n")).toContain(
+      'dangling exam reference "ky-exam-ghost"',
+    );
+  });
+
+  it("rejects an exam whose topicId is another book", () => {
+    const { input, exam } = withExam();
+    exam.topicId = "german";
+    expect(expectErrors(validateContent(input)).join("\n")).toContain(
+      'topicId "german" does not match topic id "kyrgyz"',
+    );
+  });
+
+  it("rejects an exam id without the book's code prefix", () => {
+    const { input, exam, book } = withExam();
+    exam.id = "exam-1";
+    book.examIds = ["exam-1"];
+    expect(expectErrors(validateContent(input)).join("\n")).toContain(
+      'exam id must start with "ky-"',
+    );
+  });
+
+  it("keeps question items out of the duplicate-display-text check", () => {
+    // Class (h) calls `itemDisplayText`, which throws for a question exactly
+    // as it does for a pair. Two questions sharing a stem must validate
+    // rather than blow up the validator.
+    const { input, rowQuestion, question } = withExam();
+    rowQuestion.payload.stem = question.payload.stem;
+    expect("content" in validateContent(input)).toBe(true);
   });
 });

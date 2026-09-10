@@ -108,6 +108,42 @@ const CASES: [string, View][] = [
   ],
 ];
 
+// The exam route (plan 0027 §6): a sibling of `/lessons/<lessonId>`, with
+// three phases in the query rather than three routes.
+CASES.push(
+  [
+    "/books/demo/exams/dx-exam-mock",
+    started({ screen: "exam", bookId: "demo", examId: "dx-exam-mock" }),
+  ],
+  [
+    "/books/demo/exams/dx-exam-mock?q=0",
+    started({
+      screen: "exam",
+      bookId: "demo",
+      examId: "dx-exam-mock",
+      questionIndex: 0,
+    }),
+  ],
+  [
+    "/books/demo/exams/dx-exam-mock?q=17",
+    started({
+      screen: "exam",
+      bookId: "demo",
+      examId: "dx-exam-mock",
+      questionIndex: 17,
+    }),
+  ],
+  [
+    "/books/demo/exams/dx-exam-mock?end=1",
+    started({
+      screen: "exam",
+      bookId: "demo",
+      examId: "dx-exam-mock",
+      atEnd: true,
+    }),
+  ],
+);
+
 describe("route", () => {
   it.each(CASES)("round-trips %s", (path, view) => {
     expect(toPath(view)).toBe(path);
@@ -134,6 +170,17 @@ describe("route", () => {
     expect(fromPath("/books/demo/chapters/7")).toBeNull();
     expect(fromPath("/nonsense")).toBeNull();
     expect(fromPath("/domains/demo/study?mode=telepathy")).toBeNull();
+  });
+
+  it("reads a nonsense ?q= as the exam intro rather than a broken runner", () => {
+    // A link this build cannot make sense of lands on the intro, which is
+    // one tap from the runner — never on question NaN.
+    expect(fromPath("/books/demo/exams/e?q=nope")).toEqual(
+      started({ screen: "exam", bookId: "demo", examId: "e" }),
+    );
+    expect(fromPath("/books/demo/exams/e?q=-2")).toEqual(
+      started({ screen: "exam", bookId: "demo", examId: "e" }),
+    );
   });
 
   it("keeps ids that need escaping intact", () => {

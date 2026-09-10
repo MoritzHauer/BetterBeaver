@@ -129,6 +129,7 @@ function renderBook(session: EditSessionValue | null, book = BOOK) {
       onPlay={() => {}}
       onReview={() => {}}
       onVocabulary={() => {}}
+      onSelectExam={() => undefined}
       onBack={() => {}}
     />
   );

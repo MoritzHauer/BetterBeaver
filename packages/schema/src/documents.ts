@@ -23,10 +23,21 @@
  * harmlessly instead of rejecting the document, so there's nothing to force
  * a republish over.
  */
-/** Version 2: plan 0023 §7 renamed `lexemePayload.components[].script` to
- * `text`, which is breaking. The same plan's `entryId`, `bound` and
- * `variants` are additive and ride along on this one bump. */
-export const CONTENT_SCHEMA_VERSION = 2;
+/** Version 3: plan 0027 adds the `question` item kind and the `choice` and
+ * `assign` task types. Neither is covered by the additive-optional exemption
+ * above — a strict discriminated union in an older client rejects an unknown
+ * item kind and an unknown task type outright — so the §8 bump procedure
+ * applies in full: bump here, admin republishes every listed document,
+ * re-export the bundled seed. The `exam` entity and `bookSchema.examIds`
+ * ride along on the same bump.
+ *
+ * Private content needs no migration: `content/private-migrations.ts` is
+ * where a private Book would be brought forward, and there is nothing to
+ * bring — a private Book authored before this bump contains no `question`
+ * items and no `choice`/`assign` tasks, and both `topic.examIds` and the
+ * document's `exams` are optional precisely so it keeps loading untouched
+ * (plan 0017 decision 5, additive-only). */
+export const CONTENT_SCHEMA_VERSION = 3;
 
 /**
  * Backend/cache document identity: `<kind>:<content-id>` (e.g.
@@ -60,6 +71,15 @@ export interface BookDocument {
   /** Book-owned items only (sentences, pairs, non-lexicon concepts). */
   items: unknown[];
   tasks: unknown[];
+  /** The Book's exams (plan 0027 §3), inside the book document rather than a
+   * document kind of their own — so `documentId`'s `"topic" | "domain"`
+   * union is untouched and a private Book's `.bbbook` export carries its
+   * exams for free.
+   *
+   * Optional because documents at rest predate it: every published document
+   * lacks the key until the republish runs, and a private Book no republish
+   * can reach lacks it forever. Absent reads as none. */
+  exams?: unknown[];
   resources: unknown[];
   notes: BookDocumentNote[];
 }

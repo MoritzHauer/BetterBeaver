@@ -8,6 +8,7 @@ import {
   TASK_TYPES,
   type TaskType,
   parseClozeMarkup,
+  hasGenericPresentation,
   recognizePrompt,
   sentenceTokens,
   stripClozeMarkup,
@@ -45,6 +46,7 @@ const KIND_PLURAL: Record<ItemKind, string> = {
   concept: "concepts",
   sentence: "sentences",
   pair: "pairs",
+  question: "questions",
 };
 
 /** An exercise the author could add, or a greyed row saying why not. */
@@ -70,8 +72,9 @@ export function exerciseTypeLabel(type: TaskType): string {
  * One item, named for an author (§1b: display text, never an id).
  *
  * Not `itemDisplayText`/`recognizePrompt`: both **throw permanently** on a
- * `pair` (`entities.ts:326`), and a `minimal-pair` exercise's item pool is
- * exactly pairs — calling either here would white-screen the page.
+ * `pair` and on a `question`, and a `minimal-pair` exercise's item pool is
+ * exactly pairs (a `choice`/`assign` one exactly questions) — calling either
+ * here would white-screen the page.
  */
 export function itemLabel(item: Item): string {
   switch (item.kind) {
@@ -83,6 +86,8 @@ export function itemLabel(item: Item): string {
       return stripClozeMarkup(item.payload.text);
     case "pair":
       return `${item.payload.a.script} / ${item.payload.b.script}`;
+    case "question":
+      return item.payload.stem;
   }
 }
 
@@ -99,17 +104,18 @@ export function exerciseLabel(type: TaskType, items: Item[]): string {
   return `${exerciseTypeLabel(type)} · ${items.length} ${noun}`;
 }
 
-/** Class (n), audio half. `pair` is exempt exactly as `validate.ts:625` is:
- * its audio lives on the two sides, and it only ever feeds `minimal-pair`,
- * which requires no asset. */
+/** Class (n), audio half. `pair` and `question` are exempt exactly as the
+ * validator's own class (n) task loop is: a pair's audio lives on its two
+ * sides, a question carries none at all, and neither kind's task types
+ * require an asset. */
 function hasAudio(item: Item): boolean {
-  return item.kind === "pair" || item.payload.audioRef !== undefined;
+  return !hasGenericPresentation(item) || item.payload.audioRef !== undefined;
 }
 
-/** Class (n), image half — `sentence` is exempt (`validate.ts:635`). */
+/** Class (n), image half — `sentence` is exempt too. */
 function hasImage(item: Item): boolean {
   return (
-    item.kind === "pair" ||
+    !hasGenericPresentation(item) ||
     item.kind === "sentence" ||
     item.payload.imageRef !== undefined
   );
@@ -122,6 +128,16 @@ function hasBlank(item: Item): boolean {
   }
   const parsed = parseClozeMarkup(item.payload.text);
   return parsed.valid && parsed.blanks.length > 0;
+}
+
+/** Class (af): a question with `labels` is an `assign` question, one without
+ * is a `choice` question — the two types are mutually exclusive over the one
+ * payload shape (plan 0027 §7). */
+function matchesQuestionType(item: Item, type: "choice" | "assign"): boolean {
+  return (
+    item.kind === "question" &&
+    (item.payload.labels !== undefined) === (type === "assign")
+  );
 }
 
 /** Class (q): scramble/build need >= 3 tokens to have anything to reorder. */
@@ -187,6 +203,15 @@ export function exerciseProblem(
   if ((type === "scramble" || type === "build") && !items.every(reorderable)) {
     return "needs a sentence of 3 words or more";
   }
+  // Class (af): the payload decides which of the two question types plays it.
+  if (
+    (type === "choice" || type === "assign") &&
+    !items.every((item) => matchesQuestionType(item, type))
+  ) {
+    return type === "assign"
+      ? "needs questions with two labels"
+      : "needs questions without labels";
+  }
   // Class (p): 2..5 items, no two sharing a prompt-side text.
   if (type === "matching") {
     const prompts = new Set(items.map(recognizePrompt));
@@ -236,6 +261,9 @@ function offerFor(
   }
   if (type === "scramble" || type === "build") {
     candidates = candidates.filter(reorderable);
+  }
+  if (type === "choice" || type === "assign") {
+    candidates = candidates.filter((item) => matchesQuestionType(item, type));
   }
   if (type === "matching") {
     // Deduping and capping the *pre-fill*, not just gating the offer: class

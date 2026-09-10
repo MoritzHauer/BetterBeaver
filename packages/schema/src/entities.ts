@@ -73,6 +73,19 @@ export const bookSchema = z.object({
    * exercise fills a slot.
    */
   generatedExercises: z.boolean().optional(),
+  /**
+   * The exams this Book offers (plan 0027 §3), listed after `lessonIds` on
+   * the Book screen. An exam is a **sibling of a lesson**, one level under
+   * the Book: it is never part of the unlock chain and has no completion
+   * effect in either direction.
+   *
+   * Optional, and that is forced rather than a style choice: plan 0017
+   * decision 5 makes the schema policy for private content additive-only,
+   * because no admin republish can reach a Book that exists on one device.
+   * A required `examIds` would permanently break every private Book already
+   * authored.
+   */
+  examIds: z.array(slugSchema).optional(),
 });
 export type Book = z.infer<typeof bookSchema>;
 
@@ -296,6 +309,40 @@ const pairPayloadSchema = z.object({
   contrast: z.string(),
 });
 
+const questionOptionSchema = z.object({
+  text: z.string().min(1),
+  /** The statement holds. For `choice` that means "is a correct answer";
+   *  for `assign` it means "belongs to labels[0]". */
+  correct: z.boolean(),
+});
+export type QuestionOption = z.infer<typeof questionOptionSchema>;
+
+/**
+ * An authored-option question (plan 0027 §1): its options and their
+ * correctness are properties of the question, not sampled from its unit
+ * siblings the way `recognize`'s distractors are.
+ *
+ * The payload alone decides which of the two task types plays it — `labels`
+ * present means `assign`, absent means `choice` — and the validator enforces
+ * the pairing (class (af)).
+ */
+const questionPayloadSchema = z.object({
+  stem: z.string().min(1),
+  options: z.array(questionOptionSchema).min(2),
+  /** Present iff this is an `assign` question: exactly two category labels.
+   *  Where one of the two is the affirmative one it goes first
+   *  (Richtig/Falsch, Geeignet/Nicht geeignet); where the pair is genuinely
+   *  symmetric (Blackbox/Whitebox, enge/lose Kopplung) the order is just an
+   *  authoring choice, and `correct: true` means "the first one". */
+  labels: z.tuple([z.string().min(1), z.string().min(1)]).optional(),
+  /** Model-generated, not taken from a source, and without an expert review
+   *  pass. Same purpose and same honesty as `lexemePayload.exampleGenerated`;
+   *  it sits on the question rather than the exam because a generated
+   *  question in a Unit, outside any exam, needs the mark just as much. */
+  generated: z.boolean().optional(),
+});
+export type QuestionPayload = z.infer<typeof questionPayloadSchema>;
+
 const lexemeItemSchema = z.object({
   id: slugSchema,
   kind: z.literal("lexeme"),
@@ -324,11 +371,21 @@ const pairItemSchema = z.object({
   sourceRef: slugSchema,
 });
 
+/** Book-owned like `sentence` and `pair` — never a lexicon entry, so
+ * `DOMAIN_ENTRY_KIND` is untouched (plan 0027 §1). */
+const questionItemSchema = z.object({
+  id: slugSchema,
+  kind: z.literal("question"),
+  payload: questionPayloadSchema,
+  sourceRef: slugSchema,
+});
+
 export const itemSchema = z.discriminatedUnion("kind", [
   lexemeItemSchema,
   conceptItemSchema,
   sentenceItemSchema,
   pairItemSchema,
+  questionItemSchema,
 ]);
 export type Item = z.infer<typeof itemSchema>;
 export type ItemKind = Item["kind"];
@@ -448,6 +505,36 @@ function pairUnsupported(helper: string): never {
   throw new Error(`pair items do not support ${helper} (minimal-pair only)`);
 }
 
+/** `question` items only ever feed `choice`/`assign`, whose presentation is
+ * the authored payload itself; every other presentation is unreachable by
+ * construction (validator class (o)) and permanently throws — exactly as
+ * `pair` does. */
+function questionUnsupported(helper: string): never {
+  throw new Error(
+    `question items do not support ${helper} (choice/assign only)`,
+  );
+}
+
+/** An item kind the four presentation helpers accept — and, since the two
+ * excluded kinds are also the two that carry no `audioRef`/`imageRef`, the
+ * narrowing every asset lookup over a mixed pool needs. */
+export type PresentableItem = Exclude<Item, { kind: "pair" | "question" }>;
+
+/**
+ * Whether an item has a generic presentation at all — false for the two
+ * kinds whose only exercises read their payload directly (`pair` ->
+ * `minimal-pair`, `question` -> `choice`/`assign`).
+ *
+ * Every caller that walks a mixed item pool needs this: `itemDisplayText`,
+ * `recognizePrompt`, `recallPrompt` and `recallReveal` all throw for these
+ * kinds, so a loop over "every item in the unit" must skip them rather than
+ * discover the throw at runtime. One predicate rather than a hand-written
+ * `kind === "pair"` at each site, so the next such kind is one edit here.
+ */
+export function hasGenericPresentation(item: Item): item is PresentableItem {
+  return item.kind !== "pair" && item.kind !== "question";
+}
+
 /** Display text shown to the learner for an item, per kind. */
 export function itemDisplayText(item: Item): string {
   switch (item.kind) {
@@ -459,6 +546,8 @@ export function itemDisplayText(item: Item): string {
       return item.payload.translation;
     case "pair":
       return pairUnsupported("itemDisplayText");
+    case "question":
+      return questionUnsupported("itemDisplayText");
   }
 }
 
@@ -473,6 +562,8 @@ export function recognizePrompt(item: Item): string {
       return stripClozeMarkup(item.payload.text);
     case "pair":
       return pairUnsupported("recognizePrompt");
+    case "question":
+      return questionUnsupported("recognizePrompt");
   }
 }
 
@@ -487,6 +578,8 @@ export function recallPrompt(item: Item): string {
       return item.payload.translation;
     case "pair":
       return pairUnsupported("recallPrompt");
+    case "question":
+      return questionUnsupported("recallPrompt");
   }
 }
 
@@ -501,6 +594,8 @@ export function recallReveal(item: Item): string[] {
       return [stripClozeMarkup(item.payload.text)];
     case "pair":
       return pairUnsupported("recallReveal");
+    case "question":
+      return questionUnsupported("recallReveal");
   }
 }
 
@@ -519,6 +614,8 @@ export const TASK_TYPES = [
   "minimal-pair",
   "picture",
   "build",
+  "choice",
+  "assign",
 ] as const;
 export type TaskType = (typeof TASK_TYPES)[number];
 
@@ -538,6 +635,8 @@ export const TASK_ALLOWED_ITEM_KINDS: Record<TaskType, ItemKind[]> = {
   "minimal-pair": ["pair"],
   picture: ["lexeme", "concept"],
   build: ["sentence"],
+  choice: ["question"],
+  assign: ["question"],
 };
 
 /**
@@ -556,6 +655,8 @@ export const TASK_REQUIRED_ASSET: Record<TaskType, "audio" | "image" | null> = {
   "minimal-pair": null,
   picture: "image",
   build: null,
+  choice: null,
+  assign: null,
 };
 
 /**
@@ -576,6 +677,11 @@ export const TASK_NEEDS_DISTRACTORS: Record<TaskType, boolean> = {
   picture: true,
   // build's word-bank distractors are its own mechanism (engine), not the MCQ sampler.
   build: false,
+  // choice/assign options are authored on the item (plan 0027 §2), so the
+  // sampler must not run and classes (g)/(r) must not demand same-kind
+  // siblings — the load-bearing row of the three.
+  choice: false,
+  assign: false,
 };
 
 /**
@@ -603,6 +709,8 @@ export const EXERCISES = [
   "write",
   "dictation",
   "shadowing",
+  "choice",
+  "assign",
 ] as const;
 export type Exercise = (typeof EXERCISES)[number];
 
@@ -628,6 +736,15 @@ export const EXERCISE_LEVEL: Record<Exercise, number | null> = {
   shadowing: null,
   matching: 1,
   recognize: 2,
+  // Plan 0027 §2a. `choice` is `recognize`'s act with better distractors —
+  // everything on screen, comprehension not production — so it shares its
+  // rung; authored quality is cashed in as a better level-2 exercise, not as
+  // a higher level. `assign` sits above because every row is judged
+  // independently and elimination never helps, the exact inverse of the
+  // reason `matching` sits at 1; it is also the only level-3 exercise a
+  // text-only Book can have, since `listen`/`minimal-pair` both need audio.
+  choice: 2,
+  assign: 3,
   listen: 3,
   "minimal-pair": 3,
   "recognize-produce": 4,
@@ -661,6 +778,8 @@ export const TASK_EXERCISES: Record<TaskType, readonly Exercise[]> = {
   recall: ["recall"],
   dictation: ["dictation"],
   shadowing: ["shadowing"],
+  choice: ["choice"],
+  assign: ["assign"],
 };
 
 export const taskSchema = z.object({
@@ -670,6 +789,46 @@ export const taskSchema = z.object({
   instructions: z.string().optional(),
 });
 export type Task = z.infer<typeof taskSchema>;
+
+/**
+ * The rules one exam is scored under (plan 0027 §3) — **data, not a code
+ * path**: the iSAQB rules are one such record, and a second exam with a
+ * different pass mark or no partial credit needs no engine change.
+ */
+export const examRulesetSchema = z.object({
+  passPercent: z.number().min(1).max(100),
+  timeLimitMinutes: z.number().int().min(1),
+  /** false = all-or-nothing per question; true = 1/n per correct mark. */
+  partialCredit: z.boolean(),
+  /** Wrong marks cost 1/n. A question never scores below 0 either way. */
+  negativeMarking: z.boolean(),
+});
+export type ExamRuleset = z.infer<typeof examRulesetSchema>;
+
+/**
+ * A fixed, ordered, complete list of questions run in one sitting (plan
+ * 0027 §3). An exam never samples from a pool — that is what "fixed and
+ * complete" means, and it is the property a Unit's shuffled practice
+ * session does not have.
+ *
+ * Points sit on the exam's own list rather than on the question, because
+ * they are the exam's weighting: the same question is worth 1 point in one
+ * exam and 2 in another.
+ */
+export const examSchema = z.object({
+  id: slugSchema,
+  // Wire-format field name, as on `lessonSchema`; not renamed — see
+  // docs/specs/0015-rename-topic-to-book.md DO-NOT-TOUCH.
+  topicId: slugSchema,
+  title: z.string(),
+  description: z.string(),
+  questions: z
+    .array(z.object({ taskId: slugSchema, points: z.number().int().min(1) }))
+    .min(1),
+  ruleset: examRulesetSchema,
+});
+export type Exam = z.infer<typeof examSchema>;
+export type ExamQuestion = Exam["questions"][number];
 
 export const resourceSchema = z.object({
   id: slugSchema,

@@ -60,6 +60,7 @@ function makeContent(args: {
   units: Unit[];
 }): Content {
   return {
+    exams: [],
     topic: {
       id: "t-topic",
       code: "t",

@@ -1,6 +1,6 @@
 # Plan 0027: Authored-option questions and exam mode
 
-Status: **designed** · Owner: Moe · Date: 2026-09-07 · Direction pinned by four owner decisions this session (two task types, not one; an exam is its own entity, run in one sitting, timed; exams sit at the same level as lessons; licence-encumbered questions ship as a private Book). Grilling deliberately skipped by the owner.
+Status: **designed** 2026-09-07 · **slices 1-6 implemented and browser-verified 2026-09-10** (step 7, the owner's bump procedure, is outstanding, as is the exam content of §8; see `docs/STATUS.md` for what shipped and what was decided while building) · Owner: Moe · Date: 2026-09-07 · Direction pinned by four owner decisions this session (two task types, not one; an exam is its own entity, run in one sitting, timed; exams sit at the same level as lessons; licence-encumbered questions ship as a private Book). Grilling deliberately skipped by the owner.
 
 ## Purpose
 
@@ -197,7 +197,7 @@ Three screens behind `#/books/<bookId>/exams/<examId>`:
 
 ### 7. Validation (`packages/schema/validate.ts`)
 
-New classes, continuing after (ab):
+New classes, continuing after (ab) — **implemented as (ae)/(af)/(ag)**, because plan 0026 landed (ac) and (ad) first:
 
 - **(ac)** — a `question` payload: ≥2 options; with `labels` absent, at least one `correct: true` **and** one `correct: false` (an all-correct choice question is degenerate); with `labels` present, both labels non-blank. Question items are excluded from class (h)'s duplicate-display-text check exactly as `pair` items are, since `itemDisplayText` throws for them.
 - **(ad)** — task/payload pairing: every item of a `choice` task must have no `labels`; every item of an `assign` task must have `labels`. This is what makes the two types mutually exclusive over one payload shape.

@@ -8,8 +8,12 @@ import {
   shuffle,
   checkScrambleAnswer,
   checkMatchingPair,
+  checkAssignAnswer,
+  checkChoiceAnswer,
   matchingOutcomes,
   countUnitQuestions,
+  type AssignQuestion,
+  type ChoiceQuestion,
   type MatchingQuestion,
   type Question,
   type Rng,
@@ -70,6 +74,7 @@ const conceptUnit: Unit = {
 };
 
 const conceptContent: Content = {
+  exams: [],
   topic: {
     id: "t-topic",
     code: "t",
@@ -186,6 +191,7 @@ const lexemeUnit: Unit = {
 };
 
 const lexemeContent: Content = {
+  exams: [],
   topic: {
     id: "t-topic",
     code: "t",
@@ -260,6 +266,7 @@ const lexemeRecognizeUnit: Unit = {
 };
 
 const lexemeRecognizeContent: Content = {
+  exams: [],
   topic: {
     id: "t-topic",
     code: "t",
@@ -343,6 +350,7 @@ const clozeUnit: Unit = {
   noteIds: [],
 };
 const clozeContent: Content = {
+  exams: [],
   topic: {
     id: "t-topic",
     code: "t",
@@ -419,6 +427,7 @@ const matchingUnit: Unit = {
   noteIds: [],
 };
 const matchingContent: Content = {
+  exams: [],
   topic: {
     id: "t-topic",
     code: "t",
@@ -532,6 +541,7 @@ const scrambleUnit: Unit = {
   noteIds: [],
 };
 const scrambleContent: Content = {
+  exams: [],
   topic: {
     id: "t-topic",
     code: "t",
@@ -621,6 +631,7 @@ function buildContentWith(unitItems: Item[]): Content {
     noteIds: [],
   };
   return {
+    exams: [],
     topic: {
       id: "t-topic",
       code: "t",
@@ -736,6 +747,7 @@ const listenUnit: Unit = {
   noteIds: [],
 };
 const listenContent: Content = {
+  exams: [],
   topic: {
     id: "t-topic",
     code: "t",
@@ -846,6 +858,7 @@ const pictureUnit: Unit = {
   noteIds: [],
 };
 const pictureContent: Content = {
+  exams: [],
   topic: {
     id: "t-topic",
     code: "t",
@@ -942,6 +955,7 @@ const minimalPairUnit: Unit = {
   noteIds: [],
 };
 const minimalPairContent: Content = {
+  exams: [],
   topic: {
     id: "t-topic",
     code: "t",
@@ -1268,6 +1282,7 @@ describe("buildUnitSession", () => {
       noteIds: [],
     };
     const content: Content = {
+      exams: [],
       topic: {
         id: "t-topic",
         code: "t",
@@ -1376,6 +1391,7 @@ describe("countUnitQuestions", () => {
       noteIds: [],
     };
     const content: Content = {
+      exams: [],
       topic: {
         id: "t-topic",
         code: "t",
@@ -1429,6 +1445,7 @@ describe("buildRecallSession", () => {
     noteIds: [],
   };
   const bigRecallContent: Content = {
+    exams: [],
     topic: {
       id: "t-topic",
       code: "t",
@@ -1475,5 +1492,178 @@ describe("buildRecallSession", () => {
     const actual = buildRecallSession(bigRecallUnit, bigRecallContent, () => 0);
 
     expect(actual).toEqual(expected);
+  });
+});
+
+/**
+ * Authored-option questions (plan 0027 §5): the payload is the whole
+ * exercise, so both builders are total functions of the item — no sampling,
+ * no shuffle, no rng consumed at all.
+ */
+describe("choice and assign questions (plan 0027)", () => {
+  const choiceItem: Item = {
+    id: "t-item-choice",
+    kind: "question",
+    payload: {
+      stem: "Which of these are architectural views?",
+      options: [
+        { text: "Bausteinsicht", correct: true },
+        { text: "Laufzeitsicht", correct: true },
+        { text: "Dienstagssicht", correct: false },
+        { text: "Verteilungssicht", correct: true },
+      ],
+    },
+    sourceRef: "t-resource-1",
+  };
+  const assignItem: Item = {
+    id: "t-item-assign",
+    kind: "question",
+    payload: {
+      stem: "Richtig oder falsch?",
+      options: [
+        { text: "A blackbox hides its internals", correct: true },
+        { text: "A whitebox hides its internals", correct: false },
+        { text: "Both are views on the same building block", correct: true },
+      ],
+      labels: ["Richtig", "Falsch"],
+    },
+    sourceRef: "t-resource-1",
+  };
+  const choiceTask: Task = {
+    id: "t-task-choice",
+    type: "choice",
+    itemIds: [choiceItem.id],
+  };
+  const assignTask: Task = {
+    id: "t-task-assign",
+    type: "assign",
+    itemIds: [assignItem.id],
+  };
+  const questionUnit: Unit = {
+    id: "t-unit-questions",
+    lessonId: "t-topic",
+    title: "Questions",
+    goal: "Goal",
+    itemIds: [choiceItem.id, assignItem.id],
+    taskIds: [choiceTask.id, assignTask.id],
+    noteIds: [],
+  };
+  const questionContent: Content = {
+    exams: [],
+    topic: {
+      id: "t-topic",
+      code: "t",
+      domainId: "t",
+      title: "Book",
+      description: "",
+      lessonIds: [questionUnit.id],
+    },
+    lessons: [],
+    units: [questionUnit],
+    items: [choiceItem, assignItem],
+    tasks: [choiceTask, assignTask],
+    resources: [],
+    notes: [],
+  };
+  /** Any call is a bug: neither builder samples or shuffles anything. */
+  const noRng: Rng = () => {
+    throw new Error("rng must not be consumed");
+  };
+
+  it("builds a choice question in the authored option order", () => {
+    const [question] = buildTaskSession(choiceTask, questionContent, noRng);
+    expect(question).toEqual({
+      kind: "choice",
+      unitId: choiceItem.id,
+      stem: "Which of these are architectural views?",
+      choices: [
+        "Bausteinsicht",
+        "Laufzeitsicht",
+        "Dienstagssicht",
+        "Verteilungssicht",
+      ],
+      correctIndices: [0, 1, 3],
+      selectCount: 3,
+    } satisfies ChoiceQuestion);
+  });
+
+  it("derives selectCount from the correct options, never from a field", () => {
+    const [question] = buildTaskSession(choiceTask, questionContent, noRng);
+    expect((question as ChoiceQuestion).selectCount).toBe(
+      (question as ChoiceQuestion).correctIndices.length,
+    );
+  });
+
+  it("builds an assign question, correct meaning the first label", () => {
+    const [question] = buildTaskSession(assignTask, questionContent, noRng);
+    expect(question).toEqual({
+      kind: "assign",
+      unitId: assignItem.id,
+      stem: "Richtig oder falsch?",
+      rows: [
+        "A blackbox hides its internals",
+        "A whitebox hides its internals",
+        "Both are views on the same building block",
+      ],
+      labels: ["Richtig", "Falsch"],
+      correctLabelIndex: [0, 1, 0],
+    } satisfies AssignQuestion);
+  });
+
+  it("reviews a due question item as its own card, not a recall card", () => {
+    const [question] = buildReviewSession(
+      [{ id: assignItem.id, item: assignItem }],
+      questionContent,
+      noRng,
+    );
+    expect(question?.kind).toBe("assign");
+  });
+
+  it("counts one question per item", () => {
+    expect(countUnitQuestions(questionUnit, questionContent)).toBe(2);
+  });
+
+  describe("checkChoiceAnswer", () => {
+    const question = buildTaskSession(
+      choiceTask,
+      questionContent,
+      noRng,
+    )[0] as ChoiceQuestion;
+
+    it("accepts exactly the correct set, in any order", () => {
+      expect(checkChoiceAnswer(question, [3, 0, 1])).toBe(true);
+    });
+
+    it("rejects a partially correct answer", () => {
+      expect(checkChoiceAnswer(question, [0, 1])).toBe(false);
+    });
+
+    it("rejects a full-count answer with one wrong pick", () => {
+      expect(checkChoiceAnswer(question, [0, 1, 2])).toBe(false);
+    });
+
+    it("rejects an empty answer", () => {
+      expect(checkChoiceAnswer(question, [])).toBe(false);
+    });
+  });
+
+  describe("checkAssignAnswer", () => {
+    const question = buildTaskSession(
+      assignTask,
+      questionContent,
+      noRng,
+    )[0] as AssignQuestion;
+
+    it("accepts every row correctly labelled", () => {
+      expect(checkAssignAnswer(question, [0, 1, 0])).toBe(true);
+    });
+
+    it("rejects one wrong row", () => {
+      expect(checkAssignAnswer(question, [0, 0, 0])).toBe(false);
+    });
+
+    it("counts an unanswered row as wrong — in practice, not in an exam", () => {
+      expect(checkAssignAnswer(question, [0, null, 0])).toBe(false);
+    });
   });
 });

@@ -54,6 +54,7 @@ const numbers: Lesson = {
 };
 
 const content: Content = {
+  exams: [],
   topic: {
     id: "t-topic",
     code: "t",
@@ -90,6 +91,7 @@ function renderBookScreen(onSelectLesson: (lessonId: string) => void) {
       onPlay={() => {}}
       onReview={() => {}}
       onVocabulary={() => {}}
+      onSelectExam={() => undefined}
       onBack={() => {}}
     />,
   );

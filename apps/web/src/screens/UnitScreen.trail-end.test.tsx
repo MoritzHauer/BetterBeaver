@@ -40,6 +40,7 @@ const unit: Unit = {
 };
 
 const content: Content = {
+  exams: [],
   topic: {
     id: "t-topic",
     code: "t",

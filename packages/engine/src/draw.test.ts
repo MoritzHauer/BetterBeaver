@@ -34,6 +34,7 @@ function contentWith(
     ...(itemTargets !== undefined && { itemTargets }),
   };
   return {
+    exams: [],
     topic: {
       id: "t",
       code: "t",

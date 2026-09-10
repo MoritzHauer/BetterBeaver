@@ -83,6 +83,28 @@ const minimalPairTask: Task = {
   itemIds: [pair.id],
 };
 
+/** A `question` item and its `choice` task (plan 0027 §5): the plan's
+ * scheduling rule is that this needs no code in `units.ts` at all — the kind
+ * falls through the existing "all other kinds contribute `<itemId>`" rule —
+ * so it is pinned by test rather than by implementation. */
+const question: Item = {
+  id: "t-item-question",
+  kind: "question",
+  payload: {
+    stem: "Which of these are layers?",
+    options: [
+      { text: "Presentation", correct: true },
+      { text: "Tuesday", correct: false },
+    ],
+  },
+  sourceRef: "t-resource-1",
+};
+const choiceTask: Task = {
+  id: "t-task-choice",
+  type: "choice",
+  itemIds: [question.id],
+};
+
 const unit: Unit = {
   id: "t-unit-1",
   lessonId: "t-topic",
@@ -95,6 +117,7 @@ const unit: Unit = {
     lexeme.id,
     concept.id,
     pair.id,
+    question.id,
   ],
   taskIds: [
     clozeTask.id,
@@ -102,11 +125,13 @@ const unit: Unit = {
     scrambleTask.id,
     recallTask.id,
     minimalPairTask.id,
+    choiceTask.id,
   ],
   noteIds: [],
 };
 
 const content: Content = {
+  exams: [],
   topic: {
     id: "t-topic",
     code: "t",
@@ -124,8 +149,16 @@ const content: Content = {
     lexeme,
     concept,
     pair,
+    question,
   ],
-  tasks: [clozeTask, dictationTask, scrambleTask, recallTask, minimalPairTask],
+  tasks: [
+    clozeTask,
+    dictationTask,
+    scrambleTask,
+    recallTask,
+    minimalPairTask,
+    choiceTask,
+  ],
   resources: [],
   notes: [],
 };
@@ -143,6 +176,10 @@ describe("schedulingUnits", () => {
         sharedSentence.id,
       ].sort(),
     );
+  });
+
+  it("a question item is exactly one scheduling unit, its own item id (plan 0027 §5)", () => {
+    expect(idsByItem(question.id)).toEqual([question.id]);
   });
 
   it("a cloze-only sentence yields only its blank unit", () => {
@@ -182,6 +219,7 @@ describe("schedulingUnits — notes (plan 0008 step 7)", () => {
     noteIds: [note.id, otherNote.id],
   };
   const noteContent: Content = {
+    exams: [],
     topic: {
       id: "t-topic",
       code: "t",
@@ -241,6 +279,7 @@ describe("domainSchedulingUnits", () => {
     noteIds: [],
   };
   const otherContent: Content = {
+    exams: [],
     topic: {
       id: "t-topic-2",
       code: "t",
@@ -317,6 +356,7 @@ describe("domainSchedulingUnits — notes across books (plan 0008 step 7)", () =
     noteIds: [sharedNote.id],
   };
   const noteContentA: Content = {
+    exams: [],
     topic: {
       id: "t-topic-notes-a",
       code: "t",
@@ -342,6 +382,7 @@ describe("domainSchedulingUnits — notes across books (plan 0008 step 7)", () =
     noteIds: [sharedNote.id],
   };
   const noteContentB: Content = {
+    exams: [],
     topic: {
       id: "t-topic-notes-b",
       code: "t",

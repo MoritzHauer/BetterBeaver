@@ -4,6 +4,7 @@ import type {
   Unit,
   Item,
   Task,
+  Exam,
   Resource,
   Domain,
   Family,
@@ -36,6 +37,7 @@ type LexemePayload = Extract<Item, { kind: "lexeme" }>["payload"];
 type ConceptPayload = Extract<Item, { kind: "concept" }>["payload"];
 type SentencePayload = Extract<Item, { kind: "sentence" }>["payload"];
 type PairPayload = Extract<Item, { kind: "pair" }>["payload"];
+type QuestionPayload = Extract<Item, { kind: "question" }>["payload"];
 
 /** The `components` breakdown, identical on both lexicon payloads (plan 0023
  * §4) — a second copy would drift. */
@@ -151,6 +153,23 @@ function draftPairPayload(p: Record<string, unknown>): PairPayload {
  * present (non-empty string / present object / array), never coerced to a
  * value the schema would reject (`slugSchema` rejects `""`).
  */
+function draftQuestionPayload(p: Record<string, unknown>): QuestionPayload {
+  const labels = arr(p.labels);
+  return {
+    stem: str(p.stem),
+    options: arr(p.options).map((o) => ({
+      text: str(obj(o).text),
+      correct: obj(o).correct === true,
+    })),
+    // Exactly two, or none: a one-label or three-label draft is a `choice`
+    // question mid-edit, not an `assign` question with a broken tuple.
+    ...(labels.length === 2
+      ? { labels: [str(labels[0]), str(labels[1])] as [string, string] }
+      : {}),
+    ...(p.generated === true ? { generated: true } : {}),
+  };
+}
+
 function draftItem(raw: unknown): Item {
   const e = obj(raw);
   const id = str(e.id);
@@ -177,6 +196,13 @@ function draftItem(raw: unknown): Item {
         kind: "pair",
         sourceRef,
         payload: draftPairPayload(payload),
+      };
+    case "question":
+      return {
+        id,
+        kind: "question",
+        sourceRef,
+        payload: draftQuestionPayload(payload),
       };
     default:
       return {
@@ -259,6 +285,28 @@ function draftTask(raw: unknown): Task {
   };
 }
 
+function draftExam(raw: unknown): Exam {
+  const e = obj(raw);
+  const ruleset = obj(e.ruleset);
+  const num = (v: unknown) => (typeof v === "number" ? v : 0);
+  return {
+    id: str(e.id),
+    topicId: str(e.topicId),
+    title: str(e.title),
+    description: str(e.description),
+    questions: arr(e.questions).map((q) => ({
+      taskId: str(obj(q).taskId),
+      points: num(obj(q).points),
+    })),
+    ruleset: {
+      passPercent: num(ruleset.passPercent),
+      timeLimitMinutes: num(ruleset.timeLimitMinutes),
+      partialCredit: ruleset.partialCredit === true,
+      negativeMarking: ruleset.negativeMarking === true,
+    },
+  };
+}
+
 function draftResource(raw: unknown): Resource {
   const e = obj(raw);
   return { id: str(e.id), title: str(e.title), path: str(e.path) };
@@ -289,6 +337,7 @@ function draftBook(raw: unknown): Book {
       : {}),
     ...(e.hasCoverArt === true ? { hasCoverArt: true } : {}),
     ...(e.generatedExercises === true ? { generatedExercises: true } : {}),
+    ...(Array.isArray(e.examIds) ? { examIds: ids(e.examIds) } : {}),
   };
 }
 
@@ -345,6 +394,7 @@ export function draftContent(
   const units = arr(b.units).map(draftUnit);
   const items = arr(b.items).map(draftItem);
   const tasks = arr(b.tasks).map(draftTask);
+  const exams = arr(b.exams).map(draftExam);
   const resources = arr(b.resources).map(draftResource);
   // Derived note ids, same rule as `validateContent` (§2d): the note's
   // markdown itself is not part of Content; slice 6 threads it separately.
@@ -370,6 +420,7 @@ export function draftContent(
     units,
     items,
     tasks,
+    exams,
     resources,
     notes,
     domain: draftedDomain,
@@ -396,6 +447,7 @@ export function draftContent(
     units,
     items: [...items, ...referencedEntries],
     tasks,
+    exams,
     resources,
     notes,
   };
