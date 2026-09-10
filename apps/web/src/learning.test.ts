@@ -57,9 +57,20 @@ describe("learning settings", () => {
     expect(getLearning()).toEqual(DEFAULT_LEARNING);
   });
 
-  it("hands the scheduler only the field it needs", () => {
+  it("hands the scheduler only the fields it needs", () => {
     setLearning({ pace: "thorough", skip: "month" });
-    expect(schedulingConfig()).toEqual({ pace: "thorough" });
+    expect(schedulingConfig()).toEqual({ pace: "thorough", levelsPerDay: 1 });
+  });
+
+  it("turns the Fast practice depth into the scheduler's double step", () => {
+    // The preset is stored; `levelsPerDay` is derived from it at grade time,
+    // so there is exactly one source of truth for how fast a word climbs.
+    setLearning({ progression: "fast" });
+    expect(schedulingConfig().levelsPerDay).toBe(2);
+    setLearning({ progression: "normal" });
+    expect(schedulingConfig().levelsPerDay).toBe(1);
+    setLearning({ progression: "careful" });
+    expect(schedulingConfig().levelsPerDay).toBe(1);
   });
 
   it("rides the bb.* backup sweep", () => {

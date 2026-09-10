@@ -88,6 +88,8 @@ Three placements carry their own justification:
 
 **`picture` moves to the production direction** (image → the foreign word). Today its choices are display texts, so "see the image → pick the English gloss" involves no foreign form anywhere and tests nothing about the language.
 
+**The table is extended by [plan 0027](0027-authored-questions-and-exam-mode.md)**, which adds `choice` at level 2 and `assign` at level 3 — recorded there, in the plan that adds the types, because slice 2 made this table exhaustive over `TaskType` precisely so that a new type cannot compile without placing itself. 0027's §2a carries the reasoning; the placement rule it follows is this section's.
+
 ### 3. The level table: interval, and the speed preset
 
 The level indexes the interval. Difficulty climbs through the first four levels while the word is still being met daily; spacing takes over once it can be produced.
@@ -107,20 +109,24 @@ The level indexes the interval. Difficulty climbs through the first four levels 
 Each appearance of a word in a session fills one of two slots:
 
 - **Repetition, early** — drawn at random from `{level − 1, level}`, clamped to at least 1: a level the word has already passed.
-- **New attempt, later** — exactly `level + 1`. Getting this right is the only thing that advances the level.
+- **New attempt, later** — exactly `level + 1`. Getting this right is the only thing that advances the level **at and above the production level**; below it every correct answer advances, which is what the next paragraph is about.
+
+**Corrected 2026-09-10, after measuring the built behaviour.** The table below reads as if it held for every learner. It holds at **Careful**, and the rule it leaves out is the one that makes the bottom of the ladder move: **below level 4 there is no due gate and no day guard (§5), so every correct answer is a level.** A word therefore climbs the recognition band at one level per repetition — three in a first sitting at Careful, two at Normal, one at Fast — and only from level 4 up does "one advance per day, whatever the depth" take over.
+
+That is the mechanism working as designed rather than a defect, and it is why the Practice depth preset is felt twice: as depth everywhere, and as speed only in levels 1–3. The measured cost is small and repaid — see the table in the slice 11 note below, where Fast reaches level 4 two days after Careful does and the top of the ladder 108 days sooner.
 
 <!-- prettier-ignore -->
-| Session | Level at start | Early slot | Later slot | Level after |
+| Session | Level at start | Early slot | Later slot | Level after (Careful) |
 | --- | --- | --- | --- | --- |
-| 1 | 0 — new word | — | 1, then 2, then 3 | 3 |
+| 1 | 0 — new word | — | 1, then 2, then 3 | 3 (Normal 2, Fast 1) |
 | 2 | 3 | random of {2, 3} | 4 | 4 |
 | 3 | 4 | random of {3, 4} | 5 | 5 |
 
-This replaces the weighted draw over everything at or below a ceiling, and it is better on three counts. **Advancement becomes unambiguous** — the level rises if and only if the `level + 1` exercise was answered correctly, rather than depending on which exercise a draw happened to produce. **The learner gets a win before the stretch**, which weighting only approximated. And the repetitions stop being arbitrary: one consolidates, one advances. Variety survives, because the early slot is random within its window and levels 3 and 4 each hold two exercises.
+This replaces the weighted draw over everything at or below a ceiling, and it is better on three counts. **Advancement becomes unambiguous** — from level 4 up, the level rises if and only if the `level + 1` exercise was answered correctly, rather than depending on which exercise a draw happened to produce. **The learner gets a win before the stretch**, which weighting only approximated. And the repetitions stop being arbitrary: one consolidates, one advances. Variety survives, because the early slot is random within its window and levels 3 and 4 each hold two exercises.
 
 Four rules complete it:
 
-- **A brand-new word runs the bottom levels in its first session** — 1, then 2, then 3 — rather than taking three sessions to become recognisable. This is why the day guard starts where it does (§5).
+- **A brand-new word runs the bottom levels in its first session** — 1, then 2, then 3 — rather than taking three sessions to become recognisable. This is why the day guard starts where it does (§5). **At Careful**: the band advances one level per repetition, so Normal reaches level 3 in two sittings and Fast in three (corrected 2026-09-10). Forcing all three on every preset was considered and rejected — a new word would need appearances the depth setting did not ask for, and session length would then depend on how many of a unit's words are new, which §6 exists to keep predictable.
 - **A missing level is skipped, not waited for.** If `level + 1` has no exercise the content can build — level 3 is `listen`, and no Book has recordings — the new attempt goes to the next level that does. This is what keeps every level reachable, and 100% attainable, on content with gaps.
 - **A failed repetition cancels the stretch.** The later slot becomes a second repetition instead. Pushing a learner who has just shown they are shaky is how a session goes bad.
 - **Daily Review has one slot, so it draws from `{level, level + 1}`** — sometimes consolidation, sometimes progression, and it keeps its variety without becoming a drill.
@@ -129,7 +135,7 @@ Four rules complete it:
 
 **Up, at most one level per UTC day — from level 4 onwards.** A correct answer at the new-attempt slot advances the level; `levelDay` records the day, and a second advance that day is refused.
 
-**Levels 1–3 are exempt, and the exemption is the point.** They are `matching`, `recognize` and `listen` — every one of them recognition, with the answer on screen. Recognising a word met a minute ago is a legitimate outcome of meeting it, so a new word climbs to level 3 in its first sitting (§4). The guard exists to stop a word reaching *production* on the strength of short-term memory, and production starts at level 4 — pick the foreign word — so that is where the guard starts.
+**Levels 1–3 are exempt, and the exemption is the point.** They are `matching`, `recognize` and `listen` — every one of them recognition, with the answer on screen. Recognising a word met a minute ago is a legitimate outcome of meeting it, so a new word climbs to level 3 in its first sitting at Careful — one level per repetition, so two sittings at Normal and three at Fast (§4, corrected 2026-09-10). The guard exists to stop a word reaching *production* on the strength of short-term memory, and production starts at level 4 — pick the foreign word — so that is where the guard starts.
 
 Above that the codebase has met this problem twice and answered it the same way both times: plan 0022's practice-only rule advances a rung at most once per day, and plan 0024's graduation counts three separate *days* "because the thing being tested is overnight retention".
 
@@ -325,11 +331,50 @@ The session engine, the ceiling draw and the two derived exercises, landed toget
 
 `SessionScreen` was split first (shell, interactions, summary, queue hook): at 1508 lines it was over the ceiling `docs/design.md` pins, and the queue had to become one replaceable thing before a drill could drive it.
 
-**Still open here:** the Progression preset's *second* effect — whether a clean streak may advance two levels in a day on Fast — is unimplemented, because it is open question 1 and the plan does not settle what evidence should gate it. The repetitions-per-word half is wired, and Settings names it "Practice depth" rather than "Progression speed": what a learner picks is how many times they must get a word right, not an abstract speed.
+~~**Still open here:** the Progression preset's *second* effect — whether a clean streak may advance two levels in a day on Fast — is unimplemented, because it is open question 1 and the plan does not settle what evidence should gate it.~~ **Landed 2026-09-09, see slice 11 below.** The repetitions-per-word half is wired, and Settings names it "Practice depth" rather than "Progression speed": what a learner picks is how many times they must get a word right, not an abstract speed.
+
+### Slice 11 — the Fast double step (2026-09-09)
+
+The last unlanded piece of this plan, unblocked by the owner's answer to open question 1 (no evidence floor). `corepack pnpm check` green: 791 tests, 3 skipped.
+
+**What "a clean streak may advance two levels in a day" turned out to mean.** §3 promised it and never defined the streak, which is why slice 4 deferred it. With no evidence gate wanted, the definition collapses to the answer itself: **Fast makes one correct answer worth two levels once a word has reached the production level.** Nothing else gates it, because §5's wrong-answer penalty — two levels down, and the interval falls with them — is already the brake, and anything more would be the evidence floor the owner declined.
+
+**Step size, not a per-day counter.** The obvious implementation of "two levels a day" is to count advances per day, which needs a second stored field beside `levelDay`. It is not needed: the existing guard already refuses a second *advance* per day, so making the advance worth two is enough for the done-criterion's "cannot gain more than one level in a day (two on Fast with a streak), **however many times it is answered**". `SrsState` is unchanged, and so is every stored card.
+
+**Only from level 4 up.** The step reads `level >= PRODUCTION_LEVEL`, not `wanted >=` as the guard does. Below production the band is deliberately unguarded (§5), so a double step there would let a word cross into production without ever arriving at it — and arrival at 4 is exactly what §4's table and the guard are built around. A word at 3 still steps to 4 on Fast.
+
+**`levelsPerDay` is derived, never stored.** It is optional on `SchedulingConfig` (absent reads as 1, so every prior caller and test still compiles) and `LearningSettings` omits it from its own type, so the preset stays the single source of truth. Writing it into the settings blob would have been two sources that could disagree — which the settings tests caught the moment `DEFAULT_LEARNING` spread the whole config.
+
+**One thing worth flagging rather than fixing.** Settings deliberately renamed this control "Practice depth" (slice 4, above) because what a learner picks is how many repetitions they owe, not an abstract speed — and this slice bolts a genuine speed effect onto it. The copy now says so on both the pace and depth rows, but the honest position is that one control does two things, and the name only covers one. Splitting it into two controls would be the fix if it ever confuses anyone.
+
+**Measured, 2026-09-10** — a perfectly-answered new word, Balanced pace, one sitting a day, simulated against the shipped scheduler:
+
+<!-- prettier-ignore -->
+| Practice depth | L3 | L4 | L6 | L8 | L10 |
+| --- | --- | --- | --- | --- | --- |
+| Careful (3) | day 1 | day 2 | day 9 | day 32 | **day 152** |
+| Normal (2) | day 2 | day 3 | day 10 | day 33 | **day 153** |
+| Fast (1) | day 3 | day 4 | day 6 | day 14 | **day 44** |
+
+Two things this settles, and one of them corrects the paragraph that stood here before.
+
+**The inversion is real but small, and the earlier wording overstated it.** Below production Fast *is* the slowest preset — one repetition per session where Careful asks three, and every correct answer down there is a level — but the lag is two days, and Fast then reaches the top of the ladder 108 days earlier. Calling it "the slowest preset" without that second half was misleading. It follows from §4 and §6 as designed, and §4 now states the rule rather than leaving the table to imply it.
+
+**Careful and Normal finish one day apart over 152 days.** So for two of the three presets the control does exactly what its name promises — depth, not speed — and Fast is the single outlier that also buys speed. That is a good argument for the name "Practice depth" surviving, which it has, and a fair warning that Normal buys a learner nothing over Careful except fewer questions.
 
 ## Open questions
 
-1. **Does the Fast preset's two-level streak jump need a floor on evidence?** Two levels a day means a word can reach `write` in five days. That may be right for a learner who is genuinely fast and wrong for one who is guessing well on four-option MCQs.
-2. **What replaces the unit card's question count when a unit's words are at wildly different levels?** The count is computable, but "10 questions" over words at levels 1 and 9 describes two very different sittings.
-3. **Who sets `extraChars` on the live Kyrgyz domain, and when?** It rides plan 0023's suffix-table content pass, which has not started.
-4. **Does `minimal-pair` at level 3 make sense for a word that also has a `pair` item?** The pair is its own scheduling unit with its own level, so a word and its minimal pair climb independently — probably right, but untested against real content.
+**All four answered by the owner on 2026-09-07.** Answers recorded in place; the questions are kept because the reasoning that raised them is what makes each answer legible.
+
+1. ~~**Does the Fast preset's two-level streak jump need a floor on evidence?** Two levels a day means a word can reach `write` in five days. That may be right for a learner who is genuinely fast and wrong for one who is guessing well on four-option MCQs.~~ — **No floor.** Fast ships as designed. The guessing risk is real but bounded: the two-level jump requires a clean streak, a wrong answer costs two levels (§5), and the preset is the learner's own choice about their own pace. Adding an evidence gate would be the app second-guessing a setting the learner deliberately picked. ~~**The implementation gap stands and is not this question**~~ — **closed 2026-09-09**: the answer unblocked it, and slice 11 above landed it. This plan now has no unlanded pieces.
+2. ~~**What replaces the unit card's question count when a unit's words are at wildly different levels?** The count is computable, but "10 questions" over words at levels 1 and 9 describes two very different sittings.~~ — **Nothing. The count stays.** "10 tasks" is the useful number, and level is irrelevant to it: what the card promises is how long the sitting is, not how hard. Plan 0011's decision that the card shows a real question count survives untouched. This matters beyond this plan — [plan 0026](0026-generated-exercises.md)'s amended open question 1 closes by pointing at §6's fixed length, so §6 is now the sole answer to "how long is this session".
+3. ~~**Who sets `extraChars` on the live Kyrgyz domain, and when?** It rides plan 0023's suffix-table content pass, which has not started.~~ — **Not blocking: on Android the system Kyrgyz keyboard is the fix, and it works** (owner-confirmed 2026-09-07). §10 predicted this — "the platform keyboard is the real fix, so the row defaults to off" — and it is what actually happened. `extraChars` for Kyrgyz can ride 0023's content pass whenever it runs; nothing waits on it. **But the answer exposes a case §10 got wrong**, see below.
+4. ~~**Does `minimal-pair` at level 3 make sense for a word that also has a `pair` item?**~~ — **Yes, as designed.** A word and its minimal pair climb independently, each as its own scheduling unit.
+
+## Amendment: the desktop case §10 does not cover (2026-09-07)
+
+§10's `extraChars` row exists because "the Russian layout is what learners have; the Kyrgyz alphabet is that layout's 33 letters plus exactly three it cannot produce". That premise is a **mobile** premise, and it is why the answer to question 3 is only half an answer.
+
+On a desktop browser the learner has a physical QWERTZ or QWERTY keyboard and **no Cyrillic at all** — not 30 of 33 letters, zero. Three extra keys above the field are useless to them, and so is the keyboard setup card, which walks through adding a mobile layout. So every typed exercise — `cloze`, `dictation`, and this plan's own level-9 `write` — is unanswerable on desktop web for a Kyrgyz learner, for a different reason than the one §10 fixed and with a different fix.
+
+**The candidate answer is a full virtual Kyrgyz keyboard on the web build** (owner, 2026-09-07: "for pc website there could be a full virtual kyrgyz keyboard"), not an extension of the three-key row. Scoped as a backlog item rather than designed here: it needs a decision about whether the layout is derived from the domain (`extraChars` cannot express a whole alphabet), whether it shows only on coarse-pointer-absent devices, and whether it is per-domain content or a per-script app capability. Recorded in [STATUS.md](../STATUS.md)'s backlog.

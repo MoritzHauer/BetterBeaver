@@ -95,8 +95,8 @@ describe("the pace rows (plan 0025 §3)", () => {
     }
   });
 
-  it("defaults to Balanced", () => {
-    expect(DEFAULT_SCHEDULING).toEqual({ pace: "balanced" });
+  it("defaults to Balanced, one level a day", () => {
+    expect(DEFAULT_SCHEDULING).toEqual({ pace: "balanced", levelsPerDay: 1 });
     expect(schedule(null, GOOD, new Date("2026-08-05T10:00:00Z"))).toEqual(
       schedule(null, GOOD, new Date("2026-08-05T10:00:00Z"), {
         pace: "balanced",
@@ -155,6 +155,51 @@ describe("the word level (plan 0025 §1, §5)", () => {
     }
     state = schedule(state, GOOD, day2);
     expect(state.reps).toBe(8);
+  });
+
+  describe("the Fast practice depth's double step (plan 0025 §3)", () => {
+    const FAST = { pace: "balanced", levelsPerDay: 2 } as const;
+
+    it("is worth two levels per answer from the production level up", () => {
+      const state = schedule(atLevel(6), GOOD, day1, FAST);
+      expect(state.reps).toBe(8);
+      // The interval reads off the level it landed on, not the one it passed.
+      expect(state.intervalDays).toBe(REVIEW_PACES.balanced[8]);
+    });
+
+    it("still only advances once a day, so two levels is the daily cap", () => {
+      let state = schedule(atLevel(6), GOOD, day1, FAST);
+      expect(state.reps).toBe(8);
+      for (const at of [day1, day1Later]) {
+        state = schedule(state, GOOD, at, FAST);
+        expect(state.reps).toBe(8);
+      }
+      expect(schedule(state, GOOD, day2, FAST).reps).toBe(10);
+    });
+
+    it("does not double-step below the production level", () => {
+      // Levels 1-3 are unguarded, so a second step there would let a word
+      // cross into production without ever arriving at it.
+      expect(schedule(null, GOOD, day1, FAST).reps).toBe(1);
+      expect(schedule(atLevel(1), GOOD, day1, FAST).reps).toBe(2);
+      expect(schedule(atLevel(3, "2026-08-04"), GOOD, day1, FAST).reps).toBe(4);
+    });
+
+    it("clamps at the top level rather than overshooting", () => {
+      expect(schedule(atLevel(9), GOOD, day1, FAST).reps).toBe(10);
+    });
+
+    it("changes nothing about wrong answers or Hard", () => {
+      expect(schedule(atLevel(6), AGAIN, day1, FAST).reps).toBe(4);
+      expect(schedule(atLevel(6), HARD, day1, FAST).reps).toBe(5);
+    });
+
+    it("leaves the default single-stepping when no preset is passed", () => {
+      expect(schedule(atLevel(6), GOOD, day1).reps).toBe(7);
+      expect(schedule(atLevel(6), GOOD, day1, { pace: "balanced" }).reps).toBe(
+        7,
+      );
+    });
   });
 
   it("stamps levelDay on every advance, including the unguarded ones", () => {

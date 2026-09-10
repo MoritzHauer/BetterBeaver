@@ -47,7 +47,32 @@ export const REPETITIONS_PER_WORD: Record<Progression, number> = {
   fast: 1,
 };
 
-export interface LearningSettings extends SchedulingConfig {
+/**
+ * The preset's second effect (plan 0025 §3): what one correct answer is
+ * worth once a word has reached the production level. Fast trades the
+ * consolidation repetitions it does not ask for against a faster climb, so
+ * a word can reach `write` in about five days rather than nine.
+ *
+ * Only Fast doubles. Careful and Normal already surround each stretch with
+ * consolidation, and doubling their step would mean a word gaining two
+ * levels off an answer the learner was walked up to.
+ */
+export const LEVELS_PER_DAY: Record<Progression, 1 | 2> = {
+  careful: 1,
+  normal: 1,
+  fast: 2,
+};
+
+/**
+ * `levelsPerDay` is deliberately omitted: it is **derived** from
+ * `progression` by `schedulingConfig()`, never stored, so the preset stays
+ * the single source of truth for how fast a word climbs. Omitting it from
+ * the type is what stops a future edit from persisting a second copy.
+ */
+export interface LearningSettings extends Omit<
+  SchedulingConfig,
+  "levelsPerDay"
+> {
   skip: SkipLength;
   /** Whether typed exercises show the key row for a domain's `extraChars`
    * (plan 0025 §10). **Default off**: the real fix is the platform keyboard
@@ -62,7 +87,7 @@ export interface LearningSettings extends SchedulingConfig {
 }
 
 export const DEFAULT_LEARNING: LearningSettings = {
-  ...DEFAULT_SCHEDULING,
+  pace: DEFAULT_SCHEDULING.pace,
   skip: "week",
   extraKeys: false,
   keyboardHelpDismissed: false,
@@ -119,8 +144,8 @@ export function setLearning(patch: Partial<LearningSettings>): void {
  * rather than cached, so a change in Settings applies to the next answer
  * without any invalidation path. */
 export function schedulingConfig(): SchedulingConfig {
-  const { pace } = getLearning();
-  return { pace };
+  const { pace, progression } = getLearning();
+  return { pace, levelsPerDay: LEVELS_PER_DAY[progression] };
 }
 
 /** Correct answers a word is owed per session, from the Progression preset. */

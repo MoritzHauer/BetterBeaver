@@ -357,11 +357,12 @@ export function SettingsScreen({
         </label>
         <p className="status">
           How fast a word you keep getting right moves out of your way. Every
-          word has a level: getting it right moves it one level up, at most one
-          level a day once it is being asked to produce the word, and the level
-          says both how hard the next question is and how long until you see it
-          again. Getting it wrong steps back two levels, never back to the
-          start. Cards you already have keep their current due dates.
+          word has a level: getting it right moves it one level up — two on
+          Fast, once it is being asked to produce the word — and at most one
+          step a day at that stage. The level says both how hard the next
+          question is and how long until you see it again. Getting it wrong
+          steps back two levels, never back to the start. Cards you already have
+          keep their current due dates.
         </p>
         <label className="field">
           Practice depth
@@ -383,7 +384,8 @@ export function SettingsScreen({
         <p className="status">
           How many times you have to get a word right before a practice session
           lets it go. More is slower but sticks harder; one is every question a
-          step up.
+          step up. Fast also climbs in twos once a word is being produced, so it
+          trades the repetitions it skips for a shorter ladder.
         </p>
         {extraChars !== undefined && extraChars.length > 0 && (
           <>
