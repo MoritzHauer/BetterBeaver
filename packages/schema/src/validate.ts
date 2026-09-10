@@ -673,6 +673,20 @@ export function checkReferences(parsed: ParsedSet): string[] {
     }
   }
 
+  // --- class (ac): an `itemTargets` key the unit does not own (plan 0026
+  // §5). Mirrors class (a): a target for an item this unit never lists is a
+  // dangling reference, and silently ignoring it would hide the typo that
+  // leaves a word at the full ladder its author meant to cap. ---
+  for (const unit of units) {
+    for (const itemId of Object.keys(unit.itemTargets ?? {})) {
+      if (!unit.itemIds.includes(itemId)) {
+        errors.push(
+          `${unit.id}: itemTargets references item "${itemId}", which the unit does not own`,
+        );
+      }
+    }
+  }
+
   // --- class (i): a unit with zero tasks ---
   for (const unit of units) {
     if (unit.taskIds.length === 0) {

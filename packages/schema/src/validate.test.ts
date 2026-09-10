@@ -161,6 +161,7 @@ function makeFixture() {
     noteIds: string[];
     unlocksAfterUnitId?: string;
     recallUnitIds?: string[];
+    itemTargets?: Record<string, number>;
   } = {
     id: "ky-unit-1",
     lessonId: "ky-lesson-1",
@@ -1130,6 +1131,37 @@ describe("validateContent", () => {
         (e) => e.includes(entry1.id) && e.includes('"variants" requires'),
       ),
     ).toBe(true);
+  });
+
+  it("(ac) reports an itemTargets key the unit does not own", () => {
+    const { input, unit } = makeFixture();
+    unit.itemTargets = { "ky-item-nope": 2 };
+
+    const errors = expectErrors(validateContent(input));
+
+    expect(
+      errors.some(
+        (e) => e.includes(unit.id) && e.includes("itemTargets references item"),
+      ),
+    ).toBe(true);
+  });
+
+  it("(ac) accepts a target on an item the unit owns", () => {
+    const { input, unit, itemA } = makeFixture();
+    unit.itemTargets = { [itemA.id]: 2 };
+
+    const result = validateContent(input);
+
+    if ("errors" in result) {
+      expect(result.errors).toEqual([]);
+    }
+  });
+
+  it("(ac) rejects a target off the ladder", () => {
+    const { input, unit, itemA } = makeFixture();
+    unit.itemTargets = { [itemA.id]: 0 };
+
+    expect("errors" in validateContent(input)).toBe(true);
   });
 
   it("(ab) accepts variants alongside bound", () => {

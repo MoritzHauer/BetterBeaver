@@ -21,6 +21,7 @@ function contentWith(
   tasks: Task[],
   items = [1, 2, 3, 4].map((n) => concept(n)),
   generatedExercises?: boolean,
+  itemTargets?: Record<string, number>,
 ): Content {
   const unit: Unit = {
     id: "t-unit-1",
@@ -30,6 +31,7 @@ function contentWith(
     itemIds: items.map((i) => i.id),
     taskIds: tasks.map((t) => t.id),
     noteIds: [],
+    ...(itemTargets !== undefined && { itemTargets }),
   };
   return {
     topic: {
@@ -354,6 +356,69 @@ describe("availableExercises, opted in (plan 0026 slice 2)", () => {
         drawExercise(0, "new", availableExercises(item, content), first),
       ).toBe("matching");
     }
+  });
+});
+
+describe("availableExercises and item targets (plan 0026 §5)", () => {
+  it("caps an authored task the unit's target contradicts", () => {
+    // A `recall` task sits at level 8 and `write` at 9. Capping the word at
+    // 2 means the author said how far it goes, and the cap is the more
+    // specific statement — so neither survives once something at or below
+    // the cap exists to ask instead.
+    const recallTask: Task = {
+      id: "t-task-recall",
+      type: "recall",
+      itemIds: [1, 2, 3, 4].map((n) => `t-item-c${n}`),
+    };
+    const found = availableExercises(
+      concept(1),
+      contentWith([recallTask], undefined, true, { "t-item-c1": 2 }),
+    );
+    expect(found).not.toContain("recall");
+    expect(found).not.toContain("write");
+    expect(found).toContain("recognize");
+  });
+
+  it("still asks a capped word the content cannot reach at its cap", () => {
+    // Authored `recall`/`write` only, construction off, capped at 2: nothing
+    // at or below the cap exists. Silence would leave the word undrilled and
+    // the session short, so the easiest available exercise survives the cap
+    // — and the coverage grid is where the author sees the contradiction.
+    const recallTask: Task = {
+      id: "t-task-recall",
+      type: "recall",
+      itemIds: [1, 2, 3, 4].map((n) => `t-item-c${n}`),
+    };
+    expect(
+      availableExercises(
+        concept(1),
+        contentWith([recallTask], undefined, undefined, { "t-item-c1": 2 }),
+      ),
+    ).toEqual(["recall"]);
+  });
+
+  it("leaves an uncapped sibling alone", () => {
+    const recallTask: Task = {
+      id: "t-task-recall",
+      type: "recall",
+      itemIds: [1, 2, 3, 4].map((n) => `t-item-c${n}`),
+    };
+    const found = availableExercises(
+      concept(2),
+      contentWith([recallTask], undefined, true, { "t-item-c1": 2 }),
+    );
+    expect(found).toContain("recall");
+    expect(found).toContain("write");
+  });
+
+  it("never draws above the target", () => {
+    const content = contentWith([matchingTask], undefined, true, {
+      "t-item-c1": 2,
+    });
+    const available = availableExercises(concept(1), content);
+    // The `new` slot at a level already at the ceiling falls back to the
+    // hardest thing available — which is now the target, not the ladder top.
+    expect(drawExercise(9, "new", available, first)).toBe("recognize");
   });
 });
 

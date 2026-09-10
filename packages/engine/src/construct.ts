@@ -167,18 +167,67 @@ function canConstruct(
 }
 
 /**
+ * How far up the ladder this unit means `item` to be taken (plan 0026 §5),
+ * or `MAX_EXERCISE_LEVEL` where nobody said — which is the default, so most
+ * items never set it.
+ */
+export function targetLevel(item: Item, content: Content): number {
+  return (
+    owningUnit(item.id, content)?.itemTargets?.[item.id] ?? MAX_EXERCISE_LEVEL
+  );
+}
+
+/**
+ * Caps `exercises` at `item`'s target level (§5).
+ *
+ * A target is intent — "this word is passive, recognise it and stop" — so it
+ * governs whatever the draw would otherwise choose from, an authored task
+ * included: an author who caps a word at 2 and leaves an old dictation task
+ * pointing at it has contradicted themselves, and the cap is the more
+ * specific statement.
+ *
+ * With one floor. If the cap would leave a word with nothing at all, the
+ * lowest available exercise survives it: an unaskable word is not a passive
+ * word, it is a hole in the session, and `drawExercise`'s own rule is
+ * already that a word is never skipped for want of an exact match. The
+ * coverage grid (§8) is where an author sees they asked for the impossible.
+ */
+export function capAtTarget(
+  exercises: readonly Exercise[],
+  item: Item,
+  content: Content,
+): readonly Exercise[] {
+  const target = targetLevel(item, content);
+  const capped = exercises.filter(
+    (exercise) => (EXERCISE_LEVEL[exercise] ?? 0) <= target,
+  );
+  if (capped.length > 0 || exercises.length === 0) {
+    return capped;
+  }
+  const lowest = Math.min(
+    ...exercises.map((exercise) => EXERCISE_LEVEL[exercise] ?? 0),
+  );
+  return exercises.filter((exercise) => EXERCISE_LEVEL[exercise] === lowest);
+}
+
+/**
  * Every exercise the content can construct for `item`, authored or not —
  * §1's objective read one item at a time.
  *
  * Ordered by level, lowest first, so a caller that wants "the easiest thing
- * this word can be asked as" can take the head.
+ * this word can be asked as" can take the head, and capped at the unit's
+ * item target where it set one (§5).
  */
 export function constructibleExercises(
   item: Item,
   content: Content,
 ): readonly Exercise[] {
-  return RANKED_EXERCISES.filter((exercise) =>
-    canConstruct(exercise, item, content),
+  return capAtTarget(
+    RANKED_EXERCISES.filter((exercise) =>
+      canConstruct(exercise, item, content),
+    ),
+    item,
+    content,
   );
 }
 
@@ -218,6 +267,9 @@ export interface LevelCoverage {
   authored: readonly Exercise[];
   /** Exercises the constructor fills the cell with where nothing authored it. */
   constructed: readonly Exercise[];
+  /** Above the unit's item target (§5): deliberately out of reach, not a
+   * gap in the content. The grid says which of the two an empty cell is. */
+  beyondTarget: boolean;
 }
 
 /**
@@ -234,9 +286,11 @@ export function itemCoverage(
   authoredExercises: readonly Exercise[],
 ): readonly LevelCoverage[] {
   const constructible = constructibleExercises(item, content);
+  const capped = capAtTarget(authoredExercises, item, content);
+  const target = targetLevel(item, content);
   const rows: LevelCoverage[] = [];
   for (let level = MIN_EXERCISE_LEVEL; level <= MAX_EXERCISE_LEVEL; level++) {
-    const authored = authoredExercises.filter(
+    const authored = capped.filter(
       (exercise) => EXERCISE_LEVEL[exercise] === level,
     );
     rows.push({
@@ -249,6 +303,7 @@ export function itemCoverage(
           : constructible.filter(
               (exercise) => EXERCISE_LEVEL[exercise] === level,
             ),
+      beyondTarget: level > target,
     });
   }
   return rows;

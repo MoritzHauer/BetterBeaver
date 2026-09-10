@@ -5,6 +5,7 @@ import {
   exerciseAtLevel,
   isUnreachable,
   itemCoverage,
+  targetLevel,
 } from "./construct.js";
 
 function concept(n: number, term = `Term ${n}`): Item {
@@ -59,6 +60,7 @@ function contentWith(
   items: Item[],
   tasks: Task[] = [],
   generatedExercises?: boolean,
+  itemTargets?: Record<string, number>,
 ): Content {
   const unit: Unit = {
     id: "t-unit-1",
@@ -68,6 +70,7 @@ function contentWith(
     itemIds: items.map((i) => i.id),
     taskIds: tasks.map((t) => t.id),
     noteIds: [],
+    ...(itemTargets !== undefined && { itemTargets }),
   };
   return {
     topic: {
@@ -275,17 +278,24 @@ describe("itemCoverage", () => {
       level: 1,
       authored: ["matching"],
       constructed: [],
+      beyondTarget: false,
     });
     expect(rows[1]).toEqual({
       level: 2,
       authored: [],
       constructed: ["recognize"],
+      beyondTarget: false,
     });
   });
 
   it("leaves a cell empty where neither authored nor constructed reaches", () => {
     const rows = itemCoverage(concept(1), contentWith(fourConcepts), []);
-    expect(rows[2]).toEqual({ level: 3, authored: [], constructed: [] });
+    expect(rows[2]).toEqual({
+      level: 3,
+      authored: [],
+      constructed: [],
+      beyondTarget: false,
+    });
   });
 });
 
@@ -316,5 +326,53 @@ describe("isUnreachable", () => {
     expect(isUnreachable(unknown, contentWith([unknown]), ["shadowing"])).toBe(
       true,
     );
+  });
+});
+
+describe("item targets (plan 0026 §5)", () => {
+  it("defaults to the full ladder, so most items never set one", () => {
+    const content = contentWith(fourConcepts);
+    expect(targetLevel(concept(1), content)).toBe(10);
+    expect(constructibleExercises(concept(1), content)).toContain("write");
+  });
+
+  it("stops a passive word at the level its unit meant it to reach", () => {
+    // "Recognise this, do not produce it" — a teaching decision no learner
+    // data can infer, which is why it is authored.
+    const content = contentWith(fourConcepts, [], undefined, {
+      "t-item-c1": 2,
+    });
+    expect(constructibleExercises(concept(1), content)).toEqual([
+      "matching",
+      "recognize",
+    ]);
+    expect(exerciseAtLevel(concept(1), 8, content)).toBeNull();
+  });
+
+  it("caps only the item it names", () => {
+    const content = contentWith(fourConcepts, [], undefined, {
+      "t-item-c1": 2,
+    });
+    expect(constructibleExercises(concept(2), content)).toContain("write");
+  });
+
+  it("leaves a word askable when the cap would silence it entirely", () => {
+    // A target of 1 on a word whose unit cannot build a board is an authored
+    // contradiction. Showing the easiest thing it *can* be asked as beats a
+    // hole in the session; the grid is where the author sees the problem.
+    const lone = concept(1);
+    const content = contentWith([lone], [], undefined, { "t-item-c1": 1 });
+    expect(constructibleExercises(lone, content)).toEqual(["recall"]);
+  });
+
+  it("marks the rungs above the target as out of reach, not as gaps", () => {
+    const rows = itemCoverage(
+      concept(1),
+      contentWith(fourConcepts, [], undefined, { "t-item-c1": 2 }),
+      [],
+    );
+    expect(rows[1]?.beyondTarget).toBe(false);
+    expect(rows[2]?.beyondTarget).toBe(true);
+    expect(rows[8]?.constructed).toEqual([]);
   });
 });

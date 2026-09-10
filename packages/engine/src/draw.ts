@@ -13,6 +13,7 @@ import {
   TASK_EXERCISES,
 } from "@betterbeaver/schema";
 import {
+  capAtTarget,
   constructibleExercises,
   owningUnit,
   promptIsUnique,
@@ -87,10 +88,17 @@ export function availableExercises(
   content: Content,
 ): readonly Exercise[] {
   const authored = authoredExercises(item, content);
-  if (content.topic.generatedExercises !== true) {
-    return authored;
-  }
-  return [...new Set([...authored, ...constructibleExercises(item, content)])];
+  const all =
+    content.topic.generatedExercises === true
+      ? [...new Set([...authored, ...constructibleExercises(item, content)])]
+      : authored;
+  // The unit's item target caps whatever the draw chooses from, authored
+  // tasks included (plan 0026 §5): a word meant to stay passive stays
+  // passive whoever wrote the task. Capped **once, over the union** — cap
+  // each half and `capAtTarget`'s never-silence-a-word floor would fire on
+  // the authored half alone, dragging a level-8 `recall` into a Book whose
+  // constructor had a level-1 board ready.
+  return capAtTarget(all, item, content);
 }
 
 /** The subset of `available` sitting at exactly `level`. */
