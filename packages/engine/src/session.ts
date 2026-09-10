@@ -20,6 +20,7 @@ import {
 } from "@betterbeaver/schema";
 import type { Quality } from "@betterbeaver/srs";
 import { blankUnitId, type SchedulingUnit } from "./units.js";
+import { constructibleExercises } from "./construct.js";
 import { availableExercises, drawExercise } from "./draw.js";
 import type { PlannedVisit } from "./drill.js";
 import { normalizeTypedInput } from "./normalize.js";
@@ -244,9 +245,21 @@ function sampleMcq(
 /** The unit whose `taskIds` contains `task.id` — unique, and present, for
  * any content the validator has passed. `undefined` is reachable only from a
  * draft, so this no longer asserts; `buildTaskSession`'s `owningUnitItems`
- * degrades to an empty distractor pool rather than throwing. */
+ * degrades to an empty distractor pool rather than throwing.
+ *
+ * A **constructed** exercise's synthetic task (plan 0026 §2) is listed by no
+ * unit, so it falls through to the unit that owns its items — which is the
+ * pool every builder here actually wants, and the reason a constructed MCQ
+ * gets real distractors rather than a board of one. */
 function owningUnitOf(task: Task, content: Content): Unit | undefined {
-  return content.units.find((unit) => unit.taskIds.includes(task.id));
+  return (
+    content.units.find((unit) => unit.taskIds.includes(task.id)) ??
+    (task.itemIds.length === 0
+      ? undefined
+      : content.units.find((unit) =>
+          task.itemIds.every((id) => unit.itemIds.includes(id)),
+        ))
+  );
 }
 
 /** An item's `audioRef` stem; only `lexeme`/`concept`/`sentence` carry one (guaranteed present by validator class (n)). */
@@ -700,10 +713,15 @@ export function buildExerciseQuestion(
   if (type === null) {
     return null;
   }
-  const task = content.tasks.find(
+  // §3's rule, read one cell at a time: an authored task covering this
+  // (item, level) cell answers if one exists, and the constructor answers
+  // otherwise. Authored wins *here*, per cell, rather than by suppressing a
+  // whole type for the unit — which is what the amendment retired.
+  const authored = content.tasks.find(
     (candidate) =>
       candidate.type === type && candidate.itemIds.includes(item.id),
   );
+  const task = authored ?? constructedTask(item, type, content);
   if (task === undefined) {
     return null;
   }
@@ -724,8 +742,99 @@ export function buildExerciseQuestion(
       built.find((q) => q.kind !== "matching" && q.unitId === unit.id) ?? null
     );
   }
-  return built[0] ?? null;
+  const question = built[0];
+  if (question === undefined) {
+    return null;
+  }
+  if (authored !== undefined || question.kind === "matching") {
+    return question;
+  }
+  // **A constructed exercise never mints a scheduling unit** (plan 0026 §2:
+  // nothing new is stored). It grades the unit the caller planned, which
+  // matters for exactly one type: a constructed cloze would otherwise grade
+  // `<itemId>::c1`, a blank id `schedulingUnits` only emits for an *authored*
+  // cloze task — so the drill would credit a word it never planned and the
+  // learner's level would never move. A board is left alone: its prompts
+  // already carry one item id each.
+  return { ...question, unitId: unit.id };
 }
+
+/**
+ * The synthetic task a constructed exercise is built through (plan 0026 §2).
+ *
+ * Never stored and never surfaced — this is plan 0022 §6's trick under a new
+ * name: every builder in `buildTaskSession` (distractor sampling, token
+ * banks, asset stems, the cloze fan-out) is reused untouched rather than
+ * reimplemented per exercise. Its id exists only to travel through that one
+ * call, and cannot collide with an authored one because `slugPattern`
+ * forbids `:`.
+ *
+ * `undefined` where the content cannot build the type at all — which is
+ * `constructibleExercises`' answer, asked here so the two cannot drift.
+ */
+function constructedTask(
+  item: Item,
+  type: TaskType,
+  content: Content,
+): Task | undefined {
+  const exercise = TASK_EXERCISES[type][0];
+  if (
+    exercise === undefined ||
+    !constructibleExercises(item, content).includes(exercise)
+  ) {
+    return undefined;
+  }
+  return {
+    id: `${item.id}::${type}`,
+    type,
+    itemIds: type === "matching" ? constructedBoard(item, content) : [item.id],
+  };
+}
+
+/**
+ * Which words sit on a constructed matching board: this one, then its unit's
+ * same-kind siblings in authored order, capped at the five class (p) allows
+ * and skipping any that reads the same on the prompt side.
+ *
+ * **This is what is left of open question 2.** Chunking was a question about
+ * partitioning a unit into boards, and the 2026-09-07 amendment removed the
+ * partition: construction is per item, at draw time, so the only decision
+ * left is which siblings join *this* word's board. Unit order is the
+ * author's own, so the default is stable across sessions and readable in the
+ * grid, and §3's override is still there for the five confusable words
+ * someone actually wants together.
+ */
+function constructedBoard(item: Item, content: Content): string[] {
+  const unit = content.units.find((candidate) =>
+    candidate.itemIds.includes(item.id),
+  );
+  const itemById = new Map(content.items.map((i) => [i.id, i]));
+  const prompts = new Set([recognizePrompt(item)]);
+  const board = [item.id];
+  for (const id of unit?.itemIds ?? []) {
+    if (board.length === MATCHING_BOARD_MAX) {
+      break;
+    }
+    const other = itemById.get(id);
+    if (
+      other === undefined ||
+      other.id === item.id ||
+      other.kind !== item.kind
+    ) {
+      continue;
+    }
+    const prompt = recognizePrompt(other);
+    if (prompts.has(prompt)) {
+      continue;
+    }
+    prompts.add(prompt);
+    board.push(other.id);
+  }
+  return board;
+}
+
+/** Validator class (p)'s ceiling on a matching board. */
+const MATCHING_BOARD_MAX = 5;
 
 export function buildUnitSession(
   unit: Unit,

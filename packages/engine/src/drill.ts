@@ -114,10 +114,22 @@ export function advanceDrill(
   for (const { unitId, correct } of credited) {
     if (correct) {
       // One credit pays off one owed answer. For the unit whose turn it was
-      // that is the visit just consumed; for a board's other words it is
-      // their next planned visit, which is dropped so the count and the
-      // queue stay the same length.
-      const index = queue.findIndex((visit) => visit.unitId === unitId);
+      // that is the visit just consumed — already off the queue above, so
+      // nothing more is dropped. For a board's other words it is their next
+      // planned visit, which is dropped so the count and the queue stay the
+      // same length.
+      //
+      // The `current` case must be checked *first*. Searching the queue for
+      // the current word instead finds its own later repetition and drops
+      // that, so one answer paid off one owed count while consuming two
+      // visits: every session ran at one repetition per word regardless of
+      // the Practice depth preset, and ended still owing the difference.
+      // Found 2026-09-10 running plan 0026's done-criteria through the real
+      // loop; `remaining` is the number on screen, so it was visible.
+      const index =
+        unitId === current.unitId
+          ? -1
+          : queue.findIndex((visit) => visit.unitId === unitId);
       if (index >= 0) {
         queue = [...queue.slice(0, index), ...queue.slice(index + 1)];
         remaining -= 1;

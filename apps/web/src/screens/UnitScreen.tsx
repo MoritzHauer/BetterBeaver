@@ -33,6 +33,7 @@ import {
   itemLabel,
   validTypesFor,
 } from "./edit/exerciseOffers";
+import { CoverageGrid } from "./edit/CoverageGrid";
 import { type DiffView, diffView } from "./edit/diffView";
 import { unitPoolOptionsGroupedByLesson } from "./entityPicker";
 import { getLexiconAssetUrl } from "../content/bundled";
@@ -1856,6 +1857,12 @@ export function UnitScreen({
             />{" "}
             Exercises
           </p>
+          {/* Preview first, overrides under it (plan 0026 §8): the page
+              stops being a list of things to add and becomes what this
+              unit's words can actually be asked, with the authored list as
+              the override for the cells where the constructed exercise is
+              not what you want. */}
+          <CoverageGrid unit={unit} content={content} itemById={itemById} />
           <ul className="card-list">
             {edit.taskIds.map((taskId) => (
               <ExerciseCard

@@ -362,6 +362,16 @@ Two things this settles, and one of them corrects the paragraph that stood here 
 
 **Careful and Normal finish one day apart over 152 days.** So for two of the three presets the control does exactly what its name promises — depth, not speed — and Fast is the single outlier that also buys speed. That is a good argument for the name "Practice depth" surviving, which it has, and a fair warning that Normal buys a learner nothing over Careful except fewer questions.
 
+### Fix: the Practice depth preset was inert (2026-09-10)
+
+Found while running [plan 0026](0026-generated-exercises.md)'s done-criteria through the real loop — `startDrill` → `buildVisitQuestion` → `advanceDrill` — rather than against a helper.
+
+`advanceDrill` credits a correct answer by finding that word's next planned visit and dropping it, which is right for the four *other* words a matching board just graded and wrong for the word whose turn it actually was: its own later repetition was found and dropped instead. So one answer paid off one owed count while consuming two visits. Every session ran at **one** repetition per word whatever Practice depth said (Careful 3 / Normal 2 / Fast 1), and ended with the queue empty and `remaining` still positive — a count the learner is shown. The `else if (unitId === current.unitId)` branch that handles the current word correctly was unreachable, because the queue search always matched first.
+
+It survived §6's own tests because none of them played a multi-repetition session to the end: the closest, "decrements the count only on a correct answer", asserts `remaining` and never the queue, and its expected value is the same either way. Two tests now cover it — the queue after one answer, and a three-word three-repetition session asked to completion (9 questions, nothing owed).
+
+Not a plan 0026 change, but recorded here rather than there: it is 0025 §6's engine, and it was visible on every Book, opted in or not.
+
 ## Open questions
 
 **All four answered by the owner on 2026-09-07.** Answers recorded in place; the questions are kept because the reasoning that raised them is what makes each answer legible.

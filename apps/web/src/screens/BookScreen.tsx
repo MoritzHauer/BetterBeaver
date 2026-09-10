@@ -741,6 +741,35 @@ export function BookScreen({
               />
             </label>
           )}
+          {/* Generated exercises (plan 0026 §9, phase 1). On the Book because
+              that is the grain the plan opts in at: it is what keeps a
+              Book's exercise mix from changing on the day the feature
+              ships, so it stays the author's decision, per Book, forever.
+              What it changes is which exercise fills a slot, never how many
+              slots there are — session length is word count times the
+              learner's Progression preset either way. */}
+          <label className="field">
+            Generated exercises
+            <input
+              type="checkbox"
+              checked={content.topic.generatedExercises === true}
+              onChange={(e) =>
+                edit.patchBook(
+                  withOptionalKey(
+                    edit.rawBook,
+                    "generatedExercises",
+                    e.target.checked,
+                  ),
+                )
+              }
+            />
+          </label>
+          <p className="status">
+            Ask every word at every level its own content can build, not only
+            where an exercise was written by hand. Each unit&rsquo;s Exercises
+            page shows what that reaches.
+          </p>
+
           {/* Sources (spec 0021-8 §2a). On the Book, not the Unit trail:
               `resources` is a field of the Book, shared across every unit.
               Edit-only — a resource is never shown to a learner. */}

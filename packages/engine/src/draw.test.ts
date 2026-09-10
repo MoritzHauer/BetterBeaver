@@ -16,9 +16,12 @@ function concept(n: number, term = `Term ${n}`): Item {
   };
 }
 
+/** A one-unit Book. `generatedExercises` is the plan 0026 §9 opt-in. */
 function contentWith(
   tasks: Task[],
   items = [1, 2, 3, 4].map((n) => concept(n)),
+  generatedExercises?: boolean,
+  itemTargets?: Record<string, number>,
 ): Content {
   const unit: Unit = {
     id: "t-unit-1",
@@ -28,16 +31,25 @@ function contentWith(
     itemIds: items.map((i) => i.id),
     taskIds: tasks.map((t) => t.id),
     noteIds: [],
+    ...(itemTargets !== undefined && { itemTargets }),
   };
   return {
-    topics: [],
+    topic: {
+      id: "t",
+      code: "t",
+      title: "Book",
+      description: "",
+      lessonIds: ["t-lesson-1"],
+      domainId: "t",
+      ...(generatedExercises !== undefined && { generatedExercises }),
+    },
     lessons: [],
     units: [unit],
     items,
     tasks,
     notes: [],
     resources: [],
-  } as unknown as Content;
+  };
 }
 
 const recognizeTask: Task = {
@@ -199,11 +211,214 @@ describe("buildExerciseQuestion", () => {
     ).toBeNull();
   });
 
-  it("returns null when no authored task backs the exercise", () => {
+  it("constructs the exercise when no authored task backs it", () => {
+    // Plan 0026 slice 2: the builder answers for a cell nobody authored.
+    // It is not gated on the Book's opt-in — the *draw* is (see
+    // `availableExercises`), so a Book that has not opted in never asks;
+    // asking directly is what the author's coverage preview does (§8).
     const content = contentWith([]);
+    const q = buildExerciseQuestion(
+      unitOf(concept(1)),
+      "matching",
+      content,
+      first,
+    );
+    expect(q?.kind).toBe("matching");
+  });
+
+  it("gives a constructed MCQ real distractors from the item's own unit", () => {
+    // The synthetic task is listed by no unit, so without `owningUnitOf`'s
+    // fallback this board would be one choice long.
+    const q = buildExerciseQuestion(
+      unitOf(concept(1)),
+      "recognize",
+      contentWith([]),
+      first,
+    );
+    expect(q?.kind).toBe("recognize");
+    expect(q?.kind === "recognize" && q.choices).toHaveLength(4);
+  });
+
+  it("caps a constructed board at the five class (p) allows", () => {
+    const many = [1, 2, 3, 4, 5, 6, 7].map((n) => concept(n));
+    const q = buildExerciseQuestion(
+      unitOf(many[0]!),
+      "matching",
+      contentWith([], many),
+      first,
+    );
+    expect(q?.kind === "matching" && q.prompts).toHaveLength(5);
+  });
+
+  it("keeps a constructed cloze on the word the caller planned", () => {
+    // §2: a constructed exercise mints no scheduling unit. Without this the
+    // question would grade `<itemId>::c1`, a blank id only an *authored*
+    // cloze task creates — and the drill would credit a word it never
+    // planned, stalling the session.
+    const sentence: Item = {
+      id: "t-item-s2",
+      kind: "sentence",
+      payload: {
+        text: "Beavers {{c1::gnaw}} trees.",
+        translation: "Beavers gnaw trees.",
+      },
+      sourceRef: "t-resource-1",
+    };
+    const q = buildExerciseQuestion(
+      unitOf(sentence),
+      "cloze",
+      contentWith([], [sentence]),
+      first,
+    );
+    expect(q?.kind).toBe("cloze");
+    expect(q?.kind === "cloze" && q.unitId).toBe("t-item-s2");
+  });
+
+  it("leaves an authored cloze minting its blank id", () => {
+    const sentence: Item = {
+      id: "t-item-s3",
+      kind: "sentence",
+      payload: {
+        text: "Beavers {{c1::gnaw}} trees.",
+        translation: "Beavers gnaw trees.",
+      },
+      sourceRef: "t-resource-1",
+    };
+    const task: Task = {
+      id: "t-task-cloze",
+      type: "cloze",
+      itemIds: [sentence.id],
+    };
+    const q = buildExerciseQuestion(
+      unitOf(sentence),
+      "cloze",
+      contentWith([task], [sentence]),
+      first,
+    );
+    expect(q?.kind === "cloze" && q.unitId).toBe("t-item-s3::c1");
+  });
+});
+
+describe("availableExercises, opted in (plan 0026 slice 2)", () => {
+  it("changes nothing for a Book that has not opted in", () => {
+    // Phase 1's promise: every existing Book behaves exactly as before.
+    const content = contentWith([matchingTask]);
+    expect(availableExercises(concept(1), content)).toEqual(
+      availableExercises(
+        concept(1),
+        contentWith([matchingTask], undefined, false),
+      ),
+    );
+    expect(availableExercises(concept(1), content)).not.toContain("recognize");
+  });
+
+  it("unions in what the constructor can build once opted in", () => {
+    const found = availableExercises(
+      concept(1),
+      contentWith([matchingTask], undefined, true),
+    );
+    expect(found).toContain("matching");
+    expect(found).toContain("recognize");
+    expect(found).toContain("recall");
+  });
+
+  it("gives an item no task mentions a full ladder, with no other edit", () => {
+    // The plan's second goal, and the end of index rot: adding an item to a
+    // unit is sufficient.
+    const items = [1, 2, 3, 4].map((n) => concept(n));
+    const taskOverOne: Task = {
+      id: "t-task-recall-one",
+      type: "recall",
+      itemIds: [items[0]!.id],
+    };
+    const found = availableExercises(
+      items[3]!,
+      contentWith([taskOverOne], items, true),
+    );
+    expect([...found].sort()).toEqual(
+      ["matching", "recall", "recognize", "recognize-produce", "write"].sort(),
+    );
+  });
+
+  it("lets one authored board keep its cell without costing the rest theirs", () => {
+    // The done-criterion the retired per-type rule got wrong: a board over
+    // five of a unit's items must not switch off level 1 for the others.
+    const items = Array.from({ length: 8 }, (_, i) => concept(i + 1));
+    const board: Task = {
+      id: "t-task-matching-five",
+      type: "matching",
+      itemIds: items.slice(0, 5).map((i) => i.id),
+    };
+    const content = contentWith([board], items, true);
+    for (const item of items.slice(5)) {
+      expect(availableExercises(item, content)).toContain("matching");
+      expect(
+        drawExercise(0, "new", availableExercises(item, content), first),
+      ).toBe("matching");
+    }
+  });
+});
+
+describe("availableExercises and item targets (plan 0026 §5)", () => {
+  it("caps an authored task the unit's target contradicts", () => {
+    // A `recall` task sits at level 8 and `write` at 9. Capping the word at
+    // 2 means the author said how far it goes, and the cap is the more
+    // specific statement — so neither survives once something at or below
+    // the cap exists to ask instead.
+    const recallTask: Task = {
+      id: "t-task-recall",
+      type: "recall",
+      itemIds: [1, 2, 3, 4].map((n) => `t-item-c${n}`),
+    };
+    const found = availableExercises(
+      concept(1),
+      contentWith([recallTask], undefined, true, { "t-item-c1": 2 }),
+    );
+    expect(found).not.toContain("recall");
+    expect(found).not.toContain("write");
+    expect(found).toContain("recognize");
+  });
+
+  it("still asks a capped word the content cannot reach at its cap", () => {
+    // Authored `recall`/`write` only, construction off, capped at 2: nothing
+    // at or below the cap exists. Silence would leave the word undrilled and
+    // the session short, so the easiest available exercise survives the cap
+    // — and the coverage grid is where the author sees the contradiction.
+    const recallTask: Task = {
+      id: "t-task-recall",
+      type: "recall",
+      itemIds: [1, 2, 3, 4].map((n) => `t-item-c${n}`),
+    };
     expect(
-      buildExerciseQuestion(unitOf(concept(1)), "matching", content, first),
-    ).toBeNull();
+      availableExercises(
+        concept(1),
+        contentWith([recallTask], undefined, undefined, { "t-item-c1": 2 }),
+      ),
+    ).toEqual(["recall"]);
+  });
+
+  it("leaves an uncapped sibling alone", () => {
+    const recallTask: Task = {
+      id: "t-task-recall",
+      type: "recall",
+      itemIds: [1, 2, 3, 4].map((n) => `t-item-c${n}`),
+    };
+    const found = availableExercises(
+      concept(2),
+      contentWith([recallTask], undefined, true, { "t-item-c1": 2 }),
+    );
+    expect(found).toContain("recall");
+    expect(found).toContain("write");
+  });
+
+  it("never draws above the target", () => {
+    const content = contentWith([matchingTask], undefined, true, {
+      "t-item-c1": 2,
+    });
+    const available = availableExercises(concept(1), content);
+    // The `new` slot at a level already at the ceiling falls back to the
+    // hardest thing available — which is now the target, not the ladder top.
+    expect(drawExercise(9, "new", available, first)).toBe("recognize");
   });
 });
 

@@ -57,6 +57,22 @@ export const bookSchema = z.object({
    * web app's public assets (same convention/location the one-off Kyrgyz
    * watermark already used); this field only toggles whether it's shown. */
   hasCoverArt: z.boolean().optional(),
+  /**
+   * Whether this Book's exercises may be **constructed** from its items
+   * where no authored task covers the (item, level) cell (plan 0026 §9,
+   * phase 1).
+   *
+   * Opt-in per Book, and the reason phase 1 costs no
+   * `CONTENT_SCHEMA_VERSION` bump: the field is additive and optional, so an
+   * older client drops it and plays the Book exactly as it plays it today.
+   * Absent or `false` means authored tasks only — which is what keeps every
+   * shipped Book's exercise mix from changing on the day this lands.
+   *
+   * It never changes how *many* questions a session asks: length is word
+   * count times the Progression preset (plan 0025 §6). It changes only which
+   * exercise fills a slot.
+   */
+  generatedExercises: z.boolean().optional(),
 });
 export type Book = z.infer<typeof bookSchema>;
 
@@ -174,6 +190,10 @@ export const lessonSchema = z.object({
 });
 export type Lesson = z.infer<typeof lessonSchema>;
 
+/** The ladder's bounds. A word level shares the scale but starts at 0 — "not answered correctly yet" (plan 0025 §1). */
+export const MIN_EXERCISE_LEVEL = 1;
+export const MAX_EXERCISE_LEVEL = 10;
+
 export const unitSchema = z.object({
   id: slugSchema,
   lessonId: slugSchema,
@@ -185,6 +205,34 @@ export const unitSchema = z.object({
   unlocksAfterUnitId: slugSchema.optional(),
   /** Manual cross-unit recall links (plan 0016): zero or more earlier units in the same book to prompt a refresher on. */
   recallUnitIds: z.array(slugSchema).optional(),
+  /**
+   * How far up the ladder each of this unit's items should be taken (plan
+   * 0026 §5) — **intent, not difficulty**. How hard a word is, SRS already
+   * discovers empirically and per learner and writes into the level; an
+   * authored number would be stale on arrival. How far a word is *meant* to
+   * go is the opposite: "passive vocabulary" versus "active vocabulary" is a
+   * teaching decision no amount of learner data can infer.
+   *
+   * Keyed by the unit's own item ids (validator class (ac)), holding a
+   * maximum `EXERCISE_LEVEL`: 2 stops a word at recognition, 9 takes it as
+   * far as typing it. Absent for an item means the full ladder its kind
+   * allows, so most items never set it.
+   *
+   * On the **unit**, not the item, because lexemes and concepts are
+   * domain-owned and shared across Books (plan 0006: one word, one SRS
+   * state) — a target on the entry would be global, and a word may
+   * legitimately be passive in unit 3 and active in unit 9.
+   *
+   * It caps which exercise a word is asked as, never how far its level
+   * climbs: a passive word is still answered, still advances, still stretches
+   * its interval. Additive and optional — no `CONTENT_SCHEMA_VERSION` bump.
+   */
+  itemTargets: z
+    .record(
+      slugSchema,
+      z.number().int().min(MIN_EXERCISE_LEVEL).max(MAX_EXERCISE_LEVEL),
+    )
+    .optional(),
 });
 export type Unit = z.infer<typeof unitSchema>;
 
@@ -557,10 +605,6 @@ export const EXERCISES = [
   "shadowing",
 ] as const;
 export type Exercise = (typeof EXERCISES)[number];
-
-/** The ladder's bounds. A word level shares the scale but starts at 0 — "not answered correctly yet" (plan 0025 §1). */
-export const MIN_EXERCISE_LEVEL = 1;
-export const MAX_EXERCISE_LEVEL = 10;
 
 /**
  * How hard each exercise is (plan 0025 §2) — a fixed property of the

@@ -54,11 +54,23 @@ const EMPTY_PROGRESS: UnitProgress = {
  * exercises", and the alternative is a unit nothing can ever finish sitting
  * across the navigation spine. That is the same vacuous truth the
  * every-task-attempted rule had.
+ *
+ * `legacyAttemptedTaskIds` grandfathers completions earned under the rule
+ * this one replaced (plan 0026 §4). The level rule is stricter twice over —
+ * it wants every word, and it wants them *right* — so units that read
+ * complete before it landed could flip back, re-locking gates and
+ * regressing bars for a learner who did nothing wrong. Complete is
+ * therefore the new rule **or** the old one, in the repo's existing
+ * presence-based, self-erasing shape (plan 0006): the old key is read,
+ * never written again, and ages out as content is re-studied. Only
+ * `complete` is grandfathered — `percent` and `started` stay honest, since
+ * they describe the levels rather than gate anything.
  */
 export function unitProgressByBook(
   content: Content,
   states: ReadonlyMap<string, SrsState>,
   pace?: ReviewPace,
+  legacyAttemptedTaskIds?: ReadonlySet<string>,
 ): Map<string, UnitProgress> {
   const wordsByItemId = new Map<string, SchedulingUnit[]>();
   for (const schedulingUnit of schedulingUnits(content)) {
@@ -89,14 +101,78 @@ export function unitProgressByBook(
         }
       }
     }
+    const legacy =
+      legacyAttemptedTaskIds !== undefined &&
+      legacyAttemptedTaskIds.size > 0 &&
+      unit.taskIds.length > 0 &&
+      unit.taskIds.every((taskId) => legacyAttemptedTaskIds.has(taskId));
     progress.set(unit.id, {
       percent: total === 0 ? 0 : Math.round((levelSum / total) * 10),
       started,
       total,
-      complete: started === total,
+      complete: started === total || legacy,
     });
   }
   return progress;
+}
+
+/**
+ * The level the exercise draw sees for each of `unit`'s items (plan 0025 §4).
+ *
+ * Not simply `wordLevel(states.get(itemId))`, because an item is not always
+ * one scheduling unit: a sentence with an authored cloze task carries a
+ * level per **blank** (`<itemId>::c1`, …) and none at all under its own id,
+ * so reading the item id alone pins such a sentence at level 0 for ever —
+ * every session would open it at the bottom of the ladder no matter how well
+ * the learner knew it. Found 2026-09-10, with the credit mismatch beside it
+ * (plan 0026's implementation notes).
+ *
+ * A word split across several scheduling units is at the level of its
+ * **weakest** one. The number decides how hard the next exercise may be, and
+ * a sentence whose third blank is still new is not a sentence to ask at
+ * level 10 because its first two are.
+ */
+export function itemLevels(
+  unit: Unit,
+  content: Content,
+  states: ReadonlyMap<string, SrsState>,
+  pace?: ReviewPace,
+): Map<string, number> {
+  const owned = new Set(unit.itemIds);
+  const byItemId = new Map<string, number[]>();
+  for (const schedulingUnit of schedulingUnits(content)) {
+    if (schedulingUnit.note !== undefined) {
+      continue;
+    }
+    const itemId = itemIdFromUnitId(schedulingUnit.id);
+    if (!owned.has(itemId)) {
+      continue;
+    }
+    const levels = byItemId.get(itemId) ?? [];
+    levels.push(wordLevel(states.get(schedulingUnit.id) ?? null, pace));
+    byItemId.set(itemId, levels);
+  }
+  return new Map(
+    unit.itemIds.map((itemId) => {
+      const levels = byItemId.get(itemId) ?? [];
+      // No scheduling unit at all means nothing has been asked: level 0,
+      // which is where a new word starts anyway.
+      return [itemId, levels.length === 0 ? 0 : Math.min(...levels)] as const;
+    }),
+  );
+}
+
+/** Every scheduling unit id `itemLevels` needs read from the store, for the
+ * caller that fetches them. `unit.itemIds` is not enough — see above. */
+export function itemLevelUnitIds(unit: Unit, content: Content): string[] {
+  const owned = new Set(unit.itemIds);
+  return schedulingUnits(content)
+    .filter(
+      (schedulingUnit) =>
+        schedulingUnit.note === undefined &&
+        owned.has(itemIdFromUnitId(schedulingUnit.id)),
+    )
+    .map((schedulingUnit) => schedulingUnit.id);
 }
 
 /** True when every word of `unit` has been answered correctly at least once

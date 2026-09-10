@@ -539,3 +539,99 @@ describe("the Exercises page", () => {
     expect((books[0]!.units[0] as { taskIds: string[] }).taskIds).toEqual([]);
   });
 });
+
+/**
+ * The coverage grid (plan 0026 §8): the Exercises page stops being a list of
+ * things to add and becomes what this unit's words can actually be asked.
+ */
+describe("the coverage grid", () => {
+  afterEach(cleanup);
+
+  function goToExercises() {
+    const dots = screen.getAllByRole("button", { name: /^Page \d+ of/ });
+    fireEvent.click(dots[dots.length - 1]!);
+  }
+
+  const FOUR = ["bk-w1", "bk-w2", "bk-w3", "bk-w4"];
+
+  it("shows one row per word, and the rungs of the ladder as columns", () => {
+    const book = unitOf(fullBook(), FOUR);
+    renderUnit(makeSession(book).session, book);
+    goToExercises();
+
+    expect(screen.getByText("Coverage")).toBeTruthy();
+    for (const gloss of ["word 1", "word 2", "word 3", "word 4"]) {
+      expect(screen.getByText(`сөз${gloss.slice(-1)} · ${gloss}`)).toBeTruthy();
+    }
+    expect(screen.getByRole("columnheader", { name: "10" })).toBeTruthy();
+  });
+
+  it("says how far a word reaches today", () => {
+    // A lexeme always reaches 9: `write` is derived from any lexeme or
+    // concept with no authored task (plan 0025 §9), which is what made the
+    // top of the ladder reachable on already-published content.
+    const book = unitOf(fullBook(), FOUR);
+    renderUnit(makeSession(book).session, book);
+    goToExercises();
+
+    expect(screen.getAllByText("reaches level 9").length).toBe(4);
+  });
+
+  it("says what generation would add, before the Book opts in", () => {
+    // Sentences have no derived exercise, so authored-only they reach
+    // nothing — and the grid says so, plus what ticking the switch buys.
+    const book = unitOf(fullBook(), ["bk-s1", "bk-s2", "bk-s3", "bk-s4"]);
+    renderUnit(makeSession(book).session, book);
+    goToExercises();
+
+    expect(
+      screen.getAllByText(
+        (text) =>
+          text.startsWith("no exercise reaches this word") &&
+          text.includes("if generated"),
+      ).length,
+    ).toBe(4);
+  });
+
+  it("drops the preview wording once the Book has opted in", () => {
+    const base = unitOf(fullBook(), ["bk-s1", "bk-s2", "bk-s3", "bk-s4"]);
+    const book: BookDocument = {
+      ...base,
+      topic: { ...(base.topic as object), generatedExercises: true },
+    };
+    renderUnit(makeSession(book).session, book);
+    goToExercises();
+
+    expect(screen.getAllByText("reaches level 10").length).toBe(4);
+    expect(screen.queryByText(/if generated/)).toBeNull();
+  });
+
+  it("names the target on a word its unit caps", () => {
+    const base = unitOf(fullBook(), FOUR);
+    const book: BookDocument = {
+      ...base,
+      units: [{ ...(base.units[0] as object), itemTargets: { "bk-w1": 2 } }],
+    };
+    renderUnit(makeSession(book).session, book);
+    goToExercises();
+
+    expect(screen.getByText("stops at 2")).toBeTruthy();
+  });
+
+  it("keeps the authored list under it, as the override", () => {
+    const book = unitOf(fullBook(), FOUR);
+    renderUnit(makeSession(book).session, book);
+    goToExercises();
+
+    expect(screen.getByText("+ add an exercise")).toBeTruthy();
+  });
+
+  it("stays out of learner mode entirely", () => {
+    const book = unitOf(fullBook(), FOUR);
+    renderUnit(null, book);
+    for (const dot of screen.getAllByRole("button", { name: /^Page \d+ of/ })) {
+      fireEvent.click(dot);
+      expect(screen.queryByText("Coverage")).toBeNull();
+    }
+  });
+});

@@ -2121,3 +2121,107 @@ textarea {
 .archive-section > summary::-webkit-details-marker {
   display: none;
 }
+
+/* The (item × level) coverage grid on a unit's Exercises page (plan 0026
+ * §8). A table because it is one: rows are words, columns are the ten rungs
+ * of the exercise ladder, and a screen reader should read it that way.
+ * Horizontally scrollable rather than wrapped — ten narrow columns plus a
+ * word do not fit a phone, and a wrapped ladder is not a ladder. */
+.coverage {
+  margin-bottom: 1.5rem;
+}
+.coverage-lede {
+  color: var(--locked-fg);
+  margin: 0 0 0.75rem;
+}
+.coverage-scroll {
+  overflow-x: auto;
+}
+.coverage-grid {
+  border-collapse: collapse;
+  width: 100%;
+}
+.coverage-grid th,
+.coverage-grid td {
+  text-align: left;
+  padding: 0.2rem 0.15rem;
+}
+.coverage-grid thead th {
+  color: var(--locked-fg);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-align: center;
+  width: 1.4rem;
+}
+.coverage-grid thead th:first-child {
+  text-align: left;
+  width: auto;
+}
+.coverage-grid tbody th {
+  font-weight: 500;
+  min-width: 6.5rem;
+  padding-right: 0.5rem;
+}
+.coverage-word {
+  display: block;
+}
+.coverage-reach,
+.coverage-target {
+  color: var(--locked-fg);
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+.coverage-slot {
+  text-align: center;
+}
+.coverage-cell {
+  border: 1px solid var(--card-border);
+  border-radius: 3px;
+  display: block;
+  height: 1.1rem;
+  min-width: 1.1rem;
+}
+/* Authored and constructed are told apart by fill *and* border, not by hue
+ * alone — the whole grid is a status display, and color-blind authors read
+ * it too. */
+.coverage-cell.is-authored {
+  background: var(--primary);
+  border-color: var(--primary-pressed);
+}
+.coverage-cell.is-constructed {
+  background: var(--primary-wash);
+  border-color: var(--primary);
+  border-style: dashed;
+}
+.coverage-cell.is-beyond {
+  background: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 3px,
+    var(--card-border) 3px,
+    var(--card-border) 4px
+  );
+}
+.coverage-cell.is-empty {
+  background: transparent;
+}
+.coverage-legend {
+  color: var(--locked-fg);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.75rem;
+  gap: 0.75rem;
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+}
+.coverage-legend li {
+  align-items: center;
+  display: flex;
+  gap: 0.35rem;
+}
+.coverage-legend .coverage-cell {
+  height: 0.9rem;
+  min-width: 0.9rem;
+}

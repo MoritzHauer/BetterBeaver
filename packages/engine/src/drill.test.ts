@@ -71,6 +71,35 @@ describe("advanceDrill", () => {
     expect(gapFor(state)).toBeGreaterThan(firstGap - 1);
   });
 
+  it("keeps the word's own later repetitions when it answers its own visit", () => {
+    // A correct answer pays off the visit just consumed and nothing else.
+    // Searching the queue for the current word instead found its own next
+    // repetition and dropped it, so every session ran at one repetition per
+    // word whatever the Practice depth preset said — and ended still owing
+    // the difference, on a count the learner can see.
+    let state = startDrill(["a", "b"], 2);
+    state = advanceDrill(state, ok("a"));
+    expect(state.remaining).toBe(3);
+    expect(state.queue.map((v) => v.unitId)).toEqual(["b", "a", "b"]);
+    expect(state.done).toEqual([]);
+  });
+
+  it("plays every repetition it promised, and ends owing nothing", () => {
+    let state = startDrill(["a", "b", "c"], 3);
+    let asked = 0;
+    for (let guard = 0; guard < 50; guard++) {
+      const visit = nextVisit(state);
+      if (visit === null) {
+        break;
+      }
+      asked += 1;
+      state = advanceDrill(state, ok(visit.unitId));
+    }
+    expect(asked).toBe(9);
+    expect(state.remaining).toBe(0);
+    expect(state.done.sort()).toEqual(["a", "b", "c"]);
+  });
+
   it("credits every word a matching board graded", () => {
     // One board answers for up to five words. Crediting only the word whose
     // turn it was would throw the other four answers away and ask them again.

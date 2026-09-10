@@ -5,14 +5,19 @@
  * Pure and content-only: the caller passes the word's level in, so nothing
  * here reads progress. `session.ts` turns the answer into a `Question`.
  */
-import type { Content, Exercise, Item, Unit } from "@betterbeaver/schema";
+import type { Content, Exercise, Item } from "@betterbeaver/schema";
 import {
   EXERCISE_LEVEL,
   MAX_EXERCISE_LEVEL,
   MIN_EXERCISE_LEVEL,
   TASK_EXERCISES,
-  recognizePrompt,
 } from "@betterbeaver/schema";
+import {
+  capAtTarget,
+  constructibleExercises,
+  owningUnit,
+  promptIsUnique,
+} from "./construct.js";
 import { shuffle, type Rng } from "./rng.js";
 
 /**
@@ -22,50 +27,14 @@ import { shuffle, type Rng } from "./rng.js";
  */
 export type Slot = "repetition" | "new";
 
-/** The unit that owns `itemId` — unique for any content the validator passed. */
-function owningUnit(itemId: string, content: Content): Unit | undefined {
-  return content.units.find((unit) => unit.itemIds.includes(itemId));
-}
-
 /**
- * True when `item`'s prompt-side text is unique among its unit's same-kind
- * items — the runtime gate on the produce direction (plan 0025 §9).
- *
- * Class (h) only guarantees distinct *display* texts, so two items sharing a
- * `script` while differing in gloss are valid published content and make a
- * produce-direction MCQ ambiguous: for the prompt "beautiful", both кооз and
- * сулуу are defensible answers. A new validator class would retroactively
- * invalidate live Books, so the exercise is withheld instead — the same way
- * one whose assets are missing is.
- */
-function promptIsUnique(item: Item, content: Content): boolean {
-  const unit = owningUnit(item.id, content);
-  if (unit === undefined) {
-    return false;
-  }
-  const itemById = new Map(content.items.map((i) => [i.id, i]));
-  const mine = recognizePrompt(item);
-  return !unit.itemIds.some((id) => {
-    const other = itemById.get(id);
-    return (
-      other !== undefined &&
-      other.id !== item.id &&
-      other.kind === item.kind &&
-      other.kind !== "pair" &&
-      recognizePrompt(other) === mine
-    );
-  });
-}
-
-/**
- * Every exercise `item` can actually be asked as: the ones its unit's tasks
- * authorize, plus the two this plan derives from content that never authored
- * them (§9).
+ * The exercises `item`'s own unit **authored** a task for, plus the two
+ * derived from content that never authored them (plan 0025 §9).
  *
  * Unranked exercises are excluded — `shadowing` checks nothing, so it can
  * neither be drawn to advance a word nor stand in for one that would.
  */
-export function availableExercises(
+export function authoredExercises(
   item: Item,
   content: Content,
 ): readonly Exercise[] {
@@ -96,6 +65,40 @@ export function availableExercises(
   }
 
   return [...found].filter((exercise) => EXERCISE_LEVEL[exercise] !== null);
+}
+
+/**
+ * Every exercise `item` can actually be asked as — what the draw chooses
+ * from.
+ *
+ * For a Book that has opted into generated exercises (plan 0026 §9), that is
+ * the authored set **union** what the constructor can build; for every other
+ * Book it is the authored set alone, so nothing about a shipped Book's
+ * exercise mix changes on the day this lands.
+ *
+ * The union is a *lookup* rule, not a session-construction rule (§ slice 2):
+ * it widens which exercise can fill a slot, never how many slots there are —
+ * length is still word count times the Progression preset (0025 §6). Which
+ * of the two answers a given cell is settled per (item, level) in
+ * `buildExerciseQuestion`, where an authored task wins over a constructed
+ * one at the same level (§3).
+ */
+export function availableExercises(
+  item: Item,
+  content: Content,
+): readonly Exercise[] {
+  const authored = authoredExercises(item, content);
+  const all =
+    content.topic.generatedExercises === true
+      ? [...new Set([...authored, ...constructibleExercises(item, content)])]
+      : authored;
+  // The unit's item target caps whatever the draw chooses from, authored
+  // tasks included (plan 0026 §5): a word meant to stay passive stays
+  // passive whoever wrote the task. Capped **once, over the union** — cap
+  // each half and `capAtTarget`'s never-silence-a-word floor would fire on
+  // the authored half alone, dragging a level-8 `recall` into a Book whose
+  // constructor had a level-1 board ready.
+  return capAtTarget(all, item, content);
 }
 
 /** The subset of `available` sitting at exactly `level`. */
