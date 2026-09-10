@@ -6,6 +6,7 @@ export * from "./documentEdit.js";
 export * from "./documentProblems.js";
 export * from "./documentSource.js";
 export * from "./draw.js";
+export * from "./exam.js";
 export * from "./drill.js";
 export * from "./domain.js";
 export * from "./draftContent.js";
