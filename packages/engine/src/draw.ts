@@ -5,14 +5,14 @@
  * Pure and content-only: the caller passes the word's level in, so nothing
  * here reads progress. `session.ts` turns the answer into a `Question`.
  */
-import type { Content, Exercise, Item, Unit } from "@betterbeaver/schema";
+import type { Content, Exercise, Item } from "@betterbeaver/schema";
 import {
   EXERCISE_LEVEL,
   MAX_EXERCISE_LEVEL,
   MIN_EXERCISE_LEVEL,
   TASK_EXERCISES,
-  recognizePrompt,
 } from "@betterbeaver/schema";
+import { owningUnit, promptIsUnique } from "./construct.js";
 import { shuffle, type Rng } from "./rng.js";
 
 /**
@@ -21,41 +21,6 @@ import { shuffle, type Rng } from "./rng.js";
  * and getting it right is the only thing that advances the level.
  */
 export type Slot = "repetition" | "new";
-
-/** The unit that owns `itemId` — unique for any content the validator passed. */
-function owningUnit(itemId: string, content: Content): Unit | undefined {
-  return content.units.find((unit) => unit.itemIds.includes(itemId));
-}
-
-/**
- * True when `item`'s prompt-side text is unique among its unit's same-kind
- * items — the runtime gate on the produce direction (plan 0025 §9).
- *
- * Class (h) only guarantees distinct *display* texts, so two items sharing a
- * `script` while differing in gloss are valid published content and make a
- * produce-direction MCQ ambiguous: for the prompt "beautiful", both кооз and
- * сулуу are defensible answers. A new validator class would retroactively
- * invalidate live Books, so the exercise is withheld instead — the same way
- * one whose assets are missing is.
- */
-function promptIsUnique(item: Item, content: Content): boolean {
-  const unit = owningUnit(item.id, content);
-  if (unit === undefined) {
-    return false;
-  }
-  const itemById = new Map(content.items.map((i) => [i.id, i]));
-  const mine = recognizePrompt(item);
-  return !unit.itemIds.some((id) => {
-    const other = itemById.get(id);
-    return (
-      other !== undefined &&
-      other.id !== item.id &&
-      other.kind === item.kind &&
-      other.kind !== "pair" &&
-      recognizePrompt(other) === mine
-    );
-  });
-}
 
 /**
  * Every exercise `item` can actually be asked as: the ones its unit's tasks
