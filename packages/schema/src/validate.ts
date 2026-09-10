@@ -6,10 +6,12 @@ import {
   unitSchema,
   itemSchema,
   taskSchema,
+  examSchema,
   resourceSchema,
   domainSchema,
   familySchema,
   itemDisplayText,
+  hasGenericPresentation,
   recognizePrompt,
   parseClozeMarkup,
   sentenceTokens,
@@ -27,6 +29,7 @@ import {
   type Unit,
   type Item,
   type Task,
+  type Exam,
   type Resource,
   type Domain,
   type Family,
@@ -39,6 +42,9 @@ export interface Content {
   /** Book-owned items plus the domain entries referenced by this book's units (plan 0006, pinned). */
   items: Item[];
   tasks: Task[];
+  /** The Book's exams (plan 0027 §3), lesson-level siblings listed in
+   * `topic.examIds` order. Always present, empty for a Book with none. */
+  exams: Exam[];
   resources: Resource[];
   notes: { id: string; stem: string }[];
 }
@@ -50,6 +56,11 @@ export interface ValidateContentInput {
   /** Book-owned items only: sentences, pairs, and (for language books) non-lexicon concepts. */
   items: unknown[];
   tasks: unknown[];
+  /** Optional for the same additive-only reason `bookSchema.examIds` is
+   * (plan 0017 decision 5): a document authored before plan 0027 — a private
+   * Book above all, which no republish can ever reach — simply has no
+   * `exams` key, and must keep loading. Absent reads as none. */
+  exams?: unknown[];
   resources: unknown[];
   noteStems: string[];
   /** Two separate stem lists (never cross-checked) so an `imageRef` can never validate against an audio file. */
@@ -179,6 +190,7 @@ export interface ParsedSet {
   /** Book-owned items ONLY — never the merged pool. See the doc comment on `checkReferences`. */
   items: Item[];
   tasks: Task[];
+  exams: Exam[];
   resources: Resource[];
   notes: { id: string; stem: string }[];
   domain: Domain;
@@ -215,6 +227,7 @@ export function checkReferences(parsed: ParsedSet): string[] {
     units,
     items,
     tasks,
+    exams,
     resources,
     notes,
     domain,
@@ -239,6 +252,7 @@ export function checkReferences(parsed: ParsedSet): string[] {
   // would silently share its `bb.item.<id>` SRS state (plan 0006).
   reportDuplicateIds([...items, ...entries], "item", uniquenessErrors);
   reportDuplicateIds(tasks, "task", uniquenessErrors);
+  reportDuplicateIds(exams, "exam", uniquenessErrors);
   reportDuplicateIds(resources, "resource", uniquenessErrors);
   reportDuplicateIds(notes, "note", uniquenessErrors);
   reportDuplicateIds(families, "family", uniquenessErrors);
@@ -247,6 +261,12 @@ export function checkReferences(parsed: ParsedSet): string[] {
     "topic.lessonIds",
     book.lessonIds,
     "lessonIds",
+    uniquenessErrors,
+  );
+  reportDuplicateEntries(
+    "topic.examIds",
+    book.examIds ?? [],
+    "examIds",
     uniquenessErrors,
   );
   for (const lesson of lessons) {
@@ -279,6 +299,7 @@ export function checkReferences(parsed: ParsedSet): string[] {
   const itemById = new Map([...items, ...entries].map((i) => [i.id, i]));
   const entryById = new Map(entries.map((e) => [e.id, e]));
   const taskById = new Map(tasks.map((t) => [t.id, t]));
+  const examById = new Map(exams.map((e) => [e.id, e]));
   const resourceById = new Map(resources.map((r) => [r.id, r]));
   const noteById = new Map(notes.map((n) => [n.id, n]));
 
@@ -289,6 +310,7 @@ export function checkReferences(parsed: ParsedSet): string[] {
     ["unit", units],
     ["item", items],
     ["task", tasks],
+    ["exam", exams],
     ["resource", resources],
   ] as const) {
     for (const entity of entities) {
@@ -545,6 +567,31 @@ export function checkReferences(parsed: ParsedSet): string[] {
       }
     }
 
+    // class (af): task/payload pairing (plan 0027 §7). `labels` present
+    // means the question is a row assignment, absent means it is a
+    // select-n; the two task types are mutually exclusive over the one
+    // payload shape, and this is what enforces it. Without the check an
+    // `assign` task over a label-less question would render two blank
+    // category buttons.
+    if (task.type === "choice" || task.type === "assign") {
+      for (const item of taskItems) {
+        if (item.kind !== "question") {
+          continue; // kind mismatch already reported under class (o).
+        }
+        const hasLabels = item.payload.labels !== undefined;
+        if (task.type === "choice" && hasLabels) {
+          errors.push(
+            `${task.id}: choice task item "${item.id}" has "labels" (a question with labels is an assign question)`,
+          );
+        }
+        if (task.type === "assign" && !hasLabels) {
+          errors.push(
+            `${task.id}: assign task item "${item.id}" has no "labels" (an assign question needs exactly two)`,
+          );
+        }
+      }
+    }
+
     // class (m), continued: a cloze task item with zero blanks (malformed
     // markup itself is checked below, over every sentence item).
     if (task.type === "cloze") {
@@ -576,6 +623,12 @@ export function checkReferences(parsed: ParsedSet): string[] {
           );
         }
       }
+      continue;
+    }
+    // A `question` carries no asset refs, no cloze text and no `links`: its
+    // payload is the stem and its authored options, so every check below is
+    // inapplicable rather than merely passing.
+    if (item.kind === "question") {
       continue;
     }
     if (
@@ -625,7 +678,11 @@ export function checkReferences(parsed: ParsedSet): string[] {
     }
     for (const id of task.itemIds) {
       const item = itemById.get(id);
-      if (item === undefined || item.kind === "pair") {
+      if (
+        item === undefined ||
+        item.kind === "pair" ||
+        item.kind === "question"
+      ) {
         continue; // dangling ref (a) or kind mismatch (o) already reported.
       }
       if (requiredAsset === "audio" && item.payload.audioRef === undefined) {
@@ -650,11 +707,11 @@ export function checkReferences(parsed: ParsedSet): string[] {
     const itemIdsByKindAndText = new Map<string, Map<string, string[]>>();
     for (const id of unit.itemIds) {
       const item = itemById.get(id);
-      // `pair` items have no display text (they only ever feed
-      // `minimal-pair`, which doesn't use `itemDisplayText`) — skip them so
+      // `pair` and `question` items have no display text (each only ever
+      // feeds the task types that read its payload directly) — skip them so
       // this loop, which runs over every item unconditionally, doesn't hit
-      // itemDisplayText's permanent throw for that kind.
-      if (item === undefined || item.kind === "pair") {
+      // itemDisplayText's permanent throw for those kinds.
+      if (item === undefined || !hasGenericPresentation(item)) {
         continue;
       }
       const text = itemDisplayText(item);
@@ -729,6 +786,105 @@ export function checkReferences(parsed: ParsedSet): string[] {
       if (!authored && !constructible) {
         errors.push(
           `${unit.id}: item "${id}" is reached by no exercise, authored or constructed`,
+        );
+      }
+    }
+  }
+
+  // --- class (ae): a `question` payload (plan 0027 §7, numbered after
+  // 0026's (ac)/(ad) rather than the plan's provisional letters).
+  //
+  // Zod already pins the shapes; what it cannot express is the two rules
+  // that make a question answerable. A `choice` question with every option
+  // correct (or none) is degenerate — there is nothing to discriminate, and
+  // the pick count, which is derived from the correct options rather than
+  // authored, would be the whole list or zero. Blank labels would render an
+  // `assign` question as two unlabelled buttons. ---
+  for (const item of items) {
+    if (item.kind !== "question") {
+      continue;
+    }
+    const { options, labels, stem } = item.payload;
+    if (stem.trim() === "") {
+      errors.push(`${item.id}: question stem is blank`);
+    }
+    if (options.length < 2) {
+      errors.push(
+        `${item.id}: question has ${options.length} option(s) (needs >= 2)`,
+      );
+    }
+    for (const [index, option] of options.entries()) {
+      if (option.text.trim() === "") {
+        errors.push(`${item.id}: question option ${index + 1} is blank`);
+      }
+    }
+    if (labels === undefined) {
+      if (!options.some((option) => option.correct)) {
+        errors.push(
+          `${item.id}: choice question has no correct option (nothing to pick)`,
+        );
+      }
+      if (options.every((option) => option.correct)) {
+        errors.push(
+          `${item.id}: choice question has no incorrect option (every option is correct)`,
+        );
+      }
+    } else {
+      for (const [index, label] of labels.entries()) {
+        if (label.trim() === "") {
+          errors.push(
+            `${item.id}: assign question label ${index + 1} is blank`,
+          );
+        }
+      }
+    }
+  }
+
+  // --- class (ag): exams (plan 0027 §7). Ownership runs both ways, as
+  // `lessonIds` already has; the one-item rule binds only exam-referenced
+  // tasks, since an exam entry carries one question's points and a
+  // multi-item task would make them ambiguous. A unit's practice task may
+  // still hold several question items. ---
+  const bookExamIds = book.examIds ?? [];
+  for (const id of bookExamIds) {
+    if (!examById.has(id)) {
+      errors.push(`topic.examIds: dangling exam reference "${id}"`);
+    }
+  }
+  const bookExamIdSet = new Set(bookExamIds);
+  for (const exam of exams) {
+    if (!bookExamIdSet.has(exam.id)) {
+      errors.push(`${exam.id}: exam is not referenced in topic.examIds`);
+    }
+    if (exam.topicId !== book.id) {
+      errors.push(
+        `${exam.id}: topicId "${exam.topicId}" does not match topic id "${book.id}"`,
+      );
+    }
+    const seenTaskIds = new Set<string>();
+    for (const question of exam.questions) {
+      if (seenTaskIds.has(question.taskId)) {
+        errors.push(
+          `${exam.id}: duplicate task reference "${question.taskId}" in questions`,
+        );
+      }
+      seenTaskIds.add(question.taskId);
+      const task = taskById.get(question.taskId);
+      if (task === undefined) {
+        errors.push(
+          `${exam.id}: dangling task reference "${question.taskId}" in questions`,
+        );
+        continue;
+      }
+      if (task.type !== "choice" && task.type !== "assign") {
+        errors.push(
+          `${exam.id}: task "${task.id}" is of type "${task.type}" (an exam holds only choice/assign tasks)`,
+        );
+        continue;
+      }
+      if (task.itemIds.length !== 1) {
+        errors.push(
+          `${exam.id}: task "${task.id}" holds ${task.itemIds.length} items (an exam question is exactly one)`,
         );
       }
     }
@@ -984,6 +1140,12 @@ export function validateContent(
     (raw, i) => idLabel(raw, i, "tasks"),
     phase1Errors,
   );
+  const exams = parseAll(
+    examSchema,
+    input.exams ?? [],
+    (raw, i) => idLabel(raw, i, "exams"),
+    phase1Errors,
+  );
   const resources = parseAll(
     resourceSchema,
     input.resources,
@@ -1030,6 +1192,7 @@ export function validateContent(
     units === undefined ||
     items === undefined ||
     tasks === undefined ||
+    exams === undefined ||
     resources === undefined ||
     entries === undefined ||
     families === undefined
@@ -1050,6 +1213,7 @@ export function validateContent(
     units,
     items,
     tasks,
+    exams,
     resources,
     notes,
     domain,
@@ -1081,6 +1245,7 @@ export function validateContent(
       units,
       items: [...items, ...referencedEntries],
       tasks,
+      exams,
       resources,
       notes,
     },

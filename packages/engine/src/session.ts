@@ -8,6 +8,7 @@ import type {
 } from "@betterbeaver/schema";
 import {
   gapClozeMarkup,
+  hasGenericPresentation,
   itemDisplayText,
   parseClozeMarkup,
   recallPrompt,
@@ -151,6 +152,45 @@ export interface BuildQuestion {
   targetTokens: string[];
 }
 
+/**
+ * A select-n multiple-choice question whose options are **authored on the
+ * item**, not sampled from its unit siblings (plan 0027 §5).
+ *
+ * `selectCount` is derived — it is the number of correct options — because a
+ * separately authored "pick 3" could disagree with the options themselves.
+ * The human-readable "choose the three that fit best" belongs in the task's
+ * `instructions`.
+ *
+ * Option order is the authored order, deliberately not shuffled: a question
+ * then reads the same in practice as in the exam, and an author can rely on
+ * "all of the above" style ordering. Auto-graded via `checkChoiceAnswer`.
+ */
+export interface ChoiceQuestion {
+  kind: "choice";
+  unitId: string;
+  stem: string;
+  choices: string[];
+  correctIndices: number[];
+  selectCount: number;
+}
+
+/**
+ * A row-wise binary assignment against two authored labels (plan 0027 §5):
+ * every row is judged independently, so elimination never helps.
+ *
+ * `correctLabelIndex[i]` is 0 or 1 — the option's `correct: true` means "the
+ * first label", per the authoring rule that the affirmative label goes first
+ * where there is one. Auto-graded via `checkAssignAnswer`.
+ */
+export interface AssignQuestion {
+  kind: "assign";
+  unitId: string;
+  stem: string;
+  rows: string[];
+  labels: [string, string];
+  correctLabelIndex: number[];
+}
+
 /** A note-derived scheduling unit due for review (plan 0008 step 7): the
  * note's markdown is the card itself, self-graded like `RecallQuestion` —
  * review-only, task sessions never produce this kind. */
@@ -174,6 +214,8 @@ export type Question =
   | MinimalPairQuestion
   | PictureQuestion
   | BuildQuestion
+  | ChoiceQuestion
+  | AssignQuestion
   | NoteQuestion;
 
 /** One `(schedulingUnitId, quality)` grading outcome (the outcome-list contract, plan 0002). */
@@ -267,6 +309,9 @@ function requiredAudioStem(item: Item): string {
   if (item.kind === "pair") {
     throw new Error(`item "${item.id}" is a pair; use its own a/b audioRef`);
   }
+  if (item.kind === "question") {
+    throw new Error(`item "${item.id}" is a question; it carries no audio`);
+  }
   const stem = item.payload.audioRef;
   if (stem === undefined) {
     throw new Error(`item "${item.id}" is missing audioRef`);
@@ -295,6 +340,10 @@ function shadowingTranscript(item: Item): string[] {
       return [item.payload.term];
     case "sentence":
       return [stripClozeMarkup(item.payload.text)];
+    case "question":
+      throw new Error(
+        `item "${item.id}" is a question; shadowing never uses question items`,
+      );
     case "pair":
       throw new Error(
         `item "${item.id}" is a pair; shadowing never uses pair items`,
@@ -330,6 +379,72 @@ function buildMinimalPairQuestion(
     choices: [item.payload.a.script, item.payload.b.script],
     correctIndex: playsA ? 0 : 1,
   };
+}
+
+/** Builds the `choice`/`assign` question one authored `question` item is
+ * (plan 0027 §5) — which of the two it is, is the payload's own answer:
+ * `labels` present means a row assignment, absent means a select-n. The
+ * validator's class (af) is what keeps an authored task from disagreeing. */
+function buildQuestionItemQuestion(
+  item: Extract<Item, { kind: "question" }>,
+  unitId: string,
+): ChoiceQuestion | AssignQuestion {
+  const { stem, options, labels } = item.payload;
+  if (labels === undefined) {
+    return {
+      kind: "choice",
+      unitId,
+      stem,
+      choices: options.map((option) => option.text),
+      correctIndices: options.flatMap((option, index) =>
+        option.correct ? [index] : [],
+      ),
+      selectCount: options.filter((option) => option.correct).length,
+    };
+  }
+  return {
+    kind: "assign",
+    unitId,
+    stem,
+    rows: options.map((option) => option.text),
+    labels,
+    correctLabelIndex: options.map((option) => (option.correct ? 0 : 1)),
+  };
+}
+
+/**
+ * Checks a `choice` answer: the selected indices must be exactly the correct
+ * ones (order-insensitive, duplicates ignored).
+ *
+ * Over-selection is unreachable by construction — the runner caps selection
+ * at `selectCount` (plan 0027 §4) — so this is a set comparison rather than
+ * a scoring rule. Partial correctness is simply wrong here; the exam's
+ * partial credit is `scoreExam`'s business and touches no SRS state.
+ */
+export function checkChoiceAnswer(
+  question: ChoiceQuestion,
+  selectedIndices: number[],
+): boolean {
+  const selected = new Set(selectedIndices);
+  return (
+    selected.size === question.correctIndices.length &&
+    question.correctIndices.every((index) => selected.has(index))
+  );
+}
+
+/**
+ * Checks an `assign` answer: every row must carry the correct label. A row
+ * left unanswered (`null`) is wrong here — in **practice**, an incomplete
+ * answer is an incorrect one. Exam scoring is where a blank row instead
+ * costs nothing (plan 0027 §4).
+ */
+export function checkAssignAnswer(
+  question: AssignQuestion,
+  chosenLabelIndex: (number | null)[],
+): boolean {
+  return question.correctLabelIndex.every(
+    (correct, row) => chosenLabelIndex[row] === correct,
+  );
 }
 
 /** Checks a typed answer (cloze/dictation) against a target, both normalized via `normalizeTypedInput`. */
@@ -614,6 +729,16 @@ export function buildTaskSession(
       });
     }
 
+    case "choice":
+    case "assign":
+      return task.itemIds.map((itemId): Question => {
+        const item = itemById.get(itemId)!;
+        if (item.kind !== "question") {
+          throw new Error(`${task.type} item "${itemId}" is not a question`);
+        }
+        return buildQuestionItemQuestion(item, itemId);
+      });
+
     default:
       task.type satisfies never;
       throw new Error(`unknown task type: ${task.type as string}`);
@@ -687,7 +812,7 @@ export function buildExerciseQuestion(
   }
 
   if (exercise === "recognize-produce") {
-    if (item.kind === "pair") {
+    if (!hasGenericPresentation(item)) {
       return null;
     }
     const owner = content.units.find((u) => u.itemIds.includes(item.id));
@@ -886,6 +1011,8 @@ function countTaskQuestions(task: Task, itemById: Map<string, Item>): number {
     case "minimal-pair":
     case "picture":
     case "build":
+    case "choice":
+    case "assign":
       return task.itemIds.length;
     default:
       task.type satisfies never;
@@ -1067,6 +1194,12 @@ export function buildReviewSession(
     }
     if (unit.item.kind === "pair") {
       return buildMinimalPairQuestion(unit.item, rng);
+    }
+    // Plan 0027 §5, the same rule `pair` follows: a question item's only
+    // presentation is its own authored payload, so a due one comes back as
+    // exactly the card it is. `recallQuestion` below would throw for it.
+    if (unit.item.kind === "question") {
+      return buildQuestionItemQuestion(unit.item, unit.id);
     }
     if (unit.item.kind === "sentence") {
       const exercise = sentenceExerciseQuestion(unit.item, content, rng);

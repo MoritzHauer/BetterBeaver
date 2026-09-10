@@ -209,6 +209,7 @@ describe("dueUnits / dueDomainUnits pinning (plan 0008)", () => {
     noteIds: [],
   };
   const content: Content = {
+    exams: [],
     topic: {
       id: "t-topic",
       code: "t",

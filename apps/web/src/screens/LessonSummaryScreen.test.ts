@@ -47,6 +47,7 @@ const lessonA: Lesson = {
 };
 
 const content: Content = {
+  exams: [],
   topic: {
     id: "t-topic",
     code: "t",

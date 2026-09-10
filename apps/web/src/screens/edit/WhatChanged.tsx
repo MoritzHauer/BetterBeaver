@@ -222,7 +222,8 @@ export function entityTarget(
 }
 
 /** A title for an item without touching `itemDisplayText`, which throws on
- * a `pair` — the same trap slice 8's `itemLabel` records. */
+ * a `pair` and on a `question` — the same trap slice 8's `itemLabel`
+ * records. */
 function itemTitle(item: Content["items"][number]): string {
   switch (item.kind) {
     case "lexeme":
@@ -233,6 +234,8 @@ function itemTitle(item: Content["items"][number]): string {
       return item.payload.translation;
     case "pair":
       return `${item.payload.a.script} / ${item.payload.b.script}`;
+    case "question":
+      return item.payload.stem;
   }
 }
 

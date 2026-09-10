@@ -21,6 +21,7 @@ import {
   MIN_EXERCISE_LEVEL,
   RECOGNIZE_DISTRACTOR_COUNT,
   parseClozeMarkup,
+  hasGenericPresentation,
   recognizePrompt,
   sentenceTokens,
 } from "@betterbeaver/schema";
@@ -70,12 +71,12 @@ export function promptIsUnique(item: Item, content: Content): boolean {
   if (owningUnit(item.id, content) === undefined) {
     return false;
   }
-  if (item.kind === "pair") {
+  if (!hasGenericPresentation(item)) {
     return false;
   }
   const mine = recognizePrompt(item);
   return !sameKindSiblings(item, content).some(
-    (other) => other.kind !== "pair" && recognizePrompt(other) === mine,
+    (other) => hasGenericPresentation(other) && recognizePrompt(other) === mine,
   );
 }
 
@@ -99,7 +100,11 @@ function clozeBlankCount(item: Item): number {
 
 /** The item's own audio stem, for the three exercises that need one (class (n)). */
 function hasAudio(item: Item): boolean {
-  return item.kind !== "pair" && item.payload.audioRef !== undefined;
+  return (
+    item.kind !== "pair" &&
+    item.kind !== "question" &&
+    item.payload.audioRef !== undefined
+  );
 }
 
 /**
@@ -118,9 +123,10 @@ function canConstruct(
   const isSentence = item.kind === "sentence";
   // Positive kind guards throughout, mirroring `TASK_ALLOWED_ITEM_KINDS`:
   // every presentation helper (`recognizePrompt`, `itemDisplayText`,
-  // `recallPrompt`) is exhaustive over today's four kinds and throws outside
-  // them, so a kind added later must come here and say what it can be asked
-  // as rather than inheriting a rung it cannot render.
+  // `recallPrompt`) is exhaustive over the item kinds and throws outside the
+  // ones with a generic presentation, so a kind added later must come here
+  // and say what it can be asked as rather than inheriting a rung it cannot
+  // render. Plan 0027's `question` did exactly that, at the two cases below.
   const isAskable = isWord || isSentence;
 
   switch (exercise) {
@@ -163,6 +169,16 @@ function canConstruct(
       return isSentence && hasAudio(item);
     case "shadowing":
       return false;
+    // Plan 0027 §1: a question's options and their correctness are payload,
+    // and the task type is derivable from the payload — `labels` present
+    // means `assign`, absent means `choice`. So an authored question is
+    // playable with no authored task at all, which is 0026's central
+    // pattern in its clearest case; what construction still must not do is
+    // invent the options, and it never sees a chance to.
+    case "choice":
+      return item.kind === "question" && item.payload.labels === undefined;
+    case "assign":
+      return item.kind === "question" && item.payload.labels !== undefined;
   }
 }
 

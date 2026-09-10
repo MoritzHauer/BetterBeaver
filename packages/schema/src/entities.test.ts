@@ -17,6 +17,10 @@ describe("the exercise level table (plan 0025 §2)", () => {
       shadowing: null,
       matching: 1,
       recognize: 2,
+      // Plan 0027 §2a: `choice` is `recognize`'s act with authored
+      // distractors, `assign` a rung above because elimination never helps.
+      choice: 2,
+      assign: 3,
       listen: 3,
       "minimal-pair": 3,
       "recognize-produce": 4,

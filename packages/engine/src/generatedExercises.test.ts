@@ -54,6 +54,7 @@ function bookOf(
     noteIds: [],
   };
   const content: Content = {
+    exams: [],
     topic: {
       id: "t",
       code: "t",

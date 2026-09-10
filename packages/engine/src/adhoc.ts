@@ -1,5 +1,6 @@
 import type { Item, LinkType } from "@betterbeaver/schema";
 import {
+  hasGenericPresentation,
   itemDisplayText,
   recallPrompt,
   recallReveal,
@@ -47,7 +48,9 @@ function modeUnavailableReason(
       }
       if (mode === "listen" && !ttsAvailable) {
         const unplayable = items.some(
-          (item) => item.kind === "pair" || item.payload.audioRef === undefined,
+          (item) =>
+            !hasGenericPresentation(item) ||
+            item.payload.audioRef === undefined,
         );
         if (unplayable) {
           return "some words have no audio and read-aloud is unavailable";
@@ -189,7 +192,7 @@ export function buildAdhocSession(
           kind: "listen",
           unitId: item.id,
           audio:
-            item.kind !== "pair" && item.payload.audioRef !== undefined
+            hasGenericPresentation(item) && item.payload.audioRef !== undefined
               ? { kind: "stem", stem: item.payload.audioRef }
               : { kind: "speak", text: recognizePrompt(item) },
           choices,
