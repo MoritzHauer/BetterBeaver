@@ -74,11 +74,17 @@ export async function dueUnits(
  * scheduling units are shared with the domain's other Books, so fetching
  * them once is both fewer reads and one consistent snapshot. Unit ids are
  * unique across Books, so the merged map has no collisions.
+ *
+ * `legacyAttemptedTaskIds` is the pre-0025 attempted-task set, passed
+ * straight through to grandfather completions earned under the rule the
+ * word level replaced (plan 0026 §4). It lives in the web layer's storage,
+ * not in `ProgressStore`, precisely because nothing writes it any more.
  */
 export async function collectUnitProgress(
   contents: Content[],
   store: ProgressStore,
   pace?: ReviewPace,
+  legacyAttemptedTaskIds?: ReadonlySet<string>,
 ): Promise<Map<string, UnitProgress>> {
   const unitIds = new Set<string>();
   for (const content of contents) {
@@ -93,6 +99,7 @@ export async function collectUnitProgress(
       content,
       states,
       pace,
+      legacyAttemptedTaskIds,
     )) {
       progress.set(unitId, unitProgress);
     }

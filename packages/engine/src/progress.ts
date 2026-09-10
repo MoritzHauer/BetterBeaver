@@ -54,11 +54,23 @@ const EMPTY_PROGRESS: UnitProgress = {
  * exercises", and the alternative is a unit nothing can ever finish sitting
  * across the navigation spine. That is the same vacuous truth the
  * every-task-attempted rule had.
+ *
+ * `legacyAttemptedTaskIds` grandfathers completions earned under the rule
+ * this one replaced (plan 0026 §4). The level rule is stricter twice over —
+ * it wants every word, and it wants them *right* — so units that read
+ * complete before it landed could flip back, re-locking gates and
+ * regressing bars for a learner who did nothing wrong. Complete is
+ * therefore the new rule **or** the old one, in the repo's existing
+ * presence-based, self-erasing shape (plan 0006): the old key is read,
+ * never written again, and ages out as content is re-studied. Only
+ * `complete` is grandfathered — `percent` and `started` stay honest, since
+ * they describe the levels rather than gate anything.
  */
 export function unitProgressByBook(
   content: Content,
   states: ReadonlyMap<string, SrsState>,
   pace?: ReviewPace,
+  legacyAttemptedTaskIds?: ReadonlySet<string>,
 ): Map<string, UnitProgress> {
   const wordsByItemId = new Map<string, SchedulingUnit[]>();
   for (const schedulingUnit of schedulingUnits(content)) {
@@ -89,11 +101,16 @@ export function unitProgressByBook(
         }
       }
     }
+    const legacy =
+      legacyAttemptedTaskIds !== undefined &&
+      legacyAttemptedTaskIds.size > 0 &&
+      unit.taskIds.length > 0 &&
+      unit.taskIds.every((taskId) => legacyAttemptedTaskIds.has(taskId));
     progress.set(unit.id, {
       percent: total === 0 ? 0 : Math.round((levelSum / total) * 10),
       started,
       total,
-      complete: started === total,
+      complete: started === total || legacy,
     });
   }
   return progress;

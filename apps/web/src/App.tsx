@@ -56,7 +56,10 @@ import { readPrivateBooks } from "./content/private-store";
 import { readArchived } from "./content/myBooks";
 import { newEntityId } from "./content/entity-ids";
 import { newPrivateId } from "./content/private-ids";
-import { createLocalStorageProgressStore } from "./progress/local-storage";
+import {
+  createLocalStorageProgressStore,
+  readLegacyAttemptedTaskIds,
+} from "./progress/local-storage";
 import { createLocalStorageVocabListStore } from "./progress/vocab-lists";
 import { createLocalStorageUserEntryStore } from "./progress/user-entries";
 import { getPinnedUnitIds, togglePinnedUnits } from "./progress/pinned-tasks";
@@ -114,6 +117,13 @@ import {
 type ContentSourceResult = { source: ContentSource } | { errors: string[] };
 
 const progressStore = createLocalStorageProgressStore();
+
+/**
+ * Completions this device earned under the pre-0025 attempted-task rule
+ * (plan 0026 §4), read once at module scope because nothing writes the key
+ * any more — so it cannot change while the app is running.
+ */
+const legacyAttempted = readLegacyAttemptedTaskIds();
 
 /** Preview plays the draft's exercises for real and **records nothing**
  * (spec 0021-9 §1) — inspecting your own draft must not schedule half of it
@@ -1586,6 +1596,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
       [...booksContentMap.values()],
       progressStore,
       schedulingConfig().pace,
+      legacyAttempted,
     ).then((progress) => {
       if (!cancelled) {
         setUnitProgress(progress);
@@ -2446,6 +2457,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           [shown],
           progressStore,
           schedulingConfig().pace,
+          legacyAttempted,
         );
         setUnitProgress((current) => new Map([...current, ...fresh]));
         if (

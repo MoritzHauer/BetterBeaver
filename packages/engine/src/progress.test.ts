@@ -266,6 +266,81 @@ describe("unitProgressByBook (plan 0025 §8)", () => {
       complete: true,
     });
   });
+
+  describe("the legacy grandfather (plan 0026 §4)", () => {
+    it("keeps a unit completed under the old attempted-task rule complete", () => {
+      // Neither word has been answered right, so the level rule says
+      // incomplete — but this learner finished the unit before the level
+      // rule existed, and must not watch gates re-lock.
+      const progress = unitProgressByBook(
+        content,
+        new Map(),
+        undefined,
+        new Set(["t-task-1"]),
+      ).get(unit.id);
+      expect(progress?.complete).toBe(true);
+    });
+
+    it("leaves the bar and the started count honest", () => {
+      // Only `complete` is grandfathered: the percentage describes the
+      // levels, and gates nothing.
+      const progress = unitProgressByBook(
+        content,
+        new Map(),
+        undefined,
+        new Set(["t-task-1"]),
+      ).get(unit.id);
+      expect(progress?.percent).toBe(0);
+      expect(progress?.started).toBe(0);
+    });
+
+    it("needs every one of the unit's tasks, as the old rule did", () => {
+      const twoTaskUnit = makeUnit({
+        id: "t-unit-two-tasks",
+        itemIds: [water.id, bread.id],
+        taskIds: ["t-task-1", "t-task-2"],
+      });
+      const twoTaskContent: Content = {
+        ...content,
+        units: [twoTaskUnit],
+        lessons: [makeLesson({ id: "t-lesson-a", unitIds: [twoTaskUnit.id] })],
+      };
+      expect(
+        unitProgressByBook(
+          twoTaskContent,
+          new Map(),
+          undefined,
+          new Set(["t-task-1"]),
+        ).get(twoTaskUnit.id)?.complete,
+      ).toBe(false);
+    });
+
+    it("grandfathers nothing on a device that never recorded the old set", () => {
+      // A unit's `taskIds.every(...)` over an empty set would otherwise be
+      // vacuously true and mark the whole Book complete.
+      expect(
+        unitProgressByBook(content, new Map(), undefined, new Set()).get(
+          unit.id,
+        )?.complete,
+      ).toBe(false);
+      expect(
+        unitProgressByBook(content, new Map()).get(unit.id)?.complete,
+      ).toBe(false);
+    });
+
+    it("ages out: a unit re-earned under the level rule needs no legacy entry", () => {
+      const progress = unitProgressByBook(
+        content,
+        new Map([
+          [water.id, at(3)],
+          [bread.id, at(1)],
+        ]),
+        undefined,
+        new Set(),
+      ).get(unit.id);
+      expect(progress?.complete).toBe(true);
+    });
+  });
 });
 
 describe("isUnitUnlocked", () => {
