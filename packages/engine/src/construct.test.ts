@@ -3,7 +3,6 @@ import type { Content, Item, Task, Unit } from "@betterbeaver/schema";
 import {
   constructibleExercises,
   exerciseAtLevel,
-  isUnreachable,
   itemCoverage,
   targetLevel,
 } from "./construct.js";
@@ -299,33 +298,35 @@ describe("itemCoverage", () => {
   });
 });
 
-describe("isUnreachable", () => {
-  it("is false for every item kind the app has today", () => {
+describe("what construction guarantees (plan 0026 §7)", () => {
+  it("reaches every item kind the app has today, at some level", () => {
     // Deliberate, and the point of §7 rather than a hole in it: `recall`
     // needs only the item's own two sides and `minimal-pair` *is* the pair
-    // item, so construction reaches every current kind at some level. The
-    // condition is unrepresentable rather than validated — which is what the
-    // plan asks for — and this check is the guarantee written down, ready
-    // for the first item kind that can fail to build.
+    // item, so "a unit item no exercise reaches at all" is unrepresentable
+    // rather than merely rare — which is why validator class (ad) fires on
+    // nothing today. It starts biting on the first kind that can fail to
+    // build, and `canConstruct`'s positive kind guards are what force that
+    // kind to say which rungs it can fill.
     const lone = concept(1);
-    expect(isUnreachable(lone, contentWith([lone]), [])).toBe(false);
+    expect(constructibleExercises(lone, contentWith([lone]))).toContain(
+      "recall",
+    );
 
     const short = sentence(1, "Салам досум");
-    expect(isUnreachable(short, contentWith([short]), [])).toBe(false);
+    expect(constructibleExercises(short, contentWith([short]))).toContain(
+      "recall",
+    );
 
     const p1 = pair(1);
-    expect(isUnreachable(p1, contentWith([p1]), [])).toBe(false);
+    expect(constructibleExercises(p1, contentWith([p1]))).toEqual([
+      "minimal-pair",
+    ]);
   });
 
-  it("is true when nothing constructs and only an unranked task authors", () => {
-    // The shape the check exists for: a `shadowing` task checks no answer,
-    // so an item only that task names is never really asked. Reached here
-    // with an item whose kind the constructor does not know — which is what
-    // a future item kind looks like before its own rungs are wired up.
+  it("finds nothing for a kind it has not been taught", () => {
+    // What a future item kind looks like before its rungs are wired up.
     const unknown = { ...concept(1), kind: "future" } as unknown as Item;
-    expect(isUnreachable(unknown, contentWith([unknown]), ["shadowing"])).toBe(
-      true,
-    );
+    expect(constructibleExercises(unknown, contentWith([unknown]))).toEqual([]);
   });
 });
 

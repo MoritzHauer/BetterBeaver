@@ -324,16 +324,3 @@ export function itemCoverage(
   }
   return rows;
 }
-
-/** True when no exercise, authored or constructed, reaches `item` at all —
- * the rot described in the plan's Purpose, and validator class (ac) (§7). */
-export function isUnreachable(
-  item: Item,
-  content: Content,
-  authoredExercises: readonly Exercise[],
-): boolean {
-  return (
-    authoredExercises.every((exercise) => EXERCISE_LEVEL[exercise] === null) &&
-    constructibleExercises(item, content).length === 0
-  );
-}
