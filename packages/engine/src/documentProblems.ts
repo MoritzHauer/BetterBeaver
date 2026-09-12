@@ -14,6 +14,7 @@ import {
 } from "@betterbeaver/schema";
 import { arr, draftContent, obj } from "./draftContent.js";
 import type { AssetStems } from "./documentSource.js";
+import { drillItemIds } from "./session.js";
 
 export interface Problem {
   /** Entity id, or "topic" / "domain" for the singletons. */
@@ -172,11 +173,56 @@ function referenceProblems(
 }
 
 /**
- * Every problem in `book`/`domain`, from two sources that duplicate zero
- * rules (spec 0021-4 §3): each entity's own zod schema (field-level) plus
- * `checkReferences` over the drafted, coerced set (entity-level). Returns
- * both a flat list and the same problems keyed by `entityId`, built once
- * here so slices 6-8 don't re-scan a flat array per input per render.
+ * Practice-reachability problems (plan 0027 §10): a domain that curates its
+ * `exercises` can leave an item with nothing the drill can build — the
+ * validator can't catch this itself (the schema package cannot call the
+ * engine's `availableExercises`, and a second copy of the rule would drift),
+ * so it surfaces here through the same `drillItemIds` rule the drill uses.
+ *
+ * With no allow-list at all (`parsed.domain.exercises === undefined`), an
+ * item can still lack exercises for ordinary draft reasons (mid-edit, no
+ * task authored yet), and flagging that is out of scope — so this reports
+ * nothing.
+ */
+function practiceProblems(
+  book: BookDocument,
+  domain: DomainDocument,
+  assets: AssetStems,
+): Problem[] {
+  const { content, parsed } = draftContent(book, domain, assets);
+  if (parsed.domain.exercises === undefined) {
+    return [];
+  }
+  const itemById = new Map(content.items.map((item) => [item.id, item]));
+  const problems: Problem[] = [];
+  for (const unit of content.units) {
+    const drillable = new Set(
+      drillItemIds(unit, content, parsed.domain.exercises),
+    );
+    for (const itemId of unit.itemIds) {
+      const item = itemById.get(itemId);
+      if (item === undefined || item.kind === "question") {
+        continue;
+      }
+      if (!drillable.has(itemId)) {
+        problems.push({
+          entityId: itemId,
+          message:
+            "cannot be practised under the domain's exercises (plan 0027 §10)",
+        });
+      }
+    }
+  }
+  return problems;
+}
+
+/**
+ * Every problem in `book`/`domain`, from three sources that duplicate zero
+ * rules (spec 0021-4 §3, plan 0027 §10): each entity's own zod schema
+ * (field-level), `checkReferences` over the drafted, coerced set
+ * (entity-level), and `practiceProblems` (drill-reachability). Returns both
+ * a flat list and the same problems keyed by `entityId`, built once here so
+ * slices 6-8 don't re-scan a flat array per input per render.
  */
 export function documentProblems(
   book: BookDocument,
@@ -186,6 +232,7 @@ export function documentProblems(
   const all = [
     ...fieldProblems(book, domain),
     ...referenceProblems(book, domain, assets),
+    ...practiceProblems(book, domain, assets),
   ];
 
   const byEntity = new Map<string, Problem[]>();

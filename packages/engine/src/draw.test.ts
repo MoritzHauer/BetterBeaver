@@ -113,6 +113,24 @@ describe("availableExercises", () => {
   });
 });
 
+describe("availableExercises with an allow-list (plan 0027 §10)", () => {
+  it("never returns write or recognize-produce when the list excludes them", () => {
+    const content = contentWith([recognizeTask]);
+    const allowed: Exercise[] = ["matching", "recognize", "recall"];
+    const found = availableExercises(concept(1), content, allowed);
+    expect(found).not.toContain("write");
+    expect(found).not.toContain("recognize-produce");
+    expect(found).toContain("recognize");
+  });
+
+  it("leaves behaviour unchanged when no list is given", () => {
+    const content = contentWith([recognizeTask]);
+    expect(availableExercises(concept(1), content)).toEqual(
+      availableExercises(concept(1), content, undefined),
+    );
+  });
+});
+
 describe("drawExercise", () => {
   const all: Exercise[] = [
     "matching",
@@ -460,6 +478,32 @@ describe("buildVisitQuestion", () => {
       first,
     );
     expect(built?.question.kind).toBe("write");
+  });
+
+  it("draws inside the domain's allow-list (plan 0027 §10)", () => {
+    // The companion to `drillItemIds`: that decides which words enter the
+    // session, this keeps the exercise chosen for them inside the list too.
+    // Without it a curated domain still gets asked what it removed — the
+    // test above shows this exact word drawing `write` at level 8.
+    const content = contentWith([recognizeTask]);
+    const unit = content.units[0]!;
+    const allowed: Exercise[] = ["matching", "recognize", "recall"];
+    const built = buildVisitQuestion(
+      visit("t-item-c1"),
+      unit,
+      content,
+      () => 8,
+      first,
+      new Set(),
+      allowed,
+    );
+    // `recognize`, not `recall`: this unit authors no recall task, so with
+    // `write` and the produce direction removed the draw falls back to the
+    // top exercise the list still allows. The load-bearing assertion is the
+    // first one — unlisted `write` is exactly what a curated domain must
+    // never be asked.
+    expect(built?.question.kind).not.toBe("write");
+    expect(built?.question.kind).toBe("recognize");
   });
 
   it("reads a word back down when the session already knocked it lower", () => {

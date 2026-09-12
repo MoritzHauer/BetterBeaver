@@ -82,10 +82,17 @@ export function authoredExercises(
  * of the two answers a given cell is settled per (item, level) in
  * `buildExerciseQuestion`, where an authored task wins over a constructed
  * one at the same level (§3).
+ *
+ * `allowed`, when given, is applied last (plan 0027 §10): the domain's
+ * curated exercise list for a knowledge Book, where a derived exercise like
+ * `write` tests the author's label rather than the concept. It only narrows
+ * the ladder `drawExercise` already walks — a filtered-out exercise is just
+ * another missing level, so `drawExercise` itself needs no change.
  */
 export function availableExercises(
   item: Item,
   content: Content,
+  allowed?: readonly Exercise[],
 ): readonly Exercise[] {
   const authored = authoredExercises(item, content);
   const all =
@@ -98,7 +105,10 @@ export function availableExercises(
   // each half and `capAtTarget`'s never-silence-a-word floor would fire on
   // the authored half alone, dragging a level-8 `recall` into a Book whose
   // constructor had a level-1 board ready.
-  return capAtTarget(all, item, content);
+  const capped = capAtTarget(all, item, content);
+  return allowed === undefined
+    ? capped
+    : capped.filter((exercise) => allowed.includes(exercise));
 }
 
 /** The subset of `available` sitting at exactly `level`. */

@@ -227,3 +227,84 @@ export function scoreExam(
     passed: total >= (exam.ruleset.passPercent / 100) * maxPoints,
   };
 }
+
+/** One lesson's readiness bucket (plan 0027 §4/§6): points scored versus
+ * points available, over the exam entries that test that lesson. */
+export interface LessonReadiness {
+  /** null = the "Other" bucket: entries the exam gave no `lessonId`. */
+  lessonId: string | null;
+  points: number;
+  maxPoints: number;
+  /** 0 when maxPoints is 0. */
+  percent: number;
+}
+
+/**
+ * Readiness per lesson, a second pure function over the same per-question
+ * result `scoreExam` produces (plan 0027 §4/§6). Walks `exam.questions` in
+ * order and buckets each entry's `scored`/`points` by `entry.lessonId ??
+ * null`; an entry with no result is left out of both sums entirely — the
+ * learner never saw it, most likely because content changed after the
+ * result was recorded.
+ *
+ * Bucket order is `lessonIds` order, then any lesson id the exam names that
+ * isn't in `lessonIds` (in first-seen order), then the `null` "Other" bucket
+ * last. Empty buckets (no entry with a result) are omitted.
+ *
+ * `weakestLessonId` is the non-null bucket with the lowest `percent`, ties
+ * going to the earlier bucket; "Other" is never weakest, and the result is
+ * `null` when there is no non-null bucket at all.
+ */
+export function readinessByLesson(
+  exam: Exam,
+  results: readonly ExamQuestionResult[],
+  lessonIds: readonly string[],
+): { buckets: LessonReadiness[]; weakestLessonId: string | null } {
+  const resultByTaskId = new Map(results.map((r) => [r.taskId, r]));
+  const sums = new Map<string | null, { points: number; maxPoints: number }>();
+  const firstSeen: (string | null)[] = [];
+
+  for (const entry of exam.questions) {
+    const result = resultByTaskId.get(entry.taskId);
+    if (result === undefined) {
+      continue;
+    }
+    const key = entry.lessonId ?? null;
+    let sum = sums.get(key);
+    if (sum === undefined) {
+      sum = { points: 0, maxPoints: 0 };
+      sums.set(key, sum);
+      firstSeen.push(key);
+    }
+    sum.points += result.scored;
+    sum.maxPoints += entry.points;
+  }
+
+  const knownOrder = lessonIds.filter((id) => sums.has(id));
+  const unknownOrder = firstSeen.filter(
+    (key): key is string => key !== null && !lessonIds.includes(key),
+  );
+  const bucketOrder: (string | null)[] = [
+    ...knownOrder,
+    ...unknownOrder,
+    ...(sums.has(null) ? [null] : []),
+  ];
+
+  const buckets: LessonReadiness[] = bucketOrder.map((lessonId) => {
+    const sum = sums.get(lessonId)!;
+    const percent =
+      sum.maxPoints === 0 ? 0 : (sum.points / sum.maxPoints) * 100;
+    return { lessonId, points: sum.points, maxPoints: sum.maxPoints, percent };
+  });
+
+  let weakestLessonId: string | null = null;
+  let weakestPercent = Infinity;
+  for (const bucket of buckets) {
+    if (bucket.lessonId !== null && bucket.percent < weakestPercent) {
+      weakestPercent = bucket.percent;
+      weakestLessonId = bucket.lessonId;
+    }
+  }
+
+  return { buckets, weakestLessonId };
+}
