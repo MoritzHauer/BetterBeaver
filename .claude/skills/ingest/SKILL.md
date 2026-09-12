@@ -7,6 +7,8 @@ argument-hint: "The lesson/topic to ingest and its source line range, e.g. 'Fami
 
 Curate the named lesson into shipped content. This is hand curation guided by a checklist, not an extractor — never write code that parses the manual. Content decisions (translations, dedup, task shape) are made here, not delegated to `implementer`.
 
+**Read `docs/content-practices.md` first.** This file is the mechanics; that one is the reasoning behind the sizing, the task shapes, the question rules and the ship order, learned from the content already shipped.
+
 The manual is `~/vault/sources/kyrgyz/Kyrgyz Language Manual/` (~12.5k lines of messy OCR: `ё`↔`е` confusions, garbled words, stray page numbers — trust the lesson body over its headers). Line ranges for the scoped backlog lessons (Transportation, Bazaar, Post Office, Appearance, Weather) are in `docs/plans/archive/0007-ingest-kyrgyz-manual.md` Context; the 8 unscoped lessons each need their own line-range pass first (same plan, step 4). The backlog itself is tracked in `docs/STATUS.md`.
 
 The contract is `packages/schema/src/entities.ts` (item kinds, task validator floors — `RECOGNIZE_DISTRACTOR_COUNT`, the matching 2–8/no-duplicate-prompt cap, `TASK_REQUIRED_ASSET`, cloze markup via `parseClozeMarkup`) enforced at startup by `validateContent`. Read it before authoring if unsure of a rule.
@@ -41,6 +43,32 @@ Since plan 0012 the backend is the content truth and `content/` is the frozen se
 
    Where a source's licence requires attribution, it is a **licence condition, not a courtesy**: put it in the Book description _and_ the exam's `description`, where a learner sees it — not only in a repo comment.
 
+   **Explain every question** (plan 0027's 2026-09-11 amendment). Alongside the options:
+
+   - an **`explanation`** per question — the reasoning as a whole, not a restatement of the correct option;
+   - a **`why`** on every option whose distractor encodes a real misconception, which is what makes the question teach on the way past;
+   - **`explanationGenerated: true`** where the question is transcribed from a source but the explanation is ours (the official mock exam's case). `generated: true` already covers both.
+
+   **A unit's questions are answered on its Check page, never drilled**: each is asked once, in `taskIds` order, and then spaced by Daily Review. Working shape from the `sa` pass (2026-09-12): three questions per unit — two `choice` (one multi-answer, one single-answer) plus one `assign` of 3–4 rows — in exactly two tasks, `<code>-task-<n>-<m>-choice` and `-assign`, appended to the unit's `taskIds` in that order, with item ids `<code>-item-q-<n>-<m>-<k>`. Add the new item ids to `unit.itemIds` too, or class (d) orphans them. **Exam-only** questions go in no unit at all — their task is referenced only by an exam, which is what keeps them unseen until the learner sits it.
+
 5. **Wire.** Update the unit's JSON (`itemIds` = lexeme + sentence ids, `taskIds`, `noteIds`, `unlocksAfterUnitId` chaining the prior unit). If the unit is new, append its id to its **lesson's** `unitIds` (`content/kyrgyz/lessons/*.json`); if the lesson is new too, append the lesson id to `topic.json`'s `lessonIds` (topics own lessons, lessons own units — plan 0008).
 6. **Validate.** Run `corepack pnpm check`. Then browser-verify one full session of the unit: read the text, tap a word to look it up, complete each new task type. Don't mark a lesson done without an actual browser session — a passing `pnpm check` only proves the content is structurally valid, not that it renders or reads correctly.
 7. **Ship.** With check green: `SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... node scripts/republish-content.ts` (the service key lives only with the user — ask them to run it if the env vars aren't set). It bumps only changed documents and appends version history; see `supabase/README.md`. Then commit `content/` (the shipped state doubles as the refreshed seed) and update the backlog list in `docs/STATUS.md`.
+
+## Scratch-tree Books (general domain)
+
+For a Library Book that must **never** live in the repo's `content/` (frozen onboarding seed, plan 0015 decision 10), such as the software-architecture Book of [plan 0028](../../../docs/plans/0028-software-architecture-books.md). That plan is normative: §3 is the own-words rule, §4 gives the line ranges and LZ ids, §2 the id patterns. This section **replaces steps 0, 5, 6 and 7**. Steps 1–4 keep their sizing, with `concept` in place of `lexeme` and no `sentence` items.
+
+- **Working tree:** `scratch.local/<book-id>/` (git-ignored via `*.local`), persisted between runs. Never commit it; the backend's `versions` table is its history. `export BB_CONTENT_DIR=scratch.local/<book-id>` for every command below.
+- **Step 0 (sync):** only needed if the tree is lost, or once the Book is listed (in-app edits may land). `pull-book.ts` into an **empty** directory. An unlisted Book needs `SUPABASE_SERVICE_ROLE_KEY` to pull.
+- **Step 2 (concepts):** each term a unit teaches becomes a `concept` entry in `lexicon/<domain>/entries/`: `term`, a **one-sentence** `definition` (≤ ~25 words; `recognize`/`matching` show it whole as an answer option), and an optional invented `example`. Dedup against the domain's existing entries. One `family` per lesson. Write with the source **closed** (§3).
+- **Step 3 (texts):** one note per source section, in our own words. Invented examples only, never the book's.
+- **Step 4 (tasks):** `recall`, `recognize` (≥ 4 concepts in the unit) and `matching` (2–5 per task) over the unit's concepts. No `cloze`/`scramble`/`build`: `sentence` needs a `translation` a German-only Book has no use for.
+- **Domain and Book settings** ([plan 0027](../../../docs/plans/0027-authored-questions-and-exam-mode.md) §§10–11), set once per Book rather than per unit. A knowledge domain declares `exercises` on `domain.json` to keep unsuitable exercises out of practice. `sa` uses `["matching", "recognize", "recall"]`, which drops typing the term (`write`) and the definition→term MCQ. A Book may declare `practiceDepth` (`"careful"`/`"normal"`/`"fast"`) on `topic.json`; `softwarearchitektur` uses `"fast"`. Every non-question item must still keep at least one allowed exercise **other than `matching`**. Author a `recall` task over every concept, or the unit can never complete.
+- **Goals** cite LZ ids, never LZ titles. Mark a unit whose LZs are all pure-R3 (plan §4a) with "(R3, nicht prüfungsrelevant)".
+- **Step 5 (wire):** units into `lessons/<id>.json` `unitIds`, lessons into `topic.json` `lessonIds`, all inside the working tree.
+- **Step 6 (validate), in order:**
+  1. `corepack pnpm exec vitest run packages/schema/src/content.test.ts` with `BB_CONTENT_DIR` set;
+  2. `python3 scripts/overlap-check.py --book "<vault book .md>" --lehrplan scratch.local/sources/lehrplan-cpsa-f-de.txt "$BB_CONTENT_DIR"`, which must exit 0;
+  3. `node scripts/pack-bbbook.ts scratch.local/review.bbbook`, then import it in Settings in a **fresh** browser profile (`apps/web:verify` recipe) and play one session per new unit. An unlisted Book cannot be opened any other way.
+- **Step 7 (ship):** `SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... node scripts/republish-content.ts` with `BB_CONTENT_DIR` set. **No commit.** Then add one line per shipped unit to the plan's implementation log.
