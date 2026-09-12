@@ -20,11 +20,16 @@ import type { AssignQuestion, ChoiceQuestion } from "@betterbeaver/engine";
 import {
   buildTaskSession,
   examIsGenerated,
+  readinessByLesson,
   scoreExam,
   type ExamAnswer,
   type ExamResult,
 } from "@betterbeaver/engine";
-import { AssignBoard, ChoiceBoard } from "./session/questionInputs";
+import {
+  AssignBoard,
+  ChoiceBoard,
+  QuestionFeedback,
+} from "./session/questionInputs";
 import {
   readExamRecord,
   saveAnswer,
@@ -44,7 +49,7 @@ const TICK_MS = 1000;
  * option order is the authored order (plan 0027 §5) — so an exam renders
  * identically on every visit without storing anything about how it was
  * built. */
-function buildExamQuestions(
+export function buildExamQuestions(
   exam: Exam,
   content: Content,
 ): Map<string, ChoiceQuestion | AssignQuestion> {
@@ -84,6 +89,7 @@ export function ExamScreen({
   onOpenIntro,
   onOpenReport,
   onPracticeMissed,
+  onReview,
   onBack,
 }: {
   content: Content;
@@ -98,6 +104,9 @@ export function ExamScreen({
    * which grades them into SRS normally — the only path by which anything
    * an exam touched reaches the scheduler (plan 0027 §6). */
   onPracticeMissed: (taskIds: string[]) => void;
+  /** Opens review mode (plan 0027 §6 amendment): the intro's second action,
+   * alongside Start. */
+  onReview: () => void;
   onBack: () => void;
 }) {
   const [questions] = useState(() => buildExamQuestions(exam, content));
@@ -274,6 +283,7 @@ export function ExamScreen({
           Prüfung starten
         </button>
       )}
+      <button onClick={onReview}>Testmodus (ohne Zeitlimit)</button>
       {record.lastResult !== undefined ? (
         <button onClick={onOpenReport}>Letztes Ergebnis ansehen</button>
       ) : null}
@@ -365,6 +375,23 @@ function ExamReport({
   const missed = result.questions
     .filter((question) => !question.correct)
     .map((question) => question.taskId);
+  // Readiness per lesson (plan 0027 §4/§6 amendment), weakest first: the
+  // same per-lesson buckets the Book card's "weakest" line reads, sorted
+  // here rather than by the engine, since "weakest first" is this report's
+  // presentation choice — `readinessByLesson` itself only names the single
+  // weakest lesson id.
+  const readiness = readinessByLesson(
+    exam,
+    result.questions,
+    content.topic.lessonIds,
+  );
+  const sortedReadiness = [...readiness.buckets].sort(
+    (a, b) => a.percent - b.percent,
+  );
+  const lessonTitle = (lessonId: string | null): string =>
+    lessonId === null
+      ? "Other"
+      : (content.lessons.find((l) => l.id === lessonId)?.title ?? lessonId);
   return (
     <main className="exam">
       <h1>{exam.title}</h1>
@@ -382,6 +409,17 @@ function ExamReport({
           über eine echte Prüfung aus.
         </p>
       ) : null}
+      <section className="exam-readiness">
+        <h2>Bereitschaft nach Lektion</h2>
+        <ul className="status">
+          {sortedReadiness.map((bucket) => (
+            <li key={bucket.lessonId ?? "other"}>
+              {lessonTitle(bucket.lessonId)}: {formatPoints(bucket.points)} /{" "}
+              {formatPoints(bucket.maxPoints)} · {bucket.percent.toFixed(1)}%
+            </li>
+          ))}
+        </ul>
+      </section>
       <ol className="card-list">
         {result.questions.map((scored, index) => {
           const question = questions.get(scored.taskId);
@@ -409,6 +447,7 @@ function ExamReport({
                         : []
                     }
                     onChange={() => undefined}
+                    whys={question.whys}
                     reveal
                     disabled
                   />
@@ -426,8 +465,19 @@ function ExamReport({
                         : question.rows.map(() => null)
                     }
                     onChange={() => undefined}
+                    whys={question.whys}
                     reveal
                     disabled
+                  />
+                )}
+                {/* Plan 0027 §6: the report shows the same teaching the Check
+                    and Review do — the reason per option, then the
+                    explanation. A learner reading a failed exam is exactly
+                    who needs it. */}
+                {question === undefined ? null : (
+                  <QuestionFeedback
+                    explanation={question.explanation}
+                    generated={question.explanationGenerated}
                   />
                 )}
               </div>

@@ -111,6 +111,8 @@ function renderUnit(
       unitId="bk-u1"
       lookup={lookup}
       onPractice={() => {}}
+      onCheck={() => {}}
+      checkLevels={null}
       onRecall={() => {}}
       onPinNote={() => {}}
       isNotePinned={async () => false}
@@ -326,6 +328,8 @@ describe("UnitScreen in edit mode", () => {
           unitId="bk-u1"
           lookup={lookup}
           onPractice={() => {}}
+          onCheck={() => {}}
+          checkLevels={null}
           onRecall={() => {}}
           onPinNote={() => {}}
           isNotePinned={async () => false}
@@ -525,6 +529,8 @@ function renderWithFeedback(domain: DomainDocument): DomainDocument[] {
           unitId="bk-u1"
           lookup={lookup}
           onPractice={() => {}}
+          onCheck={() => {}}
+          checkLevels={null}
           onRecall={() => {}}
           onPinNote={() => {}}
           isNotePinned={async () => false}

@@ -47,8 +47,10 @@ const PACE_OPTIONS: { pace: ReviewPace; label: string }[] = [
 ];
 
 /** Plan 0025 §12: how many correct answers a word is owed per session.
- * Named, never typed — the same argument as the pace presets. */
+ * Named, never typed — the same argument as the pace presets. "Book's
+ * choice" (plan 0027 §11) is first and is the default. */
 const PROGRESSION_OPTIONS: { progression: Progression; label: string }[] = [
+  { progression: "book", label: "Book's choice" },
   { progression: "careful", label: "Careful" },
   { progression: "normal", label: "Normal" },
   { progression: "fast", label: "Fast" },
@@ -376,7 +378,9 @@ export function SettingsScreen({
           >
             {PROGRESSION_OPTIONS.map(({ progression, label }) => (
               <option key={progression} value={progression}>
-                {label} — {REPETITIONS_PER_WORD[progression]}&times; per word
+                {progression === "book"
+                  ? `${label} — Normal unless the Book sets its own`
+                  : `${label} — ${REPETITIONS_PER_WORD[progression]}× per word`}
               </option>
             ))}
           </select>
@@ -385,7 +389,9 @@ export function SettingsScreen({
           How many times you have to get a word right before a practice session
           lets it go. More is slower but sticks harder; one is every question a
           step up. Fast also climbs in twos once a word is being produced, so it
-          trades the repetitions it skips for a shorter ladder.
+          trades the repetitions it skips for a shorter ladder. Book&rsquo;s
+          choice uses the depth each Book recommends (Normal where it recommends
+          none); picking one yourself applies it everywhere.
         </p>
         {extraChars !== undefined && extraChars.length > 0 && (
           <>

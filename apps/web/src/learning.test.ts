@@ -3,6 +3,7 @@ import {
   DEFAULT_LEARNING,
   LEARNING_KEY,
   getLearning,
+  repetitionsPerWord,
   schedulingConfig,
   setLearning,
 } from "./learning";
@@ -18,7 +19,7 @@ describe("learning settings", () => {
       skip: "week",
       extraKeys: false,
       keyboardHelpDismissed: false,
-      progression: "normal",
+      progression: "book",
     });
     expect(getLearning()).toEqual(DEFAULT_LEARNING);
   });
@@ -31,7 +32,7 @@ describe("learning settings", () => {
       skip: "year",
       extraKeys: false,
       keyboardHelpDismissed: false,
-      progression: "normal",
+      progression: "book",
     });
   });
 
@@ -48,7 +49,7 @@ describe("learning settings", () => {
       skip: "week",
       extraKeys: false,
       keyboardHelpDismissed: false,
-      progression: "normal",
+      progression: "book",
     });
   });
 
@@ -71,6 +72,22 @@ describe("learning settings", () => {
     expect(schedulingConfig().levelsPerDay).toBe(1);
     setLearning({ progression: "careful" });
     expect(schedulingConfig().levelsPerDay).toBe(1);
+  });
+
+  it("under Book's choice, follows the Book's declared depth (plan 0027 §11)", () => {
+    // Default is "book": a Book declaring "fast" owes 1, one declaring none
+    // owes 2 (Normal), and the scheduler still behaves as Normal either way
+    // — the Fast preset's double step is SRS state and global, so a Book
+    // never changes it (see `learning.ts`'s header comment).
+    expect(repetitionsPerWord("fast")).toBe(1);
+    expect(repetitionsPerWord(undefined)).toBe(2);
+    expect(schedulingConfig().levelsPerDay).toBe(1);
+  });
+
+  it("an explicit preset overrides every Book's declared depth", () => {
+    setLearning({ progression: "careful" });
+    expect(repetitionsPerWord("fast")).toBe(3);
+    expect(repetitionsPerWord(undefined)).toBe(3);
   });
 
   it("rides the bb.* backup sweep", () => {

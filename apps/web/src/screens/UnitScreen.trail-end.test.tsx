@@ -99,6 +99,8 @@ function renderUnit(onPractice: () => void, startAtEnd?: boolean) {
       unitId={unit.id}
       lookup={lookup}
       onPractice={onPractice}
+      onCheck={() => {}}
+      checkLevels={null}
       onRecall={() => {}}
       onPinNote={() => {}}
       isNotePinned={() => Promise.resolve(false)}

@@ -96,6 +96,7 @@ function renderExam(props: Partial<Parameters<typeof ExamScreen>[0]> = {}) {
       onOpenIntro={vi.fn()}
       onOpenReport={onOpenReport}
       onPracticeMissed={onPracticeMissed}
+      onReview={vi.fn()}
       onBack={vi.fn()}
       {...props}
     />,
