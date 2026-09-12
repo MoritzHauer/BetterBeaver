@@ -1,10 +1,14 @@
 import { describe, it, expect } from "vitest";
-import type { Content, Item, Task, Unit } from "@betterbeaver/schema";
+import type { Content, Exercise, Item, Task, Unit } from "@betterbeaver/schema";
 import {
   buildTaskSession,
   buildReviewSession,
   buildUnitSession,
   buildRecallSession,
+  buildFixedSession,
+  checkTaskIds,
+  drillItemIds,
+  recallableTaskIds,
   shuffle,
   checkScrambleAnswer,
   checkMatchingPair,
@@ -1584,6 +1588,8 @@ describe("choice and assign questions (plan 0027)", () => {
       ],
       correctIndices: [0, 1, 3],
       selectCount: 3,
+      whys: [undefined, undefined, undefined, undefined],
+      explanationGenerated: false,
     } satisfies ChoiceQuestion);
   });
 
@@ -1607,6 +1613,8 @@ describe("choice and assign questions (plan 0027)", () => {
       ],
       labels: ["Richtig", "Falsch"],
       correctLabelIndex: [0, 1, 0],
+      whys: [undefined, undefined, undefined],
+      explanationGenerated: false,
     } satisfies AssignQuestion);
   });
 
@@ -1665,5 +1673,458 @@ describe("choice and assign questions (plan 0027)", () => {
     it("counts an unanswered row as wrong — in practice, not in an exam", () => {
       expect(checkAssignAnswer(question, [0, null, 0])).toBe(false);
     });
+  });
+
+  describe("whys and explanation (plan 0027 amendment §5)", () => {
+    it("carries whys aligned with choices, the explanation, and marks explanationGenerated via `generated`", () => {
+      const item: Item = {
+        id: "t-item-choice-explained",
+        kind: "question",
+        payload: {
+          stem: "Which of these are architectural views?",
+          options: [
+            {
+              text: "Bausteinsicht",
+              correct: true,
+              why: "Shows the building blocks.",
+            },
+            { text: "Dienstagssicht", correct: false },
+          ],
+          explanation: "Views structure a system from different angles.",
+          generated: true,
+        },
+        sourceRef: "t-resource-1",
+      };
+      const task: Task = {
+        id: "t-task-choice-explained",
+        type: "choice",
+        itemIds: [item.id],
+      };
+      const content: Content = {
+        ...questionContent,
+        items: [item],
+        tasks: [task],
+      };
+
+      const [question] = buildTaskSession(task, content, noRng);
+
+      expect(question).toEqual({
+        kind: "choice",
+        unitId: item.id,
+        stem: "Which of these are architectural views?",
+        choices: ["Bausteinsicht", "Dienstagssicht"],
+        correctIndices: [0],
+        selectCount: 1,
+        whys: ["Shows the building blocks.", undefined],
+        explanation: "Views structure a system from different angles.",
+        explanationGenerated: true,
+      } satisfies ChoiceQuestion);
+    });
+
+    it("marks explanationGenerated true via `explanationGenerated` alone", () => {
+      const item: Item = {
+        id: "t-item-choice-explained-2",
+        kind: "question",
+        payload: {
+          stem: "Stem",
+          options: [
+            { text: "A", correct: true },
+            { text: "B", correct: false },
+          ],
+          explanation: "Because.",
+          explanationGenerated: true,
+        },
+        sourceRef: "t-resource-1",
+      };
+      const task: Task = {
+        id: "t-task-choice-explained-2",
+        type: "choice",
+        itemIds: [item.id],
+      };
+      const content: Content = {
+        ...questionContent,
+        items: [item],
+        tasks: [task],
+      };
+
+      const [question] = buildTaskSession(task, content, noRng) as [
+        ChoiceQuestion,
+      ];
+
+      expect(question.explanationGenerated).toBe(true);
+    });
+
+    it("leaves explanationGenerated false when neither flag is set", () => {
+      // choiceItem carries no `generated`/`explanationGenerated` and no `why`s.
+      const [question] = buildTaskSession(choiceTask, questionContent, noRng);
+      expect((question as ChoiceQuestion).explanationGenerated).toBe(false);
+      expect((question as ChoiceQuestion).whys).toEqual([
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      ]);
+      expect(question !== undefined && "explanation" in question).toBe(false);
+    });
+  });
+});
+
+describe("buildFixedSession (plan 0027 §5)", () => {
+  const c1: Item = {
+    id: "t-item-fixed-c1",
+    kind: "concept",
+    payload: { term: "Term 1", definition: "Definition 1" },
+    sourceRef: "t-resource-1",
+  };
+  const c2: Item = {
+    id: "t-item-fixed-c2",
+    kind: "concept",
+    payload: { term: "Term 2", definition: "Definition 2" },
+    sourceRef: "t-resource-1",
+  };
+  const taskA: Task = {
+    id: "t-task-fixed-a",
+    type: "recall",
+    itemIds: [c2.id],
+  };
+  const taskB: Task = {
+    id: "t-task-fixed-b",
+    type: "recall",
+    itemIds: [c1.id],
+  };
+  const unit: Unit = {
+    id: "t-unit-fixed",
+    lessonId: "t-topic",
+    title: "Fixed",
+    goal: "Goal",
+    itemIds: [c1.id, c2.id],
+    taskIds: [taskA.id, taskB.id],
+    noteIds: [],
+  };
+  const content: Content = {
+    exams: [],
+    topic: {
+      id: "t-topic",
+      code: "t",
+      domainId: "t",
+      title: "Book",
+      description: "",
+      lessonIds: [unit.id],
+    },
+    lessons: [],
+    units: [unit],
+    items: [c1, c2],
+    tasks: [taskA, taskB],
+    resources: [],
+    notes: [],
+  };
+
+  it("preserves the given task order, not unit.taskIds order, and skips an unknown id", () => {
+    const pairs = buildFixedSession(
+      [taskB.id, "t-task-missing", taskA.id],
+      content,
+      () => 0,
+    );
+    expect(pairs.map((p) => p.taskId)).toEqual([taskB.id, taskA.id]);
+    expect(
+      pairs.map((p) =>
+        p.question.kind === "recall" ? p.question.unitId : undefined,
+      ),
+    ).toEqual([c1.id, c2.id]);
+  });
+});
+
+describe("checkTaskIds (plan 0027 §12)", () => {
+  it("returns only the choice/assign task ids, in unit.taskIds order", () => {
+    const concept1: Item = {
+      id: "t-item-check-c1",
+      kind: "concept",
+      payload: { term: "Term 1", definition: "Definition 1" },
+      sourceRef: "t-resource-1",
+    };
+    const concept2: Item = {
+      id: "t-item-check-c2",
+      kind: "concept",
+      payload: { term: "Term 2", definition: "Definition 2" },
+      sourceRef: "t-resource-1",
+    };
+    const qItem: Item = {
+      id: "t-item-check-q",
+      kind: "question",
+      payload: {
+        stem: "Stem",
+        options: [
+          { text: "A", correct: true },
+          { text: "B", correct: false },
+        ],
+      },
+      sourceRef: "t-resource-1",
+    };
+    const assignItem: Item = {
+      id: "t-item-check-assign",
+      kind: "question",
+      payload: {
+        stem: "Stem",
+        options: [
+          { text: "A", correct: true },
+          { text: "B", correct: false },
+        ],
+        labels: ["Richtig", "Falsch"],
+      },
+      sourceRef: "t-resource-1",
+    };
+    const recallTask: Task = {
+      id: "t-task-check-recall",
+      type: "recall",
+      itemIds: [concept1.id],
+    };
+    const choiceTask: Task = {
+      id: "t-task-check-choice",
+      type: "choice",
+      itemIds: [qItem.id],
+    };
+    const matchingTask: Task = {
+      id: "t-task-check-matching",
+      type: "matching",
+      itemIds: [concept1.id, concept2.id],
+    };
+    const assignTask: Task = {
+      id: "t-task-check-assign",
+      type: "assign",
+      itemIds: [assignItem.id],
+    };
+    const unit: Unit = {
+      id: "t-unit-check",
+      lessonId: "t-topic",
+      title: "Check",
+      goal: "Goal",
+      itemIds: [concept1.id, concept2.id, qItem.id, assignItem.id],
+      taskIds: [recallTask.id, choiceTask.id, matchingTask.id, assignTask.id],
+      noteIds: [],
+    };
+    const content: Content = {
+      exams: [],
+      topic: {
+        id: "t-topic",
+        code: "t",
+        domainId: "t",
+        title: "Book",
+        description: "",
+        lessonIds: [unit.id],
+      },
+      lessons: [],
+      units: [unit],
+      items: [concept1, concept2, qItem, assignItem],
+      tasks: [recallTask, choiceTask, matchingTask, assignTask],
+      resources: [],
+      notes: [],
+    };
+
+    expect(checkTaskIds(unit, content)).toEqual([choiceTask.id, assignTask.id]);
+  });
+});
+
+describe("drillItemIds (plan 0027 §5, §10)", () => {
+  const drillQuestionItem: Item = {
+    id: "t-item-drill-question",
+    kind: "question",
+    payload: {
+      stem: "Stem",
+      options: [
+        { text: "A", correct: true },
+        { text: "B", correct: false },
+      ],
+    },
+    sourceRef: "t-resource-1",
+  };
+  const matchingOnlySentence: Item = {
+    id: "t-item-drill-matching-only",
+    kind: "sentence",
+    payload: { text: "Hello.", translation: "Hi." },
+    sourceRef: "t-resource-1",
+  };
+  const scrambleBuildSentence: Item = {
+    id: "t-item-drill-scramble-build",
+    kind: "sentence",
+    payload: { text: "Hello there.", translation: "Hi there." },
+    sourceRef: "t-resource-1",
+  };
+  const recallConcept: Item = {
+    id: "t-item-drill-recall",
+    kind: "concept",
+    payload: { term: "Term", definition: "Definition" },
+    sourceRef: "t-resource-1",
+  };
+  const questionTask: Task = {
+    id: "t-task-drill-question",
+    type: "choice",
+    itemIds: [drillQuestionItem.id],
+  };
+  const matchingOnlyTask: Task = {
+    id: "t-task-drill-matching-only",
+    type: "matching",
+    itemIds: [matchingOnlySentence.id],
+  };
+  const scrambleTask: Task = {
+    id: "t-task-drill-scramble",
+    type: "scramble",
+    itemIds: [scrambleBuildSentence.id],
+  };
+  const buildTask: Task = {
+    id: "t-task-drill-build",
+    type: "build",
+    itemIds: [scrambleBuildSentence.id],
+  };
+  const recallOnlyTask: Task = {
+    id: "t-task-drill-recall-only",
+    type: "recall",
+    itemIds: [recallConcept.id],
+  };
+  const drillUnit: Unit = {
+    id: "t-unit-drill",
+    lessonId: "t-topic",
+    title: "Drill",
+    goal: "Goal",
+    itemIds: [
+      drillQuestionItem.id,
+      matchingOnlySentence.id,
+      scrambleBuildSentence.id,
+      recallConcept.id,
+    ],
+    taskIds: [
+      questionTask.id,
+      matchingOnlyTask.id,
+      scrambleTask.id,
+      buildTask.id,
+      recallOnlyTask.id,
+    ],
+    noteIds: [],
+  };
+  const drillContent: Content = {
+    exams: [],
+    topic: {
+      id: "t-topic",
+      code: "t",
+      domainId: "t",
+      title: "Book",
+      description: "",
+      lessonIds: [drillUnit.id],
+    },
+    lessons: [],
+    units: [drillUnit],
+    items: [
+      drillQuestionItem,
+      matchingOnlySentence,
+      scrambleBuildSentence,
+      recallConcept,
+    ],
+    tasks: [
+      questionTask,
+      matchingOnlyTask,
+      scrambleTask,
+      buildTask,
+      recallOnlyTask,
+    ],
+    resources: [],
+    notes: [],
+  };
+
+  it("excludes a question item", () => {
+    expect(drillItemIds(drillUnit, drillContent)).not.toContain(
+      drillQuestionItem.id,
+    );
+  });
+
+  it("excludes an item whose only available exercise is matching", () => {
+    expect(drillItemIds(drillUnit, drillContent)).not.toContain(
+      matchingOnlySentence.id,
+    );
+  });
+
+  it("keeps a concept with recall", () => {
+    expect(drillItemIds(drillUnit, drillContent)).toContain(recallConcept.id);
+  });
+
+  it("keeps a sentence whose only tasks are scramble/build when nothing is disallowed", () => {
+    expect(drillItemIds(drillUnit, drillContent)).toContain(
+      scrambleBuildSentence.id,
+    );
+  });
+
+  it("excludes that same sentence under an allow-list without scramble/build", () => {
+    const allowed: Exercise[] = ["matching", "recognize", "recall"];
+    expect(drillItemIds(drillUnit, drillContent, allowed)).not.toContain(
+      scrambleBuildSentence.id,
+    );
+  });
+});
+
+describe("recallableTaskIds and buildRecallSession over a choice task (plan 0027 §5)", () => {
+  const recallConcept: Item = {
+    id: "t-item-recall-mixed",
+    kind: "concept",
+    payload: { term: "Term", definition: "Definition" },
+    sourceRef: "t-resource-1",
+  };
+  const qItem: Item = {
+    id: "t-item-recall-mixed-q",
+    kind: "question",
+    payload: {
+      stem: "Stem",
+      options: [
+        { text: "A", correct: true },
+        { text: "B", correct: false },
+      ],
+    },
+    sourceRef: "t-resource-1",
+  };
+  const recallTask: Task = {
+    id: "t-task-mixed-recall",
+    type: "recall",
+    itemIds: [recallConcept.id],
+  };
+  const choiceTask: Task = {
+    id: "t-task-mixed-choice",
+    type: "choice",
+    itemIds: [qItem.id],
+  };
+  const mixedUnit: Unit = {
+    id: "t-unit-mixed",
+    lessonId: "t-topic",
+    title: "Mixed",
+    goal: "Goal",
+    itemIds: [recallConcept.id, qItem.id],
+    taskIds: [recallTask.id, choiceTask.id],
+    noteIds: [],
+  };
+  const mixedContent: Content = {
+    exams: [],
+    topic: {
+      id: "t-topic",
+      code: "t",
+      domainId: "t",
+      title: "Book",
+      description: "",
+      lessonIds: [mixedUnit.id],
+    },
+    lessons: [],
+    units: [mixedUnit],
+    items: [recallConcept, qItem],
+    tasks: [recallTask, choiceTask],
+    resources: [],
+    notes: [],
+  };
+
+  it("never draws the choice task, across 20 rng seeds", () => {
+    for (let seed = 0; seed < 20; seed++) {
+      const rng: Rng = () => seed / 20;
+      const pairs = buildRecallSession(mixedUnit, mixedContent, rng);
+      expect(pairs.some((pair) => pair.question.kind === "choice")).toBe(false);
+    }
+  });
+
+  it("recallableTaskIds of an all-question unit is []", () => {
+    const allQuestionUnit: Unit = { ...mixedUnit, taskIds: [choiceTask.id] };
+    expect(recallableTaskIds(allQuestionUnit, mixedContent)).toEqual([]);
   });
 });

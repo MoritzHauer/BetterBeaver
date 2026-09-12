@@ -399,3 +399,133 @@ describe("draftContent: the Book's optional display fields", () => {
     expect("itemTargets" in (parsed.units[0] ?? {})).toBe(false);
   });
 });
+
+describe("draftContent: plan 0027's additions", () => {
+  it("carries the domain's exercises (unknown names dropped) and extraChars through", () => {
+    const { parsed } = draftContent(
+      {
+        topic: { id: "b", code: "b", domainId: "d" },
+        lessons: [],
+        units: [],
+        items: [],
+        tasks: [],
+        resources: [],
+        notes: [],
+      },
+      {
+        domain: {
+          id: "d",
+          code: "d",
+          kind: "language",
+          extraChars: ["ң", "ө", 5],
+          exercises: ["matching", "recall", "not-a-real-exercise"],
+        },
+        entries: [],
+        families: [],
+      },
+      emptyAssets,
+    );
+    expect(parsed.domain.extraChars).toEqual(["ң", "ө"]);
+    expect(parsed.domain.exercises).toEqual(["matching", "recall"]);
+  });
+
+  it("keeps a Book's practiceDepth and drops an unknown one", () => {
+    const withDepth = draftContent(
+      {
+        topic: { id: "b", code: "b", domainId: "d", practiceDepth: "fast" },
+        lessons: [],
+        units: [],
+        items: [],
+        tasks: [],
+        resources: [],
+        notes: [],
+      },
+      { domain: {}, entries: [], families: [] },
+      emptyAssets,
+    ).parsed.book;
+    expect(withDepth.practiceDepth).toBe("fast");
+
+    const withUnknownDepth = draftContent(
+      {
+        topic: {
+          id: "b",
+          code: "b",
+          domainId: "d",
+          practiceDepth: "leisurely",
+        },
+        lessons: [],
+        units: [],
+        items: [],
+        tasks: [],
+        resources: [],
+        notes: [],
+      },
+      { domain: {}, entries: [], families: [] },
+      emptyAssets,
+    ).parsed.book;
+    expect("practiceDepth" in withUnknownDepth).toBe(false);
+  });
+
+  it("keeps a question's why, explanation and explanationGenerated", () => {
+    const book = bookWithItems([
+      {
+        id: "b-item-1",
+        kind: "question",
+        payload: {
+          stem: "Stem",
+          options: [
+            { text: "A", correct: true, why: "Because A." },
+            { text: "B", correct: false },
+          ],
+          explanation: "The reasoning.",
+          explanationGenerated: true,
+        },
+        sourceRef: "b-resource-1",
+      },
+    ]);
+
+    const { content } = draftContent(book, emptyDomain(), emptyAssets);
+
+    const item = content.items[0];
+    expect(item?.kind).toBe("question");
+    if (item?.kind === "question") {
+      expect(item.payload.options[0]?.why).toBe("Because A.");
+      expect("why" in (item.payload.options[1] ?? {})).toBe(false);
+      expect(item.payload.explanation).toBe("The reasoning.");
+      expect(item.payload.explanationGenerated).toBe(true);
+    }
+  });
+
+  it("keeps an exam entry's lessonId", () => {
+    const book: BookDocument = {
+      topic: { id: "b", code: "b", domainId: "d" },
+      lessons: [],
+      units: [],
+      items: [],
+      tasks: [],
+      exams: [
+        {
+          id: "b-exam-1",
+          topicId: "b",
+          title: "Exam",
+          description: "",
+          questions: [
+            { taskId: "b-task-1", points: 1, lessonId: "b-lesson-1" },
+          ],
+          ruleset: {
+            passPercent: 60,
+            timeLimitMinutes: 60,
+            partialCredit: true,
+            negativeMarking: true,
+          },
+        },
+      ],
+      resources: [],
+      notes: [],
+    };
+
+    const { parsed } = draftContent(book, emptyDomain(), emptyAssets);
+
+    expect(parsed.exams[0]?.questions[0]?.lessonId).toBe("b-lesson-1");
+  });
+});

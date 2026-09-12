@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
 import type { Exam, ExamRuleset } from "@betterbeaver/schema";
-import { scoreExam, type ExamAnswer } from "./exam.js";
+import {
+  scoreExam,
+  readinessByLesson,
+  type ExamAnswer,
+  type ExamQuestionResult,
+} from "./exam.js";
 import type { AssignQuestion, ChoiceQuestion } from "./session.js";
 
 /** The iSAQB CPSA-F record (plan 0027 §3) — one ruleset value, not a code path. */
@@ -23,6 +28,8 @@ function choice(
     choices: Array.from({ length: total }, (_, i) => `option ${i}`),
     correctIndices: Array.from({ length: correctCount }, (_, i) => i),
     selectCount: correctCount,
+    whys: Array.from({ length: total }, () => undefined),
+    explanationGenerated: false,
   };
 }
 
@@ -34,11 +41,13 @@ function assign(id: string, correctLabelIndex: number[]): AssignQuestion {
     rows: correctLabelIndex.map((_, i) => `row ${i}`),
     labels: ["Richtig", "Falsch"],
     correctLabelIndex,
+    whys: correctLabelIndex.map(() => undefined),
+    explanationGenerated: false,
   };
 }
 
 function exam(
-  questions: { taskId: string; points: number }[],
+  questions: Exam["questions"],
   ruleset: ExamRuleset = iSAQB,
 ): Exam {
   return {
@@ -239,5 +248,100 @@ describe("scoreExam (plan 0027 §4)", () => {
     expect(result.total).toBe(0);
     expect(result.maxPoints).toBe(2);
     expect(result.passed).toBe(false);
+  });
+});
+
+describe("readinessByLesson (plan 0027 §4/§6)", () => {
+  function resultFor(
+    taskId: string,
+    points: number,
+    scored: number,
+  ): ExamQuestionResult {
+    const full = scored === points;
+    return {
+      taskId,
+      points,
+      scored,
+      correct: full,
+      required: 1,
+      right: full ? 1 : 0,
+      wrong: full ? 0 : 1,
+    };
+  }
+
+  it("orders buckets by lessonIds order, Other last, and calls the tie for weakest to the earlier bucket", () => {
+    const theExam = exam([
+      { taskId: "t-task-1", points: 2, lessonId: "l2" },
+      { taskId: "t-task-2", points: 2, lessonId: "l1" },
+      { taskId: "t-task-3", points: 2 },
+      { taskId: "t-task-4", points: 2, lessonId: "l1" },
+    ]);
+    const results = [
+      resultFor("t-task-1", 2, 1), // l2: 1/2 = 50%
+      resultFor("t-task-2", 2, 1), // l1, part 1 of 2: 1/2
+      resultFor("t-task-3", 2, 2), // Other: 2/2 = 100%
+      resultFor("t-task-4", 2, 1), // l1, part 2 of 2: 1/2 -> l1 total 2/4 = 50%
+    ];
+
+    const { buckets, weakestLessonId } = readinessByLesson(theExam, results, [
+      "l1",
+      "l2",
+    ]);
+
+    expect(buckets).toEqual([
+      { lessonId: "l1", points: 2, maxPoints: 4, percent: 50 },
+      { lessonId: "l2", points: 1, maxPoints: 2, percent: 50 },
+      { lessonId: null, points: 2, maxPoints: 2, percent: 100 },
+    ]);
+    // l1 and l2 are tied at 50%; the earlier bucket (l1) wins, and Other
+    // (100%) is never a candidate at all.
+    expect(weakestLessonId).toBe("l1");
+  });
+
+  it("excludes an entry with no result from both sums", () => {
+    const theExam = exam([
+      { taskId: "t-task-1", points: 2, lessonId: "l1" },
+      { taskId: "t-task-2", points: 3, lessonId: "l1" },
+    ]);
+
+    const { buckets } = readinessByLesson(
+      theExam,
+      [resultFor("t-task-1", 2, 2)],
+      ["l1"],
+    );
+
+    expect(buckets).toEqual([
+      { lessonId: "l1", points: 2, maxPoints: 2, percent: 100 },
+    ]);
+  });
+
+  it("places a lesson id the exam names but lessonIds doesn't, before Other, in first-seen order", () => {
+    const theExam = exam([
+      { taskId: "t-task-1", points: 1, lessonId: "l-unknown" },
+      { taskId: "t-task-2", points: 1 },
+      { taskId: "t-task-3", points: 1, lessonId: "l1" },
+    ]);
+    const results = [
+      resultFor("t-task-1", 1, 1),
+      resultFor("t-task-2", 1, 1),
+      resultFor("t-task-3", 1, 1),
+    ];
+
+    const { buckets } = readinessByLesson(theExam, results, ["l1"]);
+
+    expect(buckets.map((b) => b.lessonId)).toEqual(["l1", "l-unknown", null]);
+  });
+
+  it("is null for weakestLessonId when only the Other bucket exists", () => {
+    const theExam = exam([{ taskId: "t-task-1", points: 1 }]);
+
+    const { buckets, weakestLessonId } = readinessByLesson(
+      theExam,
+      [resultFor("t-task-1", 1, 0)],
+      ["l1"],
+    );
+
+    expect(buckets.map((b) => b.lessonId)).toEqual([null]);
+    expect(weakestLessonId).toBeNull();
   });
 });

@@ -89,6 +89,16 @@ export type Screen =
       unitId: string;
       editing?: boolean;
     }
+  // The unit Check (plan 0027 §12): a fixed, ordered, once-per-question
+  // session over the unit's `choice`/`assign` tasks, launched from the
+  // Check page in the unit trail.
+  | {
+      screen: "unit-check";
+      bookId: string;
+      lessonId: string;
+      unitId: string;
+      editing?: boolean;
+    }
   // Cross-unit recall session (plan 0016): practice-only over a sample of
   // the LINKED unit's tasks; onDone returns to the LINKING unit's Overview.
   | {
@@ -116,6 +126,10 @@ export type Screen =
        * normally. In the URL because it is a screen the back button has to
        * be able to leave and return to, like every other session. */
       practiceTaskIds?: string[];
+      /** Review mode (plan 0027 §6, amendment): the exam's questions,
+       * untimed, immediate feedback, writing nothing. A flag rather than a
+       * fourth phase, since it shares the intro's entry point. */
+      review?: true;
     }
   // Lesson summary (plan 0020 §5): shown after the unit session that
   // completed the lesson. Derived tiles only — nothing is persisted for it.
@@ -192,6 +206,8 @@ export function toPath(view: View): string {
       return `/books/${screen.bookId}/lessons/${screen.lessonId}/units/${screen.unitId}/tasks/${screen.taskId}${flags({ edit: e(screen.editing), sheet })}`;
     case "unit-session":
       return `/books/${screen.bookId}/lessons/${screen.lessonId}/units/${screen.unitId}/practice${flags({ edit: e(screen.editing), sheet })}`;
+    case "unit-check":
+      return `/books/${screen.bookId}/lessons/${screen.lessonId}/units/${screen.unitId}/check${flags({ edit: e(screen.editing), sheet })}`;
     case "recall-session":
       return `/books/${screen.bookId}/lessons/${screen.lessonId}/units/${screen.unitId}/recall/${screen.recallUnitId}${flags({ edit: e(screen.editing), sheet })}`;
     case "lesson-summary":
@@ -204,6 +220,7 @@ export function toPath(view: View): string {
             : String(screen.questionIndex),
         end: on(screen.atEnd),
         practice: screen.practiceTaskIds?.join(","),
+        review: on(screen.review),
       })}`;
     case "review":
       return `/domains/${screen.domainId}/review${flags({ sheet })}`;
@@ -284,6 +301,7 @@ export function fromPath(path: string): View | null {
         questionIndex:
           Number.isInteger(parsed) && parsed >= 0 ? parsed : undefined,
         atEnd: query.get("end") === "1" ? true : undefined,
+        review: query.get("review") === "1" ? true : undefined,
       });
     }
     if (rest[1] !== "lessons" || rest[2] === undefined) {
@@ -314,6 +332,15 @@ export function fromPath(path: string): View | null {
     if (rest[5] === "practice" && rest.length === 6) {
       return view({
         screen: "unit-session",
+        bookId,
+        lessonId,
+        unitId,
+        editing,
+      });
+    }
+    if (rest[5] === "check" && rest.length === 6) {
+      return view({
+        screen: "unit-check",
         bookId,
         lessonId,
         unitId,

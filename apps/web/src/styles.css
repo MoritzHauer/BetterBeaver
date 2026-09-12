@@ -2269,6 +2269,31 @@ textarea {
   font-weight: 600;
 }
 
+/* Post-grade feedback (plan 0027 §5): a per-option reason sits quietly under
+ * its option, and the question's own explanation gets one subtle block below
+ * the board. Both use existing tokens, so both stay AA in either theme. */
+.option-why {
+  color: var(--locked-fg);
+  font-size: 0.8rem;
+  margin: 0.35rem 0 0;
+}
+
+.question-feedback {
+  background: var(--card-bg-translucent);
+  border: 1px solid var(--card-border);
+  border-radius: 0.5rem;
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+}
+
+.question-feedback p {
+  margin: 0;
+}
+
+.question-feedback .badge-generated {
+  margin-top: 0.35rem;
+}
+
 /* The exam run (plan 0027 §6). Deliberately plain: an exam is a sitting, not
  * a game screen, and the only thing on it that must catch the eye is the
  * clock running out. */

@@ -30,12 +30,17 @@ export function ChoiceBoard({
   onChange,
   reveal = false,
   disabled = false,
+  whys,
 }: {
   question: ChoiceQuestion;
   selected: readonly number[];
   onChange: (next: number[]) => void;
   reveal?: boolean;
   disabled?: boolean;
+  /** Per-option reasons, aligned with `question.choices` (plan 0027 §5).
+   * Rendered only once `reveal` is true — before that, the answer itself is
+   * still hidden, so its reasoning has to be too. */
+  whys?: readonly (string | undefined)[];
 }) {
   const correct = new Set(question.correctIndices);
 
@@ -70,6 +75,7 @@ export function ChoiceBoard({
             : isSelected
               ? " selected"
               : "";
+          const why = whys?.[index];
           return (
             <li key={index} className={`card${state}`}>
               <button
@@ -81,6 +87,9 @@ export function ChoiceBoard({
                 <span className="option-mark">{isSelected ? "✓" : ""}</span>
                 {choice}
               </button>
+              {reveal && why !== undefined ? (
+                <p className="option-why">{why}</p>
+              ) : null}
             </li>
           );
         })}
@@ -103,12 +112,16 @@ export function AssignBoard({
   onChange,
   reveal = false,
   disabled = false,
+  whys,
 }: {
   question: AssignQuestion;
   chosen: readonly (number | null)[];
   onChange: (next: (number | null)[]) => void;
   reveal?: boolean;
   disabled?: boolean;
+  /** Per-row reasons, aligned with `question.rows` (plan 0027 §5). Rendered
+   * only once `reveal` is true, same as `ChoiceBoard`'s. */
+  whys?: readonly (string | undefined)[];
 }) {
   function choose(row: number, labelIndex: number) {
     const next = question.rows.map((_, index) => chosen[index] ?? null);
@@ -131,6 +144,7 @@ export function AssignBoard({
             : answer === correct
               ? " correct"
               : " incorrect";
+          const why = whys?.[rowIndex];
           return (
             <li key={rowIndex} className={`card assign-row${state}`}>
               <div>
@@ -154,11 +168,40 @@ export function AssignBoard({
                     </button>
                   ))}
                 </div>
+                {reveal && why !== undefined ? (
+                  <p className="option-why">{why}</p>
+                ) : null}
               </div>
             </li>
           );
         })}
       </ul>
     </>
+  );
+}
+
+/**
+ * A question's explanation, shown once it is graded (plan 0027 §5) —
+ * practice, the Check, Review, exam review mode and the exam report all
+ * share this one rendering, rather than each drawing its own.
+ *
+ * `generated` carries the same "KI-generiert" badge the exam card and intro
+ * use, for a model-written explanation with no expert review.
+ */
+export function QuestionFeedback({
+  explanation,
+  generated,
+}: {
+  explanation: string | undefined;
+  generated: boolean;
+}) {
+  if (explanation === undefined) {
+    return null;
+  }
+  return (
+    <div className="question-feedback">
+      <p>{explanation}</p>
+      {generated ? <p className="badge-generated">KI-generiert</p> : null}
+    </div>
   );
 }

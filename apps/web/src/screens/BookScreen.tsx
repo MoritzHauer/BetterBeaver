@@ -1,6 +1,11 @@
 import { Fragment, useEffect, useState } from "react";
 import type { Content, Lesson } from "@betterbeaver/schema";
-import type { ProgressStore, Streak, UnitProgress } from "@betterbeaver/engine";
+import type {
+  ExamAnswer,
+  ProgressStore,
+  Streak,
+  UnitProgress,
+} from "@betterbeaver/engine";
 import {
   dueCountsByLesson,
   examIsGenerated,
@@ -10,7 +15,11 @@ import {
   isLessonUnlocked,
   isUnitUnlocked,
   nextUnit,
+  readinessByLesson,
+  scoreExam,
 } from "@betterbeaver/engine";
+import { buildExamQuestions } from "./ExamScreen";
+import { readExamRecord } from "../progress/exam-attempts";
 import { BOOK_ICONS } from "@betterbeaver/schema";
 import { ConfirmSheet } from "../components/Sheet";
 import { SettingsSheet } from "../components/SettingsSheet";
@@ -571,6 +580,38 @@ export function BookScreen({
               (sum, question) => sum + question.points,
               0,
             );
+            // "Last: NN % · weakest: <lesson title>" (plan 0027 §6
+            // amendment, owner decision 5), once a result exists. Readiness
+            // is recomputed from the stored answers on every render, never
+            // stored twice (§6) — the same rule the report follows.
+            const lastResult = readExamRecord(exam.id).lastResult;
+            const lastLine = (() => {
+              if (lastResult === undefined) {
+                return null;
+              }
+              const answers = new Map(
+                Object.entries(lastResult.answers),
+              ) as ReadonlyMap<string, ExamAnswer>;
+              const result = scoreExam(
+                exam,
+                buildExamQuestions(exam, content),
+                answers,
+              );
+              const readiness = readinessByLesson(
+                exam,
+                result.questions,
+                content.topic.lessonIds,
+              );
+              const weakestTitle =
+                readiness.weakestLessonId === null
+                  ? undefined
+                  : content.lessons.find(
+                      (l) => l.id === readiness.weakestLessonId,
+                    )?.title;
+              return `Last: ${Math.round(result.percentage)} %${
+                weakestTitle === undefined ? "" : ` · weakest: ${weakestTitle}`
+              }`;
+            })();
             return (
               <li key={exam.id} className="card">
                 <button onClick={() => onSelectExam(exam.id)}>
@@ -583,6 +624,9 @@ export function BookScreen({
                     {exam.questions.length} Fragen · {maxPoints} Punkte ·{" "}
                     {exam.ruleset.timeLimitMinutes} Minuten
                   </p>
+                  {lastLine !== null ? (
+                    <p className="status">{lastLine}</p>
+                  ) : null}
                 </button>
               </li>
             );

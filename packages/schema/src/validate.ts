@@ -434,10 +434,63 @@ export function checkReferences(parsed: ParsedSet): string[] {
   reportOwnership(units, unitOwnerCounts, "unit", "lesson", errors);
 
   const itemOwnerCounts = countOwnership(units, (u) => u.itemIds);
-  reportOwnership(items, itemOwnerCounts, "item", "unit", errors);
-
   const taskOwnerCounts = countOwnership(units, (u) => u.taskIds);
-  reportOwnership(tasks, taskOwnerCounts, "task", "unit", errors);
+
+  // --- class (ah): exam-only ownership (plan 0027 §3a; the plan's
+  // provisional (af) is taken by task/payload pairing below, so this is
+  // renumbered here). A book-owned task with no owning unit is legal when at
+  // least one exam references it. Its items are then exempt from the orphan
+  // check too, but only where every task that references them is exam-only
+  // — an item a unit-owned task also uses is not exempt. Multiple ownership
+  // is untouched: an exempted entity has owner count 0, so it was never a
+  // multiple-ownership candidate anyway. ---
+  const examTaskIds = new Set(
+    exams.flatMap((exam) => exam.questions.map((question) => question.taskId)),
+  );
+  const examOnlyTaskIds = new Set(
+    tasks
+      .filter(
+        (task) =>
+          (taskOwnerCounts.get(task.id) ?? 0) === 0 && examTaskIds.has(task.id),
+      )
+      .map((task) => task.id),
+  );
+  const itemReferencingTaskIds = new Map<string, string[]>();
+  for (const task of tasks) {
+    for (const id of task.itemIds) {
+      const referencing = itemReferencingTaskIds.get(id) ?? [];
+      referencing.push(task.id);
+      itemReferencingTaskIds.set(id, referencing);
+    }
+  }
+  const examOnlyItemIds = new Set(
+    items
+      .filter((item) => (itemOwnerCounts.get(item.id) ?? 0) === 0)
+      .filter((item) => {
+        const referencing = itemReferencingTaskIds.get(item.id) ?? [];
+        return (
+          referencing.length > 0 &&
+          referencing.every((id) => examOnlyTaskIds.has(id))
+        );
+      })
+      .map((item) => item.id),
+  );
+
+  reportOwnership(
+    items.filter((item) => !examOnlyItemIds.has(item.id)),
+    itemOwnerCounts,
+    "item",
+    "unit",
+    errors,
+  );
+
+  reportOwnership(
+    tasks.filter((task) => !examOnlyTaskIds.has(task.id)),
+    taskOwnerCounts,
+    "task",
+    "unit",
+    errors,
+  );
 
   const noteOwnerCounts = countOwnership(units, (u) => u.noteIds);
   reportOwnership(notes, noteOwnerCounts, "note", "unit", errors);
@@ -485,6 +538,50 @@ export function checkReferences(parsed: ParsedSet): string[] {
         `${task.id}: task type "${task.type}" does not accept item kind "${taskKind}"`,
       );
       continue;
+    }
+
+    // class (af): task/payload pairing (plan 0027 §7). `labels` present
+    // means the question is a row assignment, absent means it is a
+    // select-n; the two task types are mutually exclusive over the one
+    // payload shape, and this is what enforces it. Without the check an
+    // `assign` task over a label-less question would render two blank
+    // category buttons.
+    //
+    // Moved above the owning-unit guard below (was after class (q)): an
+    // exam-only task (class (ah)) has no owning unit and would never reach
+    // a check placed after that guard, which would silently exempt exactly
+    // the tasks an exam depends on.
+    if (task.type === "choice" || task.type === "assign") {
+      for (const item of taskItems) {
+        if (item.kind !== "question") {
+          continue; // kind mismatch already reported under class (o).
+        }
+        const hasLabels = item.payload.labels !== undefined;
+        if (task.type === "choice" && hasLabels) {
+          errors.push(
+            `${task.id}: choice task item "${item.id}" has "labels" (a question with labels is an assign question)`,
+          );
+        }
+        if (task.type === "assign" && !hasLabels) {
+          errors.push(
+            `${task.id}: assign task item "${item.id}" has no "labels" (an assign question needs exactly two)`,
+          );
+        }
+      }
+    }
+
+    // class (ah), continued: an exam-only task's items must be owned by no
+    // unit either — otherwise a unit would drill an item whose task the
+    // author deliberately kept out of units. Also before the owning-unit
+    // guard, for the same reason as (af) above.
+    if (examOnlyTaskIds.has(task.id)) {
+      for (const id of task.itemIds) {
+        if ((itemOwnerCounts.get(id) ?? 0) > 0) {
+          errors.push(
+            `${task.id}: exam-only task's item "${id}" is owned by a unit`,
+          );
+        }
+      }
     }
 
     const owningUnit = taskOwningUnit.get(task.id);
@@ -562,31 +659,6 @@ export function checkReferences(parsed: ParsedSet): string[] {
         if (tokenCount < 3) {
           errors.push(
             `${task.id}: ${task.type} item "${item.id}" has only ${tokenCount} token(s) (needs >= 3)`,
-          );
-        }
-      }
-    }
-
-    // class (af): task/payload pairing (plan 0027 §7). `labels` present
-    // means the question is a row assignment, absent means it is a
-    // select-n; the two task types are mutually exclusive over the one
-    // payload shape, and this is what enforces it. Without the check an
-    // `assign` task over a label-less question would render two blank
-    // category buttons.
-    if (task.type === "choice" || task.type === "assign") {
-      for (const item of taskItems) {
-        if (item.kind !== "question") {
-          continue; // kind mismatch already reported under class (o).
-        }
-        const hasLabels = item.payload.labels !== undefined;
-        if (task.type === "choice" && hasLabels) {
-          errors.push(
-            `${task.id}: choice task item "${item.id}" has "labels" (a question with labels is an assign question)`,
-          );
-        }
-        if (task.type === "assign" && !hasLabels) {
-          errors.push(
-            `${task.id}: assign task item "${item.id}" has no "labels" (an assign question needs exactly two)`,
           );
         }
       }
@@ -804,7 +876,7 @@ export function checkReferences(parsed: ParsedSet): string[] {
     if (item.kind !== "question") {
       continue;
     }
-    const { options, labels, stem } = item.payload;
+    const { options, labels, stem, explanation } = item.payload;
     if (stem.trim() === "") {
       errors.push(`${item.id}: question stem is blank`);
     }
@@ -817,6 +889,12 @@ export function checkReferences(parsed: ParsedSet): string[] {
       if (option.text.trim() === "") {
         errors.push(`${item.id}: question option ${index + 1} is blank`);
       }
+      if (option.why !== undefined && option.why.trim() === "") {
+        errors.push(`${item.id}: question option ${index + 1} "why" is blank`);
+      }
+    }
+    if (explanation !== undefined && explanation.trim() === "") {
+      errors.push(`${item.id}: question explanation is blank`);
     }
     if (labels === undefined) {
       if (!options.some((option) => option.correct)) {
@@ -885,6 +963,14 @@ export function checkReferences(parsed: ParsedSet): string[] {
       if (task.itemIds.length !== 1) {
         errors.push(
           `${exam.id}: task "${task.id}" holds ${task.itemIds.length} items (an exam question is exactly one)`,
+        );
+      }
+      if (
+        question.lessonId !== undefined &&
+        !bookLessonIdSet.has(question.lessonId)
+      ) {
+        errors.push(
+          `${exam.id}: dangling lessonId reference "${question.lessonId}" in questions`,
         );
       }
     }

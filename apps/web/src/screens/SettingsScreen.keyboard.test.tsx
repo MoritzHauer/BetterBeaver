@@ -30,10 +30,10 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("Settings: practice depth (plan 0025 §12)", () => {
-  it("defaults to Normal and writes the chosen preset", () => {
+  it("defaults to Book's choice and writes the chosen preset", () => {
     renderSettings();
     const select = screen.getByLabelText(/Practice depth/);
-    expect((select as HTMLSelectElement).value).toBe("normal");
+    expect((select as HTMLSelectElement).value).toBe("book");
     fireEvent.change(select, { target: { value: "careful" } });
     expect(getLearning().progression).toBe("careful");
   });

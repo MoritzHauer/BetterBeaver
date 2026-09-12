@@ -106,6 +106,15 @@ const CASES: [string, View][] = [
       true,
     ),
   ],
+  [
+    "/books/demo/lessons/l1/units/u1/check",
+    started({
+      screen: "unit-check",
+      bookId: "demo",
+      lessonId: "l1",
+      unitId: "u1",
+    }),
+  ],
 ];
 
 // The exam route (plan 0027 §6): a sibling of `/lessons/<lessonId>`, with
@@ -140,6 +149,15 @@ CASES.push(
       bookId: "demo",
       examId: "dx-exam-mock",
       atEnd: true,
+    }),
+  ],
+  [
+    "/books/demo/exams/dx-exam-mock?review=1",
+    started({
+      screen: "exam",
+      bookId: "demo",
+      examId: "dx-exam-mock",
+      review: true,
     }),
   ],
 );

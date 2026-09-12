@@ -41,6 +41,11 @@ export const BOOK_ICONS = [
   "🚌",
 ] as const;
 
+/** Practice-depth presets (plan 0025 §3): how many correct answers a word
+ *  is owed per unit-practice session. Named, never numeric. */
+export const PRACTICE_DEPTHS = ["careful", "normal", "fast"] as const;
+export type PracticeDepth = (typeof PRACTICE_DEPTHS)[number];
+
 export const bookSchema = z.object({
   id: slugSchema,
   code: slugSchema,
@@ -86,12 +91,47 @@ export const bookSchema = z.object({
    * authored.
    */
   examIds: z.array(slugSchema).optional(),
+  /** The depth this Book's unit practice uses while the learner's own
+   *  setting is "Book's choice" (plan 0027 §11). Absent = Normal. Session
+   *  length only: the Fast preset's double step is SRS state, which is
+   *  global (one word, one state), so a Book never changes it. Additive. */
+  practiceDepth: z.enum(PRACTICE_DEPTHS).optional(),
 });
 export type Book = z.infer<typeof bookSchema>;
 
 /** A domain's kind gates which entry kind its lexicon holds (plan 0006): `language` -> lexeme, `general` -> concept. */
 export const DOMAIN_KINDS = ["language", "general"] as const;
 export type DomainKind = (typeof DOMAIN_KINDS)[number];
+
+/**
+ * Every exercise the level ladder ranks (plan 0025 §2).
+ *
+ * An exercise is not the same thing as a task type. `recognize` runs in two
+ * directions — see the foreign word and pick the meaning, or see the meaning
+ * and pick the foreign word — and those are two exercises two levels apart.
+ * `write` is derived from lexeme/concept items with no authored task type of
+ * its own (§9), which is why the two tables below point in opposite
+ * directions: `EXERCISE_LEVEL` covers the ladder, `TASK_EXERCISES` covers
+ * what content can author.
+ */
+export const EXERCISES = [
+  "matching",
+  "recognize",
+  "listen",
+  "minimal-pair",
+  "recognize-produce",
+  "picture",
+  "scramble",
+  "build",
+  "cloze",
+  "recall",
+  "write",
+  "dictation",
+  "shadowing",
+  "choice",
+  "assign",
+] as const;
+export type Exercise = (typeof EXERCISES)[number];
 
 export const domainSchema = z.object({
   id: slugSchema,
@@ -116,6 +156,18 @@ export const domainSchema = z.object({
    * domain unchanged: no `CONTENT_SCHEMA_VERSION` bump.
    */
   extraChars: z.array(z.string().min(1)).max(12).optional(),
+  /** The exercises unit practice may draw for this domain's items (plan
+   *  0027 §10). Absent means every exercise, so no shipped Book changes.
+   *  `write` and `recognize-produce` are listable although no task authors
+   *  them — they are the derived ones, and the usual reason to curate: in a
+   *  knowledge domain, typing the author's label teaches nothing.
+   *
+   *  Only the practice draw reads it. Review, the Check, exams and ad-hoc
+   *  study keep their fixed presentations.
+   *
+   *  Additive and optional, so an older client drops it and parses the
+   *  domain unchanged: no `CONTENT_SCHEMA_VERSION` bump. */
+  exercises: z.array(z.enum(EXERCISES)).min(1).optional(),
 });
 export type Domain = z.infer<typeof domainSchema>;
 
@@ -314,6 +366,10 @@ const questionOptionSchema = z.object({
   /** The statement holds. For `choice` that means "is a correct answer";
    *  for `assign` it means "belongs to labels[0]". */
   correct: z.boolean(),
+  /** Why this option is right or wrong. Shown under the option once the
+   *  question is graded, in practice, the Check, Review and the exam
+   *  report. Own words. */
+  why: z.string().min(1).optional(),
 });
 export type QuestionOption = z.infer<typeof questionOptionSchema>;
 
@@ -335,11 +391,19 @@ const questionPayloadSchema = z.object({
    *  symmetric (Blackbox/Whitebox, enge/lose Kopplung) the order is just an
    *  authoring choice, and `correct: true` means "the first one". */
   labels: z.tuple([z.string().min(1), z.string().min(1)]).optional(),
+  /** Shown under the question once it is graded, wherever `why` is shown:
+   *  the reasoning behind the answer as a whole. */
+  explanation: z.string().min(1).optional(),
   /** Model-generated, not taken from a source, and without an expert review
    *  pass. Same purpose and same honesty as `lexemePayload.exampleGenerated`;
    *  it sits on the question rather than the exam because a generated
    *  question in a Unit, outside any exam, needs the mark just as much. */
   generated: z.boolean().optional(),
+  /** The `explanation` and `why`s are model-written and unreviewed while
+   *  the question itself is not — the official mock exam's case, where the
+   *  questions are transcribed and the explanations are ours. Meaningless
+   *  when `generated` is set, which already covers them. */
+  explanationGenerated: z.boolean().optional(),
 });
 export type QuestionPayload = z.infer<typeof questionPayloadSchema>;
 
@@ -685,36 +749,6 @@ export const TASK_NEEDS_DISTRACTORS: Record<TaskType, boolean> = {
 };
 
 /**
- * Every exercise the level ladder ranks (plan 0025 §2).
- *
- * An exercise is not the same thing as a task type. `recognize` runs in two
- * directions — see the foreign word and pick the meaning, or see the meaning
- * and pick the foreign word — and those are two exercises two levels apart.
- * `write` is derived from lexeme/concept items with no authored task type of
- * its own (§9), which is why the two tables below point in opposite
- * directions: `EXERCISE_LEVEL` covers the ladder, `TASK_EXERCISES` covers
- * what content can author.
- */
-export const EXERCISES = [
-  "matching",
-  "recognize",
-  "listen",
-  "minimal-pair",
-  "recognize-produce",
-  "picture",
-  "scramble",
-  "build",
-  "cloze",
-  "recall",
-  "write",
-  "dictation",
-  "shadowing",
-  "choice",
-  "assign",
-] as const;
-export type Exercise = (typeof EXERCISES)[number];
-
-/**
  * How hard each exercise is (plan 0025 §2) — a fixed property of the
  * exercise, identical for every learner and every Book, and the number a
  * word's level is compared against.
@@ -823,7 +857,16 @@ export const examSchema = z.object({
   title: z.string(),
   description: z.string(),
   questions: z
-    .array(z.object({ taskId: slugSchema, points: z.number().int().min(1) }))
+    .array(
+      z.object({
+        taskId: slugSchema,
+        points: z.number().int().min(1),
+        /** The lesson this question tests, for readiness per lesson (plan
+         *  0027 §6). On the entry rather than the question because the same
+         *  question can serve two exams. */
+        lessonId: slugSchema.optional(),
+      }),
+    )
     .min(1),
   ruleset: examRulesetSchema,
 });

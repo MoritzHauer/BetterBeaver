@@ -172,6 +172,12 @@ export interface ChoiceQuestion {
   choices: string[];
   correctIndices: number[];
   selectCount: number;
+  /** Per choice, aligned with `choices`; undefined where the option has no authored reason. */
+  whys: (string | undefined)[];
+  explanation?: string;
+  /** Either flag set on the payload: the explanation and whys are
+   *  model-written and unreviewed, and the renderer marks them. */
+  explanationGenerated: boolean;
 }
 
 /**
@@ -189,6 +195,12 @@ export interface AssignQuestion {
   rows: string[];
   labels: [string, string];
   correctLabelIndex: number[];
+  /** Per row, aligned with `rows`; undefined where the option has no authored reason. */
+  whys: (string | undefined)[];
+  explanation?: string;
+  /** Either flag set on the payload: the explanation and whys are
+   *  model-written and unreviewed, and the renderer marks them. */
+  explanationGenerated: boolean;
 }
 
 /** A note-derived scheduling unit due for review (plan 0008 step 7): the
@@ -389,7 +401,17 @@ function buildQuestionItemQuestion(
   item: Extract<Item, { kind: "question" }>,
   unitId: string,
 ): ChoiceQuestion | AssignQuestion {
-  const { stem, options, labels } = item.payload;
+  const {
+    stem,
+    options,
+    labels,
+    explanation,
+    generated,
+    explanationGenerated,
+  } = item.payload;
+  const whys = options.map((option) => option.why);
+  const explanationIsGenerated =
+    generated === true || explanationGenerated === true;
   if (labels === undefined) {
     return {
       kind: "choice",
@@ -400,6 +422,9 @@ function buildQuestionItemQuestion(
         option.correct ? [index] : [],
       ),
       selectCount: options.filter((option) => option.correct).length,
+      whys,
+      ...(explanation !== undefined ? { explanation } : {}),
+      explanationGenerated: explanationIsGenerated,
     };
   }
   return {
@@ -409,6 +434,9 @@ function buildQuestionItemQuestion(
     rows: options.map((option) => option.text),
     labels,
     correctLabelIndex: options.map((option) => (option.correct ? 0 : 1)),
+    whys,
+    ...(explanation !== undefined ? { explanation } : {}),
+    explanationGenerated: explanationIsGenerated,
   };
 }
 
@@ -981,6 +1009,82 @@ export function buildUnitSession(
 }
 
 /**
+ * Builds a fixed, ordered, never-shuffled session over the given task ids,
+ * flattened (plan 0027 §5): the Check (§12), exam review mode and "practise
+ * what you missed" all need the order they were given preserved, which is
+ * exactly what `buildUnitSession`'s pooled shuffle throws away — so it
+ * cannot be reused for them. An unknown id is skipped, the same degrade
+ * `buildUnitSession` uses for a task id that resolves to nothing.
+ */
+export function buildFixedSession(
+  taskIds: readonly string[],
+  content: Content,
+  rng: Rng,
+): { question: Question; taskId: string }[] {
+  const taskById = new Map(content.tasks.map((task) => [task.id, task]));
+  return taskIds.flatMap((taskId) => {
+    const task = taskById.get(taskId);
+    if (task === undefined) {
+      return [];
+    }
+    return buildTaskSession(task, content, rng).map((question) => ({
+      question,
+      taskId,
+    }));
+  });
+}
+
+/** The unit's `choice`/`assign` task ids, in `unit.taskIds` order (plan 0027
+ * §12) — what the Check asks, via `buildFixedSession`. */
+export function checkTaskIds(unit: Unit, content: Content): string[] {
+  const taskById = new Map(content.tasks.map((task) => [task.id, task]));
+  return unit.taskIds.filter((taskId) => {
+    const task = taskById.get(taskId);
+    return (
+      task !== undefined && (task.type === "choice" || task.type === "assign")
+    );
+  });
+}
+
+/**
+ * The unit's items unit practice may drill (plan 0027 §5, §10, §12): never a
+ * `question` item — a question is answered in the unit's Check, and is never
+ * drilled — and only an item with at least one exercise other than
+ * `matching` available. The drill cannot skip a visit it cannot build, and
+ * `buildVisitQuestion` drops `matching` for a word a board earlier in the
+ * session already covered, so an item whose only available exercise is
+ * `matching` would draw nothing on its second visit and stall the session.
+ * Filtering such an item out here, before the drill starts, is what keeps
+ * that unreachable.
+ */
+export function drillItemIds(
+  unit: Unit,
+  content: Content,
+  allowed?: readonly Exercise[],
+): string[] {
+  const itemById = new Map(content.items.map((item) => [item.id, item]));
+  return unit.itemIds.filter((itemId) => {
+    const item = itemById.get(itemId);
+    if (item === undefined || item.kind === "question") {
+      return false;
+    }
+    return availableExercises(item, content, allowed).some(
+      (exercise) => exercise !== "matching",
+    );
+  });
+}
+
+/** The unit's task ids minus its `choice`/`assign` ones (plan 0027 §5): what
+ * `buildRecallSession` samples from, filtered in **before** its
+ * shuffle-and-take-5 so a mixed unit can never draw five question tasks and
+ * produce no cards — a Check question is answered in its own unit's Check,
+ * never asked, shuffled and graded from another unit's cross-unit recall. */
+export function recallableTaskIds(unit: Unit, content: Content): string[] {
+  const checkable = new Set(checkTaskIds(unit, content));
+  return unit.taskIds.filter((taskId) => !checkable.has(taskId));
+}
+
+/**
  * Counts the actual questions/flashcards `buildUnitSession` would produce
  * for `unit`, without building any `Question` objects or requiring an `Rng`
  * (plan 0011): mirrors `buildTaskSession`'s per-type question count, since
@@ -1037,6 +1141,12 @@ function countTaskQuestions(task: Task, itemById: Map<string, Item>): number {
  * already answered for. A board answers for every word on it, so without
  * this a unit of four new words would open with four identical boards; a
  * covered word draws its next exercise up instead.
+ *
+ * `allowedExercises` is the domain's `exercises` allow-list (plan 0027
+ * §10), narrowing what the draw may pick for this word. `drillItemIds`
+ * decides which words enter the session; this is what keeps the exercise
+ * chosen for them inside the list too — without it a curated domain would
+ * still be asked the exercises it removed.
  */
 export function buildVisitQuestion(
   visit: PlannedVisit,
@@ -1045,13 +1155,14 @@ export function buildVisitQuestion(
   levelOf: (schedulingUnitId: string) => number,
   rng: Rng,
   coveredByBoard: ReadonlySet<string> = new Set(),
+  allowedExercises?: readonly Exercise[],
 ): { question: Question; taskId: string } | null {
   const item = content.items.find((candidate) => candidate.id === visit.unitId);
   if (item === undefined) {
     return null;
   }
 
-  let available = availableExercises(item, content);
+  let available = availableExercises(item, content, allowedExercises);
   if (coveredByBoard.has(visit.unitId)) {
     available = available.filter((exercise) => exercise !== "matching");
   }
@@ -1217,19 +1328,24 @@ const RECALL_SESSION_MAX_TASKS = 5;
 /**
  * Builds a practice-only "Remember: …" recall session (plan 0016) over a
  * random sample of up to `RECALL_SESSION_MAX_TASKS` of `linkedUnit`'s own
- * tasks — reusing `buildUnitSession` unchanged (it reads only `unit.taskIds`
- * plus `content`), so the per-task question shape is identical to practicing
- * the linked unit directly. No content is authored for the link itself.
+ * **recallable** tasks — reusing `buildUnitSession` unchanged (it reads only
+ * `unit.taskIds` plus `content`), so the per-task question shape is
+ * identical to practicing the linked unit directly. No content is authored
+ * for the link itself.
+ *
+ * Filtered through `recallableTaskIds` **before** the shuffle-and-slice
+ * (plan 0027 §5): filtering after would let a mixed unit draw five
+ * `choice`/`assign` tasks and produce no cards at all.
  */
 export function buildRecallSession(
   linkedUnit: Unit,
   content: Content,
   rng: Rng,
 ): { question: Question; taskId: string }[] {
-  const sampledTaskIds = shuffle(linkedUnit.taskIds, rng).slice(
-    0,
-    RECALL_SESSION_MAX_TASKS,
-  );
+  const sampledTaskIds = shuffle(
+    recallableTaskIds(linkedUnit, content),
+    rng,
+  ).slice(0, RECALL_SESSION_MAX_TASKS);
   return buildUnitSession(
     { ...linkedUnit, taskIds: sampledTaskIds },
     content,

@@ -45,7 +45,7 @@ import {
   keyboardPlatform,
 } from "../../components/KeyboardSetupCard";
 import { ActionBar, VerdictBar, type Verdict } from "./ActionBar";
-import { AssignBoard, ChoiceBoard } from "./questionInputs";
+import { AssignBoard, ChoiceBoard, QuestionFeedback } from "./questionInputs";
 
 function AudioPlayer({ bookId, stem }: { bookId: string; stem: string }) {
   const url = getAssetUrl(bookId, "audio", stem);
@@ -762,6 +762,7 @@ function AuthoredQuestionView({
           onChange={setSelected}
           reveal={checked !== null}
           disabled={checked !== null}
+          whys={checked !== null ? question.whys : undefined}
         />
       ) : (
         <AssignBoard
@@ -770,8 +771,15 @@ function AuthoredQuestionView({
           onChange={setChosen}
           reveal={checked !== null}
           disabled={checked !== null}
+          whys={checked !== null ? question.whys : undefined}
         />
       )}
+      {checked !== null ? (
+        <QuestionFeedback
+          explanation={question.explanation}
+          generated={question.explanationGenerated}
+        />
+      ) : null}
       {checked === null ? (
         <ActionBar>
           <button className="primary" disabled={!complete} onClick={check}>

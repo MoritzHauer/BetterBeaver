@@ -12,7 +12,10 @@
  * Global by force, not by choice: design.md pins "one word = one SRS state
  * across topics" and `bb.item.*` is keyed by item id with no Book scope, so
  * a per-Book pace would have two schedulers writing contradictory intervals
- * into one lexeme's single state.
+ * into one lexeme's single state. Plan 0027 §11's Book-declared practice
+ * depth still holds: a Book's depth only ever changes how many correct
+ * answers *that Book's own* session asks for, and no other Book reads it,
+ * so it is a session-length choice, not a second scheduler.
  */
 import {
   DEFAULT_SCHEDULING,
@@ -20,6 +23,7 @@ import {
   type ReviewPace,
   type SchedulingConfig,
 } from "@betterbeaver/srs";
+import { PRACTICE_DEPTHS, type PracticeDepth } from "@betterbeaver/schema";
 import { readJson } from "./progress/local-storage";
 
 export const LEARNING_KEY = "bb.learning";
@@ -38,10 +42,14 @@ export const SKIP_DAYS: Record<SkipLength, number> = {
  * How fast a word climbs the ladder (plan 0025 §3, §12): how many correct
  * answers it is owed per session. One is pure progression — every
  * appearance a stretch; three surrounds each stretch with consolidation.
+ *
+ * `"book"` (plan 0027 §11) is not a preset itself — it defers to whichever
+ * preset the current Book declares, Normal when it declares none — so it is
+ * a `Progression` but not a `PracticeDepth`.
  */
-export type Progression = "careful" | "normal" | "fast";
+export type Progression = PracticeDepth | "book";
 
-export const REPETITIONS_PER_WORD: Record<Progression, number> = {
+export const REPETITIONS_PER_WORD: Record<PracticeDepth, number> = {
   careful: 3,
   normal: 2,
   fast: 1,
@@ -57,7 +65,7 @@ export const REPETITIONS_PER_WORD: Record<Progression, number> = {
  * consolidation, and doubling their step would mean a word gaining two
  * levels off an answer the learner was walked up to.
  */
-export const LEVELS_PER_DAY: Record<Progression, 1 | 2> = {
+export const LEVELS_PER_DAY: Record<PracticeDepth, 1 | 2> = {
   careful: 1,
   normal: 1,
   fast: 2,
@@ -91,7 +99,7 @@ export const DEFAULT_LEARNING: LearningSettings = {
   skip: "week",
   extraKeys: false,
   keyboardHelpDismissed: false,
-  progression: "normal",
+  progression: "book",
 };
 
 function isPace(value: unknown): value is ReviewPace {
@@ -99,7 +107,7 @@ function isPace(value: unknown): value is ReviewPace {
 }
 
 function isProgression(value: unknown): value is Progression {
-  return value === "careful" || value === "normal" || value === "fast";
+  return value === "book" || PRACTICE_DEPTHS.includes(value as PracticeDepth);
 }
 
 function isSkip(value: unknown): value is SkipLength {
@@ -142,13 +150,27 @@ export function setLearning(patch: Partial<LearningSettings>): void {
 
 /** The scheduler half of the settings, for `recordGrade`. Read at grade time
  * rather than cached, so a change in Settings applies to the next answer
- * without any invalidation path. */
+ * without any invalidation path.
+ *
+ * Under `"book"` the scheduler behaves as Normal (plan 0027 §11): the Fast
+ * preset's double step is SRS state and global (see the header comment), so
+ * a Book's own depth — which is session length only — never changes it. */
 export function schedulingConfig(): SchedulingConfig {
   const { pace, progression } = getLearning();
-  return { pace, levelsPerDay: LEVELS_PER_DAY[progression] };
+  return {
+    pace,
+    levelsPerDay:
+      LEVELS_PER_DAY[progression === "book" ? "normal" : progression],
+  };
 }
 
-/** Correct answers a word is owed per session, from the Progression preset. */
-export function repetitionsPerWord(): number {
-  return REPETITIONS_PER_WORD[getLearning().progression];
+/** Correct answers a word is owed per session, from the Progression preset.
+ * Under `"book"`, `bookDepth` (the current Book's `practiceDepth`) decides,
+ * Normal when the Book declares none (plan 0027 §11); any explicit preset
+ * applies to every Book, ignoring `bookDepth`. */
+export function repetitionsPerWord(bookDepth?: PracticeDepth): number {
+  const { progression } = getLearning();
+  return REPETITIONS_PER_WORD[
+    progression === "book" ? (bookDepth ?? "normal") : progression
+  ];
 }

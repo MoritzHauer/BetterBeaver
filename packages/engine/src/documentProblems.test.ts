@@ -262,3 +262,95 @@ describe("documentProblems", () => {
     expect(all.some((p) => p.path === "")).toBe(false);
   });
 });
+
+describe("documentProblems: practice reachability (plan 0027 §10)", () => {
+  /** One unit, one sentence item whose only tasks are `scramble`/`build` —
+   *  under an allow-list without either, `drillItemIds` strips it of every
+   *  exercise. */
+  function bookWithScrambleBuildSentence(): BookDocument {
+    return {
+      topic: {
+        id: "b",
+        code: "b",
+        title: "B",
+        description: "",
+        lessonIds: ["b-lesson-1"],
+        domainId: "d",
+      },
+      lessons: [
+        {
+          id: "b-lesson-1",
+          topicId: "b",
+          title: "L",
+          goal: "g",
+          unitIds: ["b-unit-1"],
+        },
+      ],
+      units: [
+        {
+          id: "b-unit-1",
+          lessonId: "b-lesson-1",
+          title: "U",
+          goal: "g",
+          itemIds: ["b-item-1"],
+          taskIds: ["b-task-scramble", "b-task-build"],
+          noteIds: [],
+        },
+      ],
+      items: [
+        {
+          id: "b-item-1",
+          kind: "sentence",
+          payload: { text: "Hello.", translation: "Hi." },
+          sourceRef: "b-resource-1",
+        },
+      ],
+      tasks: [
+        { id: "b-task-scramble", type: "scramble", itemIds: ["b-item-1"] },
+        { id: "b-task-build", type: "build", itemIds: ["b-item-1"] },
+      ],
+      resources: [
+        { id: "b-resource-1", title: "R", path: "https://example.com" },
+      ],
+      notes: [],
+    };
+  }
+
+  function domainWith(exercises?: string[]): DomainDocument {
+    return {
+      domain: {
+        id: "d",
+        code: "d",
+        kind: "language",
+        title: "D",
+        glossLanguage: "en",
+        ...(exercises !== undefined ? { exercises } : {}),
+      },
+      entries: [],
+      families: [],
+    };
+  }
+
+  it("reports the §10 problem for an item the allow-list leaves with nothing to drill", () => {
+    const { all } = documentProblems(
+      bookWithScrambleBuildSentence(),
+      domainWith(["matching", "recognize", "recall"]),
+      emptyAssets,
+    );
+
+    const problem = all.find((p) => p.entityId === "b-item-1");
+    expect(problem?.message).toContain("cannot be practised");
+  });
+
+  it("reports nothing for the same Book without domain.exercises", () => {
+    const { all } = documentProblems(
+      bookWithScrambleBuildSentence(),
+      domainWith(undefined),
+      emptyAssets,
+    );
+
+    expect(all.some((p) => p.message.includes("cannot be practised"))).toBe(
+      false,
+    );
+  });
+});

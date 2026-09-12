@@ -15,7 +15,10 @@ import type {
   ParsedSet,
   BookDocument,
   DomainDocument,
+  Exercise,
+  PracticeDepth,
 } from "@betterbeaver/schema";
+import { EXERCISES, PRACTICE_DEPTHS } from "@betterbeaver/schema";
 import { noteImageStems } from "./noteBlocks.js";
 import type { AssetStems } from "./documentSource.js";
 
@@ -157,16 +160,29 @@ function draftQuestionPayload(p: Record<string, unknown>): QuestionPayload {
   const labels = arr(p.labels);
   return {
     stem: str(p.stem),
-    options: arr(p.options).map((o) => ({
-      text: str(obj(o).text),
-      correct: obj(o).correct === true,
-    })),
+    options: arr(p.options).map((o) => {
+      const option = obj(o);
+      return {
+        text: str(option.text),
+        correct: option.correct === true,
+        // Own words, shown once the question is graded — dropped when
+        // blank/non-string rather than coerced to "", the same rule every
+        // other optional string field here follows.
+        ...(typeof option.why === "string" && option.why !== ""
+          ? { why: option.why }
+          : {}),
+      };
+    }),
     // Exactly two, or none: a one-label or three-label draft is a `choice`
     // question mid-edit, not an `assign` question with a broken tuple.
     ...(labels.length === 2
       ? { labels: [str(labels[0]), str(labels[1])] as [string, string] }
       : {}),
+    ...(typeof p.explanation === "string" && p.explanation !== ""
+      ? { explanation: p.explanation }
+      : {}),
     ...(p.generated === true ? { generated: true } : {}),
+    ...(p.explanationGenerated === true ? { explanationGenerated: true } : {}),
   };
 }
 
@@ -294,10 +310,16 @@ function draftExam(raw: unknown): Exam {
     topicId: str(e.topicId),
     title: str(e.title),
     description: str(e.description),
-    questions: arr(e.questions).map((q) => ({
-      taskId: str(obj(q).taskId),
-      points: num(obj(q).points),
-    })),
+    questions: arr(e.questions).map((q) => {
+      const question = obj(q);
+      return {
+        taskId: str(question.taskId),
+        points: num(question.points),
+        ...(typeof question.lessonId === "string" && question.lessonId !== ""
+          ? { lessonId: question.lessonId }
+          : {}),
+      };
+    }),
     ruleset: {
       passPercent: num(ruleset.passPercent),
       timeLimitMinutes: num(ruleset.timeLimitMinutes),
@@ -338,9 +360,20 @@ function draftBook(raw: unknown): Book {
     ...(e.hasCoverArt === true ? { hasCoverArt: true } : {}),
     ...(e.generatedExercises === true ? { generatedExercises: true } : {}),
     ...(Array.isArray(e.examIds) ? { examIds: ids(e.examIds) } : {}),
+    // Guarded against the preset list, never cast: an unknown string is a
+    // stale or hand-edited value, not a fourth depth the editor invented.
+    ...(typeof e.practiceDepth === "string" &&
+    (PRACTICE_DEPTHS as readonly string[]).includes(e.practiceDepth)
+      ? { practiceDepth: e.practiceDepth as PracticeDepth }
+      : {}),
   };
 }
 
+// This domain's `exercises`/`extraChars`, the Book's `practiceDepth`, a
+// question's `explanation`/`explanationGenerated`/option `why`s, and an
+// exam entry's `lessonId` (below and above) all get the same treatment for
+// the same reason: a draft Preview that dropped one of them would render
+// and practise a different Book than the one that gets published.
 function draftDomain(raw: unknown): Domain {
   const e = obj(raw);
   return {
@@ -351,6 +384,17 @@ function draftDomain(raw: unknown): Domain {
     glossLanguage: str(e.glossLanguage),
     ...(typeof e.readAloudLang === "string" && e.readAloudLang !== ""
       ? { readAloudLang: e.readAloudLang }
+      : {}),
+    ...(Array.isArray(e.extraChars) ? { extraChars: ids(e.extraChars) } : {}),
+    // Dropping an unknown exercise name rather than casting it across: a
+    // stale or hand-edited value must not reach the draw as a lie about
+    // what the content can actually build.
+    ...(Array.isArray(e.exercises)
+      ? {
+          exercises: ids(e.exercises).filter((x): x is Exercise =>
+            (EXERCISES as readonly string[]).includes(x),
+          ),
+        }
       : {}),
   };
 }
