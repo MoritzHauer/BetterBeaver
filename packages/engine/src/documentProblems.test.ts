@@ -261,4 +261,87 @@ describe("documentProblems", () => {
     expect(wholeEntity).toBeDefined();
     expect(all.some((p) => p.path === "")).toBe(false);
   });
+
+  it("reports the §10 'cannot be practised' problem for a sentence whose only tasks fall outside the domain's exercises, and nothing without an allow-list", () => {
+    const book: BookDocument = {
+      topic: {
+        id: "b",
+        code: "b",
+        title: "B",
+        description: "",
+        lessonIds: ["b-lesson-1"],
+        domainId: "d",
+      },
+      lessons: [
+        {
+          id: "b-lesson-1",
+          topicId: "b",
+          title: "L",
+          goal: "g",
+          unitIds: ["b-unit-1"],
+        },
+      ],
+      units: [
+        {
+          id: "b-unit-1",
+          lessonId: "b-lesson-1",
+          title: "U",
+          goal: "g",
+          itemIds: ["b-item-1"],
+          taskIds: ["b-task-scramble", "b-task-build"],
+          noteIds: [],
+        },
+      ],
+      items: [
+        {
+          id: "b-item-1",
+          kind: "sentence",
+          payload: { text: "hello there world", translation: "hi" },
+          sourceRef: "b-resource-1",
+        },
+      ],
+      tasks: [
+        { id: "b-task-scramble", type: "scramble", itemIds: ["b-item-1"] },
+        { id: "b-task-build", type: "build", itemIds: ["b-item-1"] },
+      ],
+      resources: [
+        { id: "b-resource-1", title: "R", path: "https://example.com" },
+      ],
+      notes: [],
+    };
+    const domainWithAllowList: DomainDocument = {
+      domain: {
+        id: "d",
+        code: "d",
+        kind: "language",
+        title: "D",
+        glossLanguage: "en",
+        exercises: ["matching", "recognize", "recall"],
+      },
+      entries: [],
+      families: [],
+    };
+
+    const { all: withList } = documentProblems(
+      book,
+      domainWithAllowList,
+      emptyAssets,
+    );
+    expect(
+      withList.some(
+        (p) =>
+          p.entityId === "b-item-1" &&
+          p.message.includes("cannot be practised"),
+      ),
+    ).toBe(true);
+
+    const { all: withoutList } = documentProblems(
+      book,
+      emptyDomain(),
+      emptyAssets,
+    );
+    expect(
+      withoutList.some((p) => p.message.includes("cannot be practised")),
+    ).toBe(false);
+  });
 });

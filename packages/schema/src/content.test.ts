@@ -71,6 +71,7 @@ describe("content on disk", () => {
       const items = readJsonFilesIn(join(dir, "items"));
       const tasks = readJsonFilesIn(join(dir, "tasks"));
       const resources = readJson(join(dir, "resources.json")) as unknown[];
+      const exams = readJsonFilesIn(join(dir, "exams"));
       const noteStems = readNoteStems(join(dir, "notes"));
       const audioStems = readAssetStems(join(dir, "assets", "audio"));
       const imageStems = readAssetStems(join(dir, "assets", "img"));
@@ -97,6 +98,7 @@ describe("content on disk", () => {
         items,
         tasks,
         resources,
+        exams,
         noteStems,
         // Not derived from the on-disk notes (no bundled note currently uses
         // `[img:...]`, spec 0021-2 §2d): the extractor lives in

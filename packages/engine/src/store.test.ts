@@ -223,6 +223,7 @@ describe("dueUnits / dueDomainUnits pinning (plan 0008)", () => {
     tasks: [taskA, taskB, clozeTask],
     resources: [],
     notes: [],
+    exams: [],
   };
 
   const earlierDue: SrsState = {

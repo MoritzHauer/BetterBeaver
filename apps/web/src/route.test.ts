@@ -53,6 +53,15 @@ const CASES: [string, View][] = [
     }),
   ],
   [
+    "/books/demo/lessons/l1/units/u1/check",
+    started({
+      screen: "unit-check",
+      bookId: "demo",
+      lessonId: "l1",
+      unitId: "u1",
+    }),
+  ],
+  [
     "/books/demo/lessons/l1/units/u1/tasks/t1",
     started({
       screen: "task",
@@ -75,6 +84,26 @@ const CASES: [string, View][] = [
   [
     "/books/demo/lessons/l1/summary",
     started({ screen: "lesson-summary", bookId: "demo", lessonId: "l1" }),
+  ],
+  [
+    "/books/demo/exams/e1",
+    started({ screen: "exam", bookId: "demo", examId: "e1" }),
+  ],
+  [
+    "/books/demo/exams/e1?q=0",
+    started({ screen: "exam", bookId: "demo", examId: "e1", q: 0 }),
+  ],
+  [
+    "/books/demo/exams/e1?end=1",
+    started({ screen: "exam", bookId: "demo", examId: "e1", end: true }),
+  ],
+  [
+    "/books/demo/exams/e1?review=1",
+    started({ screen: "exam", bookId: "demo", examId: "e1", review: true }),
+  ],
+  [
+    "/books/demo/exams/e1?practice=1",
+    started({ screen: "exam", bookId: "demo", examId: "e1", practice: true }),
   ],
   ["/domains/demo/review", started({ screen: "review", domainId: "demo" })],
   ["/domains/demo/vocab", started({ screen: "vocab", domainId: "demo" })],
@@ -126,6 +155,12 @@ describe("route", () => {
       screen: { screen: "books" },
       sheet: false,
     });
+  });
+
+  it("parses an exam route with more than one flag set as the intro", () => {
+    expect(fromPath("/books/demo/exams/e1?end=1&practice=1")).toEqual(
+      started({ screen: "exam", bookId: "demo", examId: "e1" }),
+    );
   });
 
   it("returns null for a route this build does not know", () => {

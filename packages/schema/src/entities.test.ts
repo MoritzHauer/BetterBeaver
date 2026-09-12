@@ -10,6 +10,11 @@ import {
 } from "./entities.js";
 
 describe("the exercise level table (plan 0025 §2)", () => {
+  it("places `choice` at 2 and `assign` at 3 (plan 0027 §2a)", () => {
+    expect(EXERCISE_LEVEL.choice).toBe(2);
+    expect(EXERCISE_LEVEL.assign).toBe(3);
+  });
+
   it("ranks every exercise except the one nothing checks", () => {
     // Pinned by value: this table *is* the design decision, so a change to
     // it should have to be made here too.
@@ -17,8 +22,10 @@ describe("the exercise level table (plan 0025 §2)", () => {
       shadowing: null,
       matching: 1,
       recognize: 2,
+      choice: 2,
       listen: 3,
       "minimal-pair": 3,
+      assign: 3,
       "recognize-produce": 4,
       picture: 4,
       scramble: 5,

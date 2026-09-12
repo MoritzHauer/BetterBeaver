@@ -7,6 +7,7 @@ export * from "./documentSource.js";
 export * from "./draw.js";
 export * from "./drill.js";
 export * from "./domain.js";
+export * from "./exam.js";
 export * from "./draftContent.js";
 export * from "./interfaces.js";
 export * from "./lookup.js";

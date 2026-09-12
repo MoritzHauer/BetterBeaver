@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { validateContent, type ValidateContentResult } from "./validate.js";
-import { bookSchema, BOOK_ICONS } from "./entities.js";
+import { bookSchema, BOOK_ICONS, domainSchema } from "./entities.js";
 
 type LinkLike = { type: string; entryId: string };
 type ComponentLike = {
@@ -58,8 +58,38 @@ type PairItemLike = {
   };
   sourceRef: string;
 };
+type QuestionItemLike = {
+  id: string;
+  kind: "question";
+  payload: {
+    stem: string;
+    options: { text: string; correct: boolean; why?: string }[];
+    labels?: [string, string];
+    explanation?: string;
+    generated?: boolean;
+    explanationGenerated?: boolean;
+  };
+  sourceRef: string;
+};
 type ItemLike =
-  ConceptItemLike | LexemeItemLike | SentenceItemLike | PairItemLike;
+  | ConceptItemLike
+  | LexemeItemLike
+  | SentenceItemLike
+  | PairItemLike
+  | QuestionItemLike;
+type ExamLike = {
+  id: string;
+  topicId: string;
+  title: string;
+  description: string;
+  questions: { taskId: string; points: number; lessonId?: string }[];
+  ruleset: {
+    passPercent: number;
+    timeLimitMinutes: number;
+    partialCredit: boolean;
+    negativeMarking: boolean;
+  };
+};
 type DomainLike = {
   id: string;
   code: string;
@@ -202,6 +232,7 @@ function makeFixture() {
     items,
     tasks: [taskRecognize, taskRecall],
     resources: [resource],
+    exams: [] as unknown[],
     noteStems: ["intro"],
     audioStems: [] as string[],
     imageStems: [] as string[],
@@ -239,6 +270,76 @@ function renameId(ids: string[], oldId: string, newId: string): void {
   if (index !== -1) {
     ids[index] = newId;
   }
+}
+
+/**
+ * Adds one `question` item and its owning `choice`/`assign` task to
+ * `fixture.input` (plan 0027 §1/§2), without touching any unit — the caller
+ * pushes `item.id`/`task.id` into `fixture.unit.itemIds`/`taskIds` itself
+ * when the test wants the pair unit-owned rather than exam-only.
+ */
+function addQuestion(
+  fixture: ReturnType<typeof makeFixture>,
+  options: {
+    taskId: string;
+    itemId: string;
+    type: "choice" | "assign";
+    payload?: Partial<QuestionItemLike["payload"]>;
+  },
+): { item: QuestionItemLike; task: TaskLike } {
+  const item: QuestionItemLike = {
+    id: options.itemId,
+    kind: "question",
+    payload: {
+      stem: "Which is correct?",
+      options: [
+        { text: "A", correct: true },
+        { text: "B", correct: false },
+      ],
+      ...options.payload,
+    },
+    sourceRef: fixture.resource.id,
+  };
+  const task: TaskLike = {
+    id: options.taskId,
+    type: options.type,
+    itemIds: [item.id],
+  };
+  fixture.input.items.push(item);
+  fixture.input.tasks.push(task);
+  return { item, task };
+}
+
+/** Adds one exam to `fixture.input.exams` (plan 0027 §3), filled in with a
+ * valid ruleset/topicId by default so a test only names what it varies. */
+function addExam(
+  fixture: ReturnType<typeof makeFixture>,
+  exam: Partial<ExamLike> & { id: string },
+): ExamLike {
+  const full: ExamLike = {
+    topicId: fixture.book.id,
+    title: "Mock Exam",
+    description: "A mock exam.",
+    questions: [],
+    ruleset: {
+      passPercent: 60,
+      timeLimitMinutes: 75,
+      partialCredit: true,
+      negativeMarking: true,
+    },
+    ...exam,
+  };
+  fixture.input.exams.push(full);
+  return full;
+}
+
+/** Sets `fixture.book.examIds` in place (the fixture's `book` has no static
+ * type carrying the field, since most tests never need it). */
+function setExamIds(
+  fixture: ReturnType<typeof makeFixture>,
+  examIds: string[],
+): void {
+  (fixture.book as { examIds?: string[] }).examIds = examIds;
 }
 
 function expectErrors(result: ValidateContentResult): string[] {
@@ -1255,5 +1356,454 @@ describe("bookSchema hasCoverArt (UI polish batch, 2026-07-25)", () => {
     if (result.success) {
       expect(result.data.hasCoverArt).toBeUndefined();
     }
+  });
+});
+
+describe("bookSchema practiceDepth (plan 0027 §11)", () => {
+  const baseBook = {
+    id: "kyrgyz",
+    code: "ky",
+    title: "Kyrgyz",
+    description: "Kyrgyz language book",
+    lessonIds: [] as string[],
+    domainId: "ky",
+  };
+
+  it("accepts a valid practice depth", () => {
+    const result = bookSchema.safeParse({
+      ...baseBook,
+      practiceDepth: "fast",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects an unknown practice depth", () => {
+    const result = bookSchema.safeParse({
+      ...baseBook,
+      practiceDepth: "turbo",
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("domainSchema exercises (plan 0027 §10)", () => {
+  const baseDomain = {
+    id: "ky",
+    code: "ky",
+    kind: "language",
+    title: "Kyrgyz",
+    glossLanguage: "en",
+  };
+
+  it("accepts a valid allow-list", () => {
+    const result = domainSchema.safeParse({
+      ...baseDomain,
+      exercises: ["matching"],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects an empty allow-list", () => {
+    const result = domainSchema.safeParse({ ...baseDomain, exercises: [] });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects an exercise the enum doesn't know", () => {
+    const result = domainSchema.safeParse({
+      ...baseDomain,
+      exercises: ["bogus"],
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("choice/assign questions (plan 0027 §1/§2/§7)", () => {
+  it("accepts a valid `choice` question in a unit task", () => {
+    const fixture = makeFixture();
+    const { item, task } = addQuestion(fixture, {
+      taskId: "ky-task-choice-1",
+      itemId: "ky-item-q1",
+      type: "choice",
+    });
+    fixture.unit.itemIds.push(item.id);
+    fixture.unit.taskIds.push(task.id);
+
+    const result = validateContent(fixture.input);
+
+    if ("errors" in result) {
+      throw new Error(
+        `expected valid content, got errors: ${result.errors.join("; ")}`,
+      );
+    }
+  });
+
+  it("accepts a valid `assign` question in a unit task", () => {
+    const fixture = makeFixture();
+    const { item, task } = addQuestion(fixture, {
+      taskId: "ky-task-assign-1",
+      itemId: "ky-item-q1",
+      type: "assign",
+      payload: { labels: ["Richtig", "Falsch"] },
+    });
+    fixture.unit.itemIds.push(item.id);
+    fixture.unit.taskIds.push(task.id);
+
+    const result = validateContent(fixture.input);
+
+    if ("errors" in result) {
+      throw new Error(
+        `expected valid content, got errors: ${result.errors.join("; ")}`,
+      );
+    }
+  });
+
+  it("rejects a `choice` task whose item has labels (class (ad))", () => {
+    const fixture = makeFixture();
+    const { item, task } = addQuestion(fixture, {
+      taskId: "ky-task-choice-1",
+      itemId: "ky-item-q1",
+      type: "choice",
+      payload: { labels: ["Richtig", "Falsch"] },
+    });
+    fixture.unit.itemIds.push(item.id);
+    fixture.unit.taskIds.push(task.id);
+
+    const errors = expectErrors(validateContent(fixture.input));
+
+    expect(errors.some((e) => e.includes("has labels"))).toBe(true);
+  });
+
+  it("rejects an `assign` task whose item has no labels (class (ad))", () => {
+    const fixture = makeFixture();
+    const { item, task } = addQuestion(fixture, {
+      taskId: "ky-task-assign-1",
+      itemId: "ky-item-q1",
+      type: "assign",
+    });
+    fixture.unit.itemIds.push(item.id);
+    fixture.unit.taskIds.push(task.id);
+
+    const errors = expectErrors(validateContent(fixture.input));
+
+    expect(errors.some((e) => e.includes("has no labels"))).toBe(true);
+  });
+
+  it("rejects a choice question with every option marked correct", () => {
+    const fixture = makeFixture();
+    const { item, task } = addQuestion(fixture, {
+      taskId: "ky-task-choice-1",
+      itemId: "ky-item-q1",
+      type: "choice",
+      payload: {
+        options: [
+          { text: "A", correct: true },
+          { text: "B", correct: true },
+        ],
+      },
+    });
+    fixture.unit.itemIds.push(item.id);
+    fixture.unit.taskIds.push(task.id);
+
+    const errors = expectErrors(validateContent(fixture.input));
+
+    expect(
+      errors.some((e) =>
+        e.includes("at least one correct and one incorrect option"),
+      ),
+    ).toBe(true);
+  });
+
+  it("rejects a question option with a blank `why`", () => {
+    const fixture = makeFixture();
+    const { item, task } = addQuestion(fixture, {
+      taskId: "ky-task-choice-1",
+      itemId: "ky-item-q1",
+      type: "choice",
+      payload: {
+        options: [
+          { text: "A", correct: true, why: " " },
+          { text: "B", correct: false },
+        ],
+      },
+    });
+    fixture.unit.itemIds.push(item.id);
+    fixture.unit.taskIds.push(task.id);
+
+    const errors = expectErrors(validateContent(fixture.input));
+
+    expect(errors.some((e) => e.includes('blank option "why"'))).toBe(true);
+  });
+
+  it("rejects a question with a blank explanation", () => {
+    const fixture = makeFixture();
+    const { item, task } = addQuestion(fixture, {
+      taskId: "ky-task-choice-1",
+      itemId: "ky-item-q1",
+      type: "choice",
+      payload: { explanation: " " },
+    });
+    fixture.unit.itemIds.push(item.id);
+    fixture.unit.taskIds.push(task.id);
+
+    const errors = expectErrors(validateContent(fixture.input));
+
+    expect(errors.some((e) => e.includes("blank explanation"))).toBe(true);
+  });
+});
+
+describe("exams (plan 0027 §3/§3a/§7)", () => {
+  it("accepts a valid exam over an exam-only `choice` task", () => {
+    const fixture = makeFixture();
+    const { task } = addQuestion(fixture, {
+      taskId: "ky-task-choice-1",
+      itemId: "ky-item-q1",
+      type: "choice",
+    });
+    // Exam-only: neither the task nor its item is in any unit's
+    // taskIds/itemIds (plan 0027 §3a).
+    addExam(fixture, {
+      id: "ky-exam-mock",
+      questions: [{ taskId: task.id, points: 1 }],
+    });
+    setExamIds(fixture, ["ky-exam-mock"]);
+
+    const result = validateContent(fixture.input);
+
+    if ("errors" in result) {
+      throw new Error(
+        `expected valid content, got errors: ${result.errors.join("; ")}`,
+      );
+    }
+  });
+
+  it("rejects the same exam-only task when no exam references it", () => {
+    const fixture = makeFixture();
+    addQuestion(fixture, {
+      taskId: "ky-task-choice-1",
+      itemId: "ky-item-q1",
+      type: "choice",
+    });
+
+    const errors = expectErrors(validateContent(fixture.input));
+
+    expect(
+      errors.some(
+        (e) => e.includes("ky-task-choice-1") && e.includes("orphaned"),
+      ),
+    ).toBe(true);
+  });
+
+  it("rejects an exam-only task whose item is also in a unit's itemIds", () => {
+    const fixture = makeFixture();
+    const { item, task } = addQuestion(fixture, {
+      taskId: "ky-task-choice-1",
+      itemId: "ky-item-q1",
+      type: "choice",
+    });
+    // The item joins a unit; the task itself stays out of every unit's
+    // taskIds, so it is still exam-only.
+    fixture.unit.itemIds.push(item.id);
+    addExam(fixture, {
+      id: "ky-exam-mock",
+      questions: [{ taskId: task.id, points: 1 }],
+    });
+    setExamIds(fixture, ["ky-exam-mock"]);
+
+    const errors = expectErrors(validateContent(fixture.input));
+
+    expect(errors.some((e) => e.includes("is owned by a unit"))).toBe(true);
+  });
+
+  it("rejects an exam-only `choice` task over a labelled item", () => {
+    const fixture = makeFixture();
+    const { task } = addQuestion(fixture, {
+      taskId: "ky-task-choice-1",
+      itemId: "ky-item-q1",
+      type: "choice",
+      payload: { labels: ["Richtig", "Falsch"] },
+    });
+    addExam(fixture, {
+      id: "ky-exam-mock",
+      questions: [{ taskId: task.id, points: 1 }],
+    });
+    setExamIds(fixture, ["ky-exam-mock"]);
+
+    const errors = expectErrors(validateContent(fixture.input));
+
+    expect(errors.some((e) => e.includes("has labels"))).toBe(true);
+  });
+
+  it("rejects an exam referencing a `recall` task", () => {
+    const fixture = makeFixture();
+    addExam(fixture, {
+      id: "ky-exam-mock",
+      questions: [{ taskId: fixture.taskRecall.id, points: 1 }],
+    });
+    setExamIds(fixture, ["ky-exam-mock"]);
+
+    const errors = expectErrors(validateContent(fixture.input));
+
+    expect(errors.some((e) => e.startsWith("ky-exam-mock:"))).toBe(true);
+  });
+
+  it("rejects an exam referencing a two-item task", () => {
+    const fixture = makeFixture();
+    const { task } = addQuestion(fixture, {
+      taskId: "ky-task-choice-1",
+      itemId: "ky-item-q1",
+      type: "choice",
+    });
+    const secondItem: QuestionItemLike = {
+      id: "ky-item-q2",
+      kind: "question",
+      payload: {
+        stem: "Second question?",
+        options: [
+          { text: "A", correct: true },
+          { text: "B", correct: false },
+        ],
+      },
+      sourceRef: fixture.resource.id,
+    };
+    fixture.input.items.push(secondItem);
+    task.itemIds.push(secondItem.id);
+    addExam(fixture, {
+      id: "ky-exam-mock",
+      questions: [{ taskId: task.id, points: 1 }],
+    });
+    setExamIds(fixture, ["ky-exam-mock"]);
+
+    const errors = expectErrors(validateContent(fixture.input));
+
+    expect(errors.some((e) => e.startsWith("ky-exam-mock:"))).toBe(true);
+  });
+
+  it("rejects an exam with a dangling taskId", () => {
+    const fixture = makeFixture();
+    addExam(fixture, {
+      id: "ky-exam-mock",
+      questions: [{ taskId: "ky-task-nonexistent", points: 1 }],
+    });
+    setExamIds(fixture, ["ky-exam-mock"]);
+
+    const errors = expectErrors(validateContent(fixture.input));
+
+    expect(errors.some((e) => e.startsWith("ky-exam-mock:"))).toBe(true);
+  });
+
+  it("rejects an exam question with a dangling lessonId", () => {
+    const fixture = makeFixture();
+    const { task } = addQuestion(fixture, {
+      taskId: "ky-task-choice-1",
+      itemId: "ky-item-q1",
+      type: "choice",
+    });
+    addExam(fixture, {
+      id: "ky-exam-mock",
+      questions: [
+        { taskId: task.id, points: 1, lessonId: "ky-lesson-nonexistent" },
+      ],
+    });
+    setExamIds(fixture, ["ky-exam-mock"]);
+
+    const errors = expectErrors(validateContent(fixture.input));
+
+    expect(errors.some((e) => e.startsWith("ky-exam-mock:"))).toBe(true);
+  });
+
+  it("rejects an exam absent from topic.examIds", () => {
+    const fixture = makeFixture();
+    const { task } = addQuestion(fixture, {
+      taskId: "ky-task-choice-1",
+      itemId: "ky-item-q1",
+      type: "choice",
+    });
+    addExam(fixture, {
+      id: "ky-exam-mock",
+      questions: [{ taskId: task.id, points: 1 }],
+    });
+    // topic.examIds left unset.
+
+    const errors = expectErrors(validateContent(fixture.input));
+
+    expect(
+      errors.some(
+        (e) => e.startsWith("ky-exam-mock:") && e.includes("orphaned"),
+      ),
+    ).toBe(true);
+  });
+
+  it("rejects topic.examIds naming a missing exam", () => {
+    const fixture = makeFixture();
+    setExamIds(fixture, ["ky-exam-missing"]);
+
+    const errors = expectErrors(validateContent(fixture.input));
+
+    expect(errors.some((e) => e.includes("ky-exam-missing"))).toBe(true);
+  });
+
+  it("rejects an exam id without the book-code prefix", () => {
+    const fixture = makeFixture();
+    const { task } = addQuestion(fixture, {
+      taskId: "ky-task-choice-1",
+      itemId: "ky-item-q1",
+      type: "choice",
+    });
+    addExam(fixture, {
+      id: "exam-mock",
+      questions: [{ taskId: task.id, points: 1 }],
+    });
+    setExamIds(fixture, ["exam-mock"]);
+
+    const errors = expectErrors(validateContent(fixture.input));
+
+    expect(errors.some((e) => e.includes('must start with "ky-"'))).toBe(true);
+  });
+
+  it("rejects two exams sharing an id", () => {
+    const fixture = makeFixture();
+    const { task } = addQuestion(fixture, {
+      taskId: "ky-task-choice-1",
+      itemId: "ky-item-q1",
+      type: "choice",
+    });
+    addExam(fixture, {
+      id: "ky-exam-mock",
+      questions: [{ taskId: task.id, points: 1 }],
+    });
+    addExam(fixture, {
+      id: "ky-exam-mock",
+      questions: [{ taskId: task.id, points: 2 }],
+    });
+    setExamIds(fixture, ["ky-exam-mock"]);
+
+    const errors = expectErrors(validateContent(fixture.input));
+
+    expect(errors.some((e) => e.includes("duplicate exam id"))).toBe(true);
+  });
+
+  it("rejects a duplicate taskId inside one exam", () => {
+    const fixture = makeFixture();
+    const { task } = addQuestion(fixture, {
+      taskId: "ky-task-choice-1",
+      itemId: "ky-item-q1",
+      type: "choice",
+    });
+    addExam(fixture, {
+      id: "ky-exam-mock",
+      questions: [
+        { taskId: task.id, points: 1 },
+        { taskId: task.id, points: 2 },
+      ],
+    });
+    setExamIds(fixture, ["ky-exam-mock"]);
+
+    const errors = expectErrors(validateContent(fixture.input));
+
+    expect(
+      errors.some((e) =>
+        e.includes('duplicate taskId "ky-task-choice-1" in questions'),
+      ),
+    ).toBe(true);
   });
 });

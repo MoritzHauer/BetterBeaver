@@ -50,6 +50,11 @@ const matchingTask: Task = {
   type: "matching",
   itemIds: [1, 2, 3, 4].map((n) => `t-item-c${n}`),
 };
+const recallTask: Task = {
+  id: "t-task-recall",
+  type: "recall",
+  itemIds: [1, 2, 3, 4].map((n) => `t-item-c${n}`),
+};
 
 describe("availableExercises", () => {
   it("collects what the unit's tasks authorize", () => {
@@ -98,6 +103,20 @@ describe("availableExercises", () => {
       availableExercises(concept(1), contentWith([shadowing])),
     ).not.toContain("shadowing");
   });
+
+  it("narrows to a domain's exercise allow-list (plan 0027 §10)", () => {
+    const content = contentWith([recognizeTask, matchingTask, recallTask]);
+    const found = availableExercises(concept(1), content, [
+      "matching",
+      "recognize",
+      "recall",
+    ]);
+    expect(found).not.toContain("write");
+    expect(found).not.toContain("recognize-produce");
+    expect(found).toContain("matching");
+    expect(found).toContain("recognize");
+    expect(found).toContain("recall");
+  });
 });
 
 describe("drawExercise", () => {
@@ -145,6 +164,18 @@ describe("drawExercise", () => {
 
   it("stays at the hardest available exercise once the ladder runs out", () => {
     expect(drawExercise(10, "new", all, first)).toBe("write");
+  });
+
+  it("walks up through an allow-list's gaps to the next allowed level (plan 0027 §10)", () => {
+    // matching(1), recognize(2), recall(8) survive the allow-list; levels
+    // 3-7 are empty, so a level-2 word's new attempt has to climb past them.
+    const content = contentWith([recognizeTask, matchingTask, recallTask]);
+    const available = availableExercises(concept(1), content, [
+      "matching",
+      "recognize",
+      "recall",
+    ]);
+    expect(drawExercise(2, "new", available, first)).toBe("recall");
   });
 });
 
@@ -289,6 +320,21 @@ describe("buildVisitQuestion", () => {
     // A `write` question is derived — no task authored it — but the tag
     // still has to point somewhere real in the unit.
     expect(unit.taskIds).toContain(built?.taskId);
+  });
+
+  it("routes the card through a domain's exercise allow-list (plan 0027 §10)", () => {
+    const content = contentWith([recognizeTask, matchingTask, recallTask]);
+    const unit = content.units[0]!;
+    const built = buildVisitQuestion(
+      visit("t-item-c1"),
+      unit,
+      content,
+      () => 2,
+      first,
+      new Set(),
+      ["matching", "recognize", "recall"],
+    );
+    expect(built?.question.kind).toBe("recall");
   });
 
   it("returns null when the content can build nothing for the word", () => {

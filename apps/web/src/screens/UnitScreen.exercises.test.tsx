@@ -218,6 +218,8 @@ function renderUnit(session: EditSessionValue | null, book: BookDocument) {
       unitId="bk-u1"
       lookup={lookup}
       onPractice={() => {}}
+      onCheck={() => {}}
+      checkLevels={null}
       onRecall={() => {}}
       onPinNote={() => {}}
       isNotePinned={async () => false}

@@ -12,7 +12,9 @@
  * Global by force, not by choice: design.md pins "one word = one SRS state
  * across topics" and `bb.item.*` is keyed by item id with no Book scope, so
  * a per-Book pace would have two schedulers writing contradictory intervals
- * into one lexeme's single state.
+ * into one lexeme's single state. A Book's own `practiceDepth` (plan 0027
+ * §11) doesn't break that rule: it changes only how many correct answers a
+ * session asks for, which no other Book ever reads.
  */
 import {
   DEFAULT_SCHEDULING,
@@ -20,6 +22,7 @@ import {
   type ReviewPace,
   type SchedulingConfig,
 } from "@betterbeaver/srs";
+import type { PracticeDepth } from "@betterbeaver/schema";
 import { readJson } from "./progress/local-storage";
 
 export const LEARNING_KEY = "bb.learning";
@@ -38,10 +41,12 @@ export const SKIP_DAYS: Record<SkipLength, number> = {
  * How fast a word climbs the ladder (plan 0025 §3, §12): how many correct
  * answers it is owed per session. One is pure progression — every
  * appearance a stretch; three surrounds each stretch with consolidation.
+ * `"book"` (plan 0027 §11) defers to the open Book's own `practiceDepth`
+ * instead of naming one directly.
  */
-export type Progression = "careful" | "normal" | "fast";
+export type Progression = PracticeDepth | "book";
 
-export const REPETITIONS_PER_WORD: Record<Progression, number> = {
+export const REPETITIONS_PER_WORD: Record<PracticeDepth, number> = {
   careful: 3,
   normal: 2,
   fast: 1,
@@ -57,7 +62,7 @@ export const REPETITIONS_PER_WORD: Record<Progression, number> = {
  * consolidation, and doubling their step would mean a word gaining two
  * levels off an answer the learner was walked up to.
  */
-export const LEVELS_PER_DAY: Record<Progression, 1 | 2> = {
+export const LEVELS_PER_DAY: Record<PracticeDepth, 1 | 2> = {
   careful: 1,
   normal: 1,
   fast: 2,
@@ -91,7 +96,7 @@ export const DEFAULT_LEARNING: LearningSettings = {
   skip: "week",
   extraKeys: false,
   keyboardHelpDismissed: false,
-  progression: "normal",
+  progression: "book",
 };
 
 function isPace(value: unknown): value is ReviewPace {
@@ -99,7 +104,12 @@ function isPace(value: unknown): value is ReviewPace {
 }
 
 function isProgression(value: unknown): value is Progression {
-  return value === "careful" || value === "normal" || value === "fast";
+  return (
+    value === "careful" ||
+    value === "normal" ||
+    value === "fast" ||
+    value === "book"
+  );
 }
 
 function isSkip(value: unknown): value is SkipLength {
@@ -145,10 +155,21 @@ export function setLearning(patch: Partial<LearningSettings>): void {
  * without any invalidation path. */
 export function schedulingConfig(): SchedulingConfig {
   const { pace, progression } = getLearning();
-  return { pace, levelsPerDay: LEVELS_PER_DAY[progression] };
+  // The double step is SRS state, global to the word (plan 0027 §11) — a
+  // Book's practiceDepth never reaches it, so "book" schedules as Normal.
+  return {
+    pace,
+    levelsPerDay:
+      LEVELS_PER_DAY[progression === "book" ? "normal" : progression],
+  };
 }
 
-/** Correct answers a word is owed per session, from the Progression preset. */
-export function repetitionsPerWord(): number {
-  return REPETITIONS_PER_WORD[getLearning().progression];
+/** Correct answers a word is owed per session, from the Progression preset.
+ * Under "book" (plan 0027 §11), `bookDepth` — the open Book's own
+ * `practiceDepth` — decides instead, defaulting to Normal. */
+export function repetitionsPerWord(bookDepth?: PracticeDepth): number {
+  const { progression } = getLearning();
+  return REPETITIONS_PER_WORD[
+    progression === "book" ? (bookDepth ?? "normal") : progression
+  ];
 }

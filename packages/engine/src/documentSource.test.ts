@@ -289,6 +289,33 @@ describe("createDocumentContentSource: broken", () => {
       "domain-a",
     ]);
   });
+
+  it("accepts a pre-bump Book document with no exams key and no examIds (plan 0027 §3)", async () => {
+    const { bookDoc, domainDoc } = makeBook({
+      bookId: "book-a",
+      domainId: "domain-a",
+      domainCode: "code-a",
+      itemIds: [
+        "book-a-item-1",
+        "book-a-item-2",
+        "book-a-item-3",
+        "book-a-item-4",
+      ],
+    });
+    expect(bookDoc.exams).toBeUndefined();
+    expect((bookDoc.topic as { examIds?: unknown }).examIds).toBeUndefined();
+
+    const built = createDocumentContentSource(
+      new Map([["book-a", bookDoc]]),
+      new Map([["domain-a", domainDoc]]),
+      emptyAssets,
+    );
+
+    expect(built.broken).toEqual([]);
+    expect((await built.source.listBooks()).map((book) => book.id)).toEqual([
+      "book-a",
+    ]);
+  });
 });
 
 // --- planUpdate -----------------------------------------------------------

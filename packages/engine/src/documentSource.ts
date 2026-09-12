@@ -145,6 +145,11 @@ function bookDocumentShapeError(doc: BookDocument): string | undefined {
       return "malformed book document: every note needs a string stem and markdown";
     }
   }
+  // `exams` is not in the required-array list above: pre-bump documents
+  // (plan 0027 §3) lack the key entirely, and that must not be malformed.
+  if (doc.exams !== undefined && !Array.isArray(doc.exams)) {
+    return 'malformed book document: "exams" must be an array when present';
+  }
   return undefined;
 }
 
@@ -200,6 +205,7 @@ export function createDocumentContentSource(
       items: doc.items,
       tasks: doc.tasks,
       resources: doc.resources,
+      exams: doc.exams ?? [],
       noteStems: doc.notes.map((note) => note.stem),
       audioStems: assets.audioByBook.get(key) ?? [],
       imageStems: assets.imageByBook.get(key) ?? [],

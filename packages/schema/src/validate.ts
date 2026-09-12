@@ -9,6 +9,7 @@ import {
   resourceSchema,
   domainSchema,
   familySchema,
+  examSchema,
   itemDisplayText,
   recognizePrompt,
   parseClozeMarkup,
@@ -27,6 +28,7 @@ import {
   type Resource,
   type Domain,
   type Family,
+  type Exam,
 } from "./entities.js";
 
 export interface Content {
@@ -38,6 +40,7 @@ export interface Content {
   tasks: Task[];
   resources: Resource[];
   notes: { id: string; stem: string }[];
+  exams: Exam[];
 }
 
 export interface ValidateContentInput {
@@ -48,6 +51,7 @@ export interface ValidateContentInput {
   items: unknown[];
   tasks: unknown[];
   resources: unknown[];
+  exams: unknown[];
   noteStems: string[];
   /** Two separate stem lists (never cross-checked) so an `imageRef` can never validate against an audio file. */
   audioStems: string[];
@@ -178,6 +182,7 @@ export interface ParsedSet {
   tasks: Task[];
   resources: Resource[];
   notes: { id: string; stem: string }[];
+  exams: Exam[];
   domain: Domain;
   entries: Item[];
   families: Family[];
@@ -214,6 +219,7 @@ export function checkReferences(parsed: ParsedSet): string[] {
     tasks,
     resources,
     notes,
+    exams,
     domain,
     entries,
     families,
@@ -239,11 +245,18 @@ export function checkReferences(parsed: ParsedSet): string[] {
   reportDuplicateIds(resources, "resource", uniquenessErrors);
   reportDuplicateIds(notes, "note", uniquenessErrors);
   reportDuplicateIds(families, "family", uniquenessErrors);
+  reportDuplicateIds(exams, "exam", uniquenessErrors);
 
   reportDuplicateEntries(
     "topic.lessonIds",
     book.lessonIds,
     "lessonIds",
+    uniquenessErrors,
+  );
+  reportDuplicateEntries(
+    "topic.examIds",
+    book.examIds ?? [],
+    "examIds",
     uniquenessErrors,
   );
   for (const lesson of lessons) {
@@ -262,6 +275,22 @@ export function checkReferences(parsed: ParsedSet): string[] {
   for (const task of tasks) {
     reportDuplicateEntries(task.id, task.itemIds, "itemIds", uniquenessErrors);
   }
+  // (ae): no duplicate taskId within one exam's questions.
+  for (const exam of exams) {
+    const seenTaskIds = new Set<string>();
+    const duplicateTaskIds = new Set<string>();
+    for (const question of exam.questions) {
+      if (seenTaskIds.has(question.taskId)) {
+        duplicateTaskIds.add(question.taskId);
+      }
+      seenTaskIds.add(question.taskId);
+    }
+    for (const taskId of duplicateTaskIds) {
+      uniquenessErrors.push(
+        `${exam.id}: duplicate taskId "${taskId}" in questions`,
+      );
+    }
+  }
 
   if (uniquenessErrors.length > 0) {
     return uniquenessErrors;
@@ -278,6 +307,7 @@ export function checkReferences(parsed: ParsedSet): string[] {
   const taskById = new Map(tasks.map((t) => [t.id, t]));
   const resourceById = new Map(resources.map((r) => [r.id, r]));
   const noteById = new Map(notes.map((n) => [n.id, n]));
+  const examById = new Map(exams.map((e) => [e.id, e]));
 
   // --- class (c): non-Book entity ids must start with "<code>-" ---
   const prefix = `${book.code}-`;
@@ -287,6 +317,7 @@ export function checkReferences(parsed: ParsedSet): string[] {
     ["item", items],
     ["task", tasks],
     ["resource", resources],
+    ["exam", exams],
   ] as const) {
     for (const entity of entities) {
       if (!entity.id.startsWith(prefix)) {
@@ -409,10 +440,48 @@ export function checkReferences(parsed: ParsedSet): string[] {
   reportOwnership(units, unitOwnerCounts, "unit", "lesson", errors);
 
   const itemOwnerCounts = countOwnership(units, (u) => u.itemIds);
-  reportOwnership(items, itemOwnerCounts, "item", "unit", errors);
-
   const taskOwnerCounts = countOwnership(units, (u) => u.taskIds);
-  reportOwnership(tasks, taskOwnerCounts, "task", "unit", errors);
+
+  // --- class (af) (plan 0027 §3a): exam-only tasks/items are exempt from
+  // the class (d) orphan check. A task with no owning unit that an exam
+  // references is exam-only; an item with no owning unit is exempt only if
+  // every task that references it is exam-only (and at least one does).
+  // Multiple ownership is unaffected — only the orphan case is filtered out.
+  const examTaskIds = new Set(
+    exams.flatMap((exam) => exam.questions.map((q) => q.taskId)),
+  );
+  const examOnlyTaskIds = new Set(
+    tasks
+      .filter(
+        (task) =>
+          (taskOwnerCounts.get(task.id) ?? 0) === 0 && examTaskIds.has(task.id),
+      )
+      .map((task) => task.id),
+  );
+  const itemReferencingTaskIds = new Map<string, string[]>();
+  for (const task of tasks) {
+    for (const id of task.itemIds) {
+      const referencing = itemReferencingTaskIds.get(id) ?? [];
+      referencing.push(task.id);
+      itemReferencingTaskIds.set(id, referencing);
+    }
+  }
+  const itemsForOwnership = items.filter((item) => {
+    if ((itemOwnerCounts.get(item.id) ?? 0) !== 0) {
+      return true;
+    }
+    const referencing = itemReferencingTaskIds.get(item.id) ?? [];
+    const exemptOrphan =
+      referencing.length > 0 &&
+      referencing.every((id) => examOnlyTaskIds.has(id));
+    return !exemptOrphan;
+  });
+  reportOwnership(itemsForOwnership, itemOwnerCounts, "item", "unit", errors);
+
+  const tasksForOwnership = tasks.filter(
+    (task) => !examOnlyTaskIds.has(task.id),
+  );
+  reportOwnership(tasksForOwnership, taskOwnerCounts, "task", "unit", errors);
 
   const noteOwnerCounts = countOwnership(units, (u) => u.noteIds);
   reportOwnership(notes, noteOwnerCounts, "note", "unit", errors);
@@ -460,6 +529,42 @@ export function checkReferences(parsed: ParsedSet): string[] {
         `${task.id}: task type "${task.type}" does not accept item kind "${taskKind}"`,
       );
       continue;
+    }
+
+    // class (ad): a choice/assign payload's `labels` is what makes the two
+    // task types mutually exclusive over one payload shape. Placed before
+    // the owning-unit guard below so it still runs for exam-only tasks.
+    if (task.type === "choice" || task.type === "assign") {
+      for (const item of taskItems) {
+        if (item.kind !== "question") {
+          continue; // kind mismatch already reported under class (o).
+        }
+        const hasLabels = item.payload.labels !== undefined;
+        if (task.type === "choice" && hasLabels) {
+          errors.push(
+            `${task.id}: choice task item "${item.id}" has labels (that is an assign question)`,
+          );
+        }
+        if (task.type === "assign" && !hasLabels) {
+          errors.push(
+            `${task.id}: assign task item "${item.id}" has no labels (that is a choice question)`,
+          );
+        }
+      }
+    }
+
+    // class (af) (plan 0027 §3a), continued: an exam-only task's items must
+    // be owned by no unit — otherwise a unit would drill a question its
+    // author kept out of units. Also before the owning-unit guard, since an
+    // exam-only task has none.
+    if (examOnlyTaskIds.has(task.id)) {
+      for (const id of task.itemIds) {
+        if ((itemOwnerCounts.get(id) ?? 0) !== 0) {
+          errors.push(
+            `${task.id}: exam-only task's item "${id}" is owned by a unit`,
+          );
+        }
+      }
     }
 
     const owningUnit = taskOwningUnit.get(task.id);
@@ -559,6 +664,55 @@ export function checkReferences(parsed: ParsedSet): string[] {
     }
   }
 
+  // --- class (ae): exams ---
+  for (const exam of exams) {
+    if (exam.topicId !== book.id) {
+      errors.push(
+        `${exam.id}: topicId "${exam.topicId}" does not match topic id "${book.id}"`,
+      );
+    }
+    for (const question of exam.questions) {
+      const task = taskById.get(question.taskId);
+      if (task === undefined) {
+        errors.push(
+          `${exam.id}: dangling taskId reference "${question.taskId}" in questions`,
+        );
+        continue;
+      }
+      if (task.type !== "choice" && task.type !== "assign") {
+        errors.push(
+          `${exam.id}: taskId "${question.taskId}" is not a choice/assign task`,
+        );
+      } else if (task.itemIds.length !== 1) {
+        errors.push(
+          `${exam.id}: taskId "${question.taskId}" has ${task.itemIds.length} items (needs exactly 1)`,
+        );
+      }
+      if (
+        question.lessonId !== undefined &&
+        !book.lessonIds.includes(question.lessonId)
+      ) {
+        errors.push(
+          `${exam.id}: dangling lessonId reference "${question.lessonId}" in questions`,
+        );
+      }
+    }
+  }
+  // Ownership both ways, as `lessonIds` already has: every book.examIds
+  // entry resolves, and every exam is referenced exactly once (>1 is
+  // already covered by class (k) above).
+  for (const id of book.examIds ?? []) {
+    if (!examById.has(id)) {
+      errors.push(`topic.examIds: dangling exam reference "${id}"`);
+    }
+  }
+  const bookExamIdSet = new Set(book.examIds ?? []);
+  for (const exam of exams) {
+    if (!bookExamIdSet.has(exam.id)) {
+      errors.push(`${exam.id}: exam is orphaned (not in topic.examIds)`);
+    }
+  }
+
   // --- classes (m) and (n), per item: invalid cloze markup on sentence
   // text (the zero-blanks-for-a-cloze-task sub-case lives in the task loop
   // above) and dangling audioRef/imageRef ---
@@ -573,6 +727,12 @@ export function checkReferences(parsed: ParsedSet): string[] {
           );
         }
       }
+      continue;
+    }
+    if (item.kind === "question") {
+      // A question has no audioRef/imageRef and no cloze markup; skip this
+      // loop's checks the way `pair` does. Its own shape rules are (ac),
+      // below.
       continue;
     }
     if (
@@ -604,6 +764,45 @@ export function checkReferences(parsed: ParsedSet): string[] {
     }
   }
 
+  // --- class (ac): a question payload needs >= 2 options (schema-enforced);
+  // with `labels` absent, at least one correct and one incorrect option
+  // (an all-correct choice question is degenerate); with `labels` present,
+  // both non-blank after trimming; `explanation` and every option's `why`,
+  // when present, non-blank after trimming (`min(1)` alone lets " " through);
+  // every option's `text` non-blank after trimming ---
+  for (const item of items) {
+    if (item.kind !== "question") {
+      continue;
+    }
+    const { options, labels, explanation } = item.payload;
+    if (labels === undefined) {
+      const hasCorrect = options.some((option) => option.correct);
+      const hasIncorrect = options.some((option) => !option.correct);
+      if (!hasCorrect || !hasIncorrect) {
+        errors.push(
+          `${item.id}: question needs at least one correct and one incorrect option`,
+        );
+      }
+    } else {
+      for (const label of labels) {
+        if (label.trim() === "") {
+          errors.push(`${item.id}: question has a blank label`);
+        }
+      }
+    }
+    if (explanation !== undefined && explanation.trim() === "") {
+      errors.push(`${item.id}: question has a blank explanation`);
+    }
+    for (const option of options) {
+      if (option.text.trim() === "") {
+        errors.push(`${item.id}: question has a blank option text`);
+      }
+      if (option.why !== undefined && option.why.trim() === "") {
+        errors.push(`${item.id}: question has a blank option "why"`);
+      }
+    }
+  }
+
   // --- dangling note figure refs (spec 0021-2 §2d), against the same
   // `imageStemSet` item imageRefs check above ---
   for (const ref of noteImageRefs) {
@@ -622,7 +821,11 @@ export function checkReferences(parsed: ParsedSet): string[] {
     }
     for (const id of task.itemIds) {
       const item = itemById.get(id);
-      if (item === undefined || item.kind === "pair") {
+      if (
+        item === undefined ||
+        item.kind === "pair" ||
+        item.kind === "question"
+      ) {
         continue; // dangling ref (a) or kind mismatch (o) already reported.
       }
       if (requiredAsset === "audio" && item.payload.audioRef === undefined) {
@@ -647,11 +850,16 @@ export function checkReferences(parsed: ParsedSet): string[] {
     const itemIdsByKindAndText = new Map<string, Map<string, string[]>>();
     for (const id of unit.itemIds) {
       const item = itemById.get(id);
-      // `pair` items have no display text (they only ever feed
-      // `minimal-pair`, which doesn't use `itemDisplayText`) — skip them so
-      // this loop, which runs over every item unconditionally, doesn't hit
-      // itemDisplayText's permanent throw for that kind.
-      if (item === undefined || item.kind === "pair") {
+      // `pair` and `question` items have no display text (they only ever
+      // feed `minimal-pair`/`choice`/`assign`, which don't use
+      // `itemDisplayText`) — skip them so this loop, which runs over every
+      // item unconditionally, doesn't hit itemDisplayText's permanent throw
+      // for those kinds.
+      if (
+        item === undefined ||
+        item.kind === "pair" ||
+        item.kind === "question"
+      ) {
         continue;
       }
       const text = itemDisplayText(item);
@@ -929,6 +1137,12 @@ export function validateContent(
     (raw, i) => idLabel(raw, i, "resources"),
     phase1Errors,
   );
+  const exams = parseAll(
+    examSchema,
+    input.exams,
+    (raw, i) => idLabel(raw, i, "exams"),
+    phase1Errors,
+  );
 
   const domainResult = domainSchema.safeParse(input.domain);
   if (!domainResult.success) {
@@ -970,6 +1184,7 @@ export function validateContent(
     items === undefined ||
     tasks === undefined ||
     resources === undefined ||
+    exams === undefined ||
     entries === undefined ||
     families === undefined
   ) {
@@ -991,6 +1206,7 @@ export function validateContent(
     tasks,
     resources,
     notes,
+    exams,
     domain,
     entries,
     families,
@@ -1022,6 +1238,7 @@ export function validateContent(
       tasks,
       resources,
       notes,
+      exams,
     },
     domain,
     entries,

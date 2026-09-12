@@ -41,12 +41,20 @@ export const BOOK_ICONS = [
   "🚌",
 ] as const;
 
+/** Practice-depth presets (plan 0025 §3, §12): how many correct answers a
+ * word is owed per unit-practice session. Named, never numeric. */
+export const PRACTICE_DEPTHS = ["careful", "normal", "fast"] as const;
+export type PracticeDepth = (typeof PRACTICE_DEPTHS)[number];
+
 export const bookSchema = z.object({
   id: slugSchema,
   code: slugSchema,
   title: z.string(),
   description: z.string(),
   lessonIds: z.array(slugSchema),
+  /** Sibling exams, one level under the Book (plan 0027 §3). Optional
+   * because private content is additive-only (0017 decision 5). */
+  examIds: z.array(slugSchema).optional(),
   /** The lexicon domain this book draws vocabulary from (plan 0006); readAloudLang lives on the domain now. */
   domainId: slugSchema,
   /** Library/My Books card icon (plan 0015 decision 6); absent means no icon, no default. */
@@ -57,12 +65,48 @@ export const bookSchema = z.object({
    * web app's public assets (same convention/location the one-off Kyrgyz
    * watermark already used); this field only toggles whether it's shown. */
   hasCoverArt: z.boolean().optional(),
+  /** The depth this Book's unit practice uses while the learner's own
+   * setting is "Book's choice" (plan 0027 §11). Absent = Normal. Session
+   * length only: the Fast preset's double step is SRS state, which is
+   * global (one word, one state), so a Book never changes it.
+   * Additive and optional: no `CONTENT_SCHEMA_VERSION` bump. */
+  practiceDepth: z.enum(PRACTICE_DEPTHS).optional(),
 });
 export type Book = z.infer<typeof bookSchema>;
 
 /** A domain's kind gates which entry kind its lexicon holds (plan 0006): `language` -> lexeme, `general` -> concept. */
 export const DOMAIN_KINDS = ["language", "general"] as const;
 export type DomainKind = (typeof DOMAIN_KINDS)[number];
+
+/**
+ * Every exercise the level ladder ranks (plan 0025 §2).
+ *
+ * An exercise is not the same thing as a task type. `recognize` runs in two
+ * directions — see the foreign word and pick the meaning, or see the meaning
+ * and pick the foreign word — and those are two exercises two levels apart.
+ * `write` is derived from lexeme/concept items with no authored task type of
+ * its own (§9), which is why the two tables below point in opposite
+ * directions: `EXERCISE_LEVEL` covers the ladder, `TASK_EXERCISES` covers
+ * what content can author.
+ */
+export const EXERCISES = [
+  "matching",
+  "recognize",
+  "choice",
+  "listen",
+  "minimal-pair",
+  "assign",
+  "recognize-produce",
+  "picture",
+  "scramble",
+  "build",
+  "cloze",
+  "recall",
+  "write",
+  "dictation",
+  "shadowing",
+] as const;
+export type Exercise = (typeof EXERCISES)[number];
 
 export const domainSchema = z.object({
   id: slugSchema,
@@ -87,6 +131,22 @@ export const domainSchema = z.object({
    * domain unchanged: no `CONTENT_SCHEMA_VERSION` bump.
    */
   extraChars: z.array(z.string().min(1)).max(12).optional(),
+  /**
+   * The exercises unit practice may draw for this domain's items (plan
+   * 0027 §10). Absent means every exercise, so no shipped Book changes.
+   * `write` and `recognize-produce` are listable although no task authors
+   * them — they are the derived ones, and the usual reason to curate.
+   *
+   * Only the practice draw reads it: Daily Review, cross-unit recall and
+   * ad-hoc Vocabulary study never draw, so their fixed presentations
+   * ignore it.
+   *
+   * Additive and optional, so an older client drops it and parses the
+   * domain unchanged: no `CONTENT_SCHEMA_VERSION` bump. A document may
+   * only list an exercise every client reading its schema_version knows,
+   * or that client's enum rejects the whole domain.
+   */
+  exercises: z.array(z.enum(EXERCISES)).min(1).optional(),
 });
 export type Domain = z.infer<typeof domainSchema>;
 
@@ -248,6 +308,41 @@ const pairPayloadSchema = z.object({
   contrast: z.string(),
 });
 
+const questionOptionSchema = z.object({
+  text: z.string().min(1),
+  /** The statement holds. For `choice` that means "is a correct answer";
+   *  for `assign` it means "belongs to labels[0]". */
+  correct: z.boolean(),
+  /** Why this option is right or wrong. Shown under the option once the
+   *  question is graded (§5), in the Check, in Review, in exam review mode
+   *  and in the exam report. Own words. */
+  why: z.string().min(1).optional(),
+});
+
+const questionPayloadSchema = z.object({
+  stem: z.string().min(1),
+  options: z.array(questionOptionSchema).min(2),
+  /** Present iff this is an `assign` question: exactly two category labels.
+   *  Where one of the two is the affirmative one it goes first
+   *  (Richtig/Falsch, Geeignet/Nicht geeignet); where the pair is genuinely
+   *  symmetric (Blackbox/Whitebox, enge/lose Kopplung) the order is just an
+   *  authoring choice, and `correct: true` means "the first one". */
+  labels: z.tuple([z.string().min(1), z.string().min(1)]).optional(),
+  /** Shown under the question once it is graded, wherever `why` is shown.
+   *  The reasoning behind the answer as a whole; `why` is per option. */
+  explanation: z.string().min(1).optional(),
+  /** Model-generated, not taken from a source, and without an expert review
+   *  pass. Same purpose and same honesty as `lexemePayload.exampleGenerated`;
+   *  it sits on the question rather than the exam because a generated
+   *  question in a Unit, outside any exam, needs the mark just as much.
+   *  Covers the whole question, explanation and `why`s included. */
+  generated: z.boolean().optional(),
+  /** The `explanation` and `why`s are model-generated and unreviewed while the
+   *  question itself is not — the official mock exam's case (owner decision
+   *  3, 2026-09-11). Meaningless when `generated` is set. */
+  explanationGenerated: z.boolean().optional(),
+});
+
 const lexemeItemSchema = z.object({
   id: slugSchema,
   kind: z.literal("lexeme"),
@@ -276,11 +371,19 @@ const pairItemSchema = z.object({
   sourceRef: slugSchema,
 });
 
+const questionItemSchema = z.object({
+  id: slugSchema,
+  kind: z.literal("question"),
+  payload: questionPayloadSchema,
+  sourceRef: slugSchema,
+});
+
 export const itemSchema = z.discriminatedUnion("kind", [
   lexemeItemSchema,
   conceptItemSchema,
   sentenceItemSchema,
   pairItemSchema,
+  questionItemSchema,
 ]);
 export type Item = z.infer<typeof itemSchema>;
 export type ItemKind = Item["kind"];
@@ -395,9 +498,13 @@ export function sentenceTokens(text: string): string[] {
     .filter((token) => token.length > 0);
 }
 
-/** `pair` items only ever feed the `minimal-pair` task; every other presentation is unreachable by construction (validator class (o)) and permanently throws. */
-function pairUnsupported(helper: string): never {
-  throw new Error(`pair items do not support ${helper} (minimal-pair only)`);
+/** `pair` items only ever feed the `minimal-pair` task, and `question` items
+ * only ever feed the `choice`/`assign` tasks (plan 0027 §1); every other
+ * presentation is unreachable by construction (validator class (o)) and
+ * permanently throws — minimal-pair only for `pair`, choice/assign only for
+ * `question`. */
+function unsupported(kind: "pair" | "question", helper: string): never {
+  throw new Error(`${kind} items do not support ${helper}`);
 }
 
 /** Display text shown to the learner for an item, per kind. */
@@ -410,7 +517,9 @@ export function itemDisplayText(item: Item): string {
     case "sentence":
       return item.payload.translation;
     case "pair":
-      return pairUnsupported("itemDisplayText");
+      return unsupported("pair", "itemDisplayText");
+    case "question":
+      return unsupported("question", "itemDisplayText");
   }
 }
 
@@ -424,7 +533,9 @@ export function recognizePrompt(item: Item): string {
     case "sentence":
       return stripClozeMarkup(item.payload.text);
     case "pair":
-      return pairUnsupported("recognizePrompt");
+      return unsupported("pair", "recognizePrompt");
+    case "question":
+      return unsupported("question", "recognizePrompt");
   }
 }
 
@@ -438,7 +549,9 @@ export function recallPrompt(item: Item): string {
     case "sentence":
       return item.payload.translation;
     case "pair":
-      return pairUnsupported("recallPrompt");
+      return unsupported("pair", "recallPrompt");
+    case "question":
+      return unsupported("question", "recallPrompt");
   }
 }
 
@@ -452,7 +565,9 @@ export function recallReveal(item: Item): string[] {
     case "sentence":
       return [stripClozeMarkup(item.payload.text)];
     case "pair":
-      return pairUnsupported("recallReveal");
+      return unsupported("pair", "recallReveal");
+    case "question":
+      return unsupported("question", "recallReveal");
   }
 }
 
@@ -471,6 +586,8 @@ export const TASK_TYPES = [
   "minimal-pair",
   "picture",
   "build",
+  "choice",
+  "assign",
 ] as const;
 export type TaskType = (typeof TASK_TYPES)[number];
 
@@ -490,6 +607,8 @@ export const TASK_ALLOWED_ITEM_KINDS: Record<TaskType, ItemKind[]> = {
   "minimal-pair": ["pair"],
   picture: ["lexeme", "concept"],
   build: ["sentence"],
+  choice: ["question"],
+  assign: ["question"],
 };
 
 /**
@@ -508,6 +627,8 @@ export const TASK_REQUIRED_ASSET: Record<TaskType, "audio" | "image" | null> = {
   "minimal-pair": null,
   picture: "image",
   build: null,
+  choice: null,
+  assign: null,
 };
 
 /**
@@ -528,35 +649,10 @@ export const TASK_NEEDS_DISTRACTORS: Record<TaskType, boolean> = {
   picture: true,
   // build's word-bank distractors are its own mechanism (engine), not the MCQ sampler.
   build: false,
+  // Options are authored, not sampled (plan 0027 §2).
+  choice: false,
+  assign: false,
 };
-
-/**
- * Every exercise the level ladder ranks (plan 0025 §2).
- *
- * An exercise is not the same thing as a task type. `recognize` runs in two
- * directions — see the foreign word and pick the meaning, or see the meaning
- * and pick the foreign word — and those are two exercises two levels apart.
- * `write` is derived from lexeme/concept items with no authored task type of
- * its own (§9), which is why the two tables below point in opposite
- * directions: `EXERCISE_LEVEL` covers the ladder, `TASK_EXERCISES` covers
- * what content can author.
- */
-export const EXERCISES = [
-  "matching",
-  "recognize",
-  "listen",
-  "minimal-pair",
-  "recognize-produce",
-  "picture",
-  "scramble",
-  "build",
-  "cloze",
-  "recall",
-  "write",
-  "dictation",
-  "shadowing",
-] as const;
-export type Exercise = (typeof EXERCISES)[number];
 
 /** The ladder's bounds. A word level shares the scale but starts at 0 — "not answered correctly yet" (plan 0025 §1). */
 export const MIN_EXERCISE_LEVEL = 1;
@@ -584,8 +680,11 @@ export const EXERCISE_LEVEL: Record<Exercise, number | null> = {
   shadowing: null,
   matching: 1,
   recognize: 2,
+  // choice/assign placement: plan 0027 §2a.
+  choice: 2,
   listen: 3,
   "minimal-pair": 3,
+  assign: 3,
   "recognize-produce": 4,
   picture: 4,
   scramble: 5,
@@ -617,6 +716,8 @@ export const TASK_EXERCISES: Record<TaskType, readonly Exercise[]> = {
   recall: ["recall"],
   dictation: ["dictation"],
   shadowing: ["shadowing"],
+  choice: ["choice"],
+  assign: ["assign"],
 };
 
 export const taskSchema = z.object({
@@ -626,6 +727,37 @@ export const taskSchema = z.object({
   instructions: z.string().optional(),
 });
 export type Task = z.infer<typeof taskSchema>;
+
+export const examRulesetSchema = z.object({
+  passPercent: z.number().min(1).max(100),
+  timeLimitMinutes: z.number().int().min(1),
+  /** false = all-or-nothing per question; true = 1/n per correct mark. */
+  partialCredit: z.boolean(),
+  /** Wrong marks cost 1/n. A question never scores below 0 either way. */
+  negativeMarking: z.boolean(),
+});
+export type ExamRuleset = z.infer<typeof examRulesetSchema>;
+
+export const examSchema = z.object({
+  id: slugSchema,
+  topicId: slugSchema, // wire-format name, per the 0015 DO-NOT-TOUCH rule
+  title: z.string(),
+  /** Rendered on the intro screen (§6). For the official iSAQB exam it
+   *  carries a licence condition (0028 §2), so it is never optional to show. */
+  description: z.string(),
+  questions: z
+    .array(
+      z.object({
+        taskId: slugSchema,
+        points: z.number().int().min(1),
+        /** The lesson this question tests, for readiness per lesson (§6). */
+        lessonId: slugSchema.optional(),
+      }),
+    )
+    .min(1),
+  ruleset: examRulesetSchema,
+});
+export type Exam = z.infer<typeof examSchema>;
 
 export const resourceSchema = z.object({
   id: slugSchema,

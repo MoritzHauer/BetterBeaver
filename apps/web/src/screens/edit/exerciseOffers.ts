@@ -45,6 +45,7 @@ const KIND_PLURAL: Record<ItemKind, string> = {
   concept: "concepts",
   sentence: "sentences",
   pair: "pairs",
+  question: "questions",
 };
 
 /** An exercise the author could add, or a greyed row saying why not. */
@@ -83,6 +84,8 @@ export function itemLabel(item: Item): string {
       return stripClozeMarkup(item.payload.text);
     case "pair":
       return `${item.payload.a.script} / ${item.payload.b.script}`;
+    case "question":
+      return item.payload.stem;
   }
 }
 
@@ -103,16 +106,27 @@ export function exerciseLabel(type: TaskType, items: Item[]): string {
  * its audio lives on the two sides, and it only ever feeds `minimal-pair`,
  * which requires no asset. */
 function hasAudio(item: Item): boolean {
-  return item.kind === "pair" || item.payload.audioRef !== undefined;
+  if (item.kind === "pair") {
+    return true;
+  }
+  // A `question` has no audioRef (plan 0027 §1); its own task types require
+  // no asset, so this is never actually asked.
+  if (item.kind === "question") {
+    return false;
+  }
+  return item.payload.audioRef !== undefined;
 }
 
 /** Class (n), image half — `sentence` is exempt (`validate.ts:635`). */
 function hasImage(item: Item): boolean {
-  return (
-    item.kind === "pair" ||
-    item.kind === "sentence" ||
-    item.payload.imageRef !== undefined
-  );
+  if (item.kind === "pair" || item.kind === "sentence") {
+    return true;
+  }
+  // A `question` has no imageRef either; same reasoning as `hasAudio`.
+  if (item.kind === "question") {
+    return false;
+  }
+  return item.payload.imageRef !== undefined;
 }
 
 /** Class (m): a cloze task's item needs well-formed markup with >= 1 blank. */

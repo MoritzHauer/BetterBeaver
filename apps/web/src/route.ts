@@ -26,6 +26,7 @@ import { ADHOC_MODES, type AdhocMode } from "@betterbeaver/engine";
  *   #/books/demo/lessons/dx-lesson-intro   a lesson
  *   #/books/demo/lessons/l1/units/u1       a unit  (?end=1, ?page=…)
  *   #/books/demo/lessons/l1/units/u1/practice
+ *   #/books/demo/lessons/l1/units/u1/check
  *   #/books/demo/lessons/l1/units/u1/recall/u2
  *   #/books/demo/lessons/l1/units/u1/tasks/t1
  *   #/books/demo/lessons/l1/summary
@@ -88,6 +89,15 @@ export type Screen =
       unitId: string;
       editing?: boolean;
     }
+  // The unit Check (plan 0027 §12): a fixed-order session over the unit's
+  // choice/assign tasks, one question each, never drilled.
+  | {
+      screen: "unit-check";
+      bookId: string;
+      lessonId: string;
+      unitId: string;
+      editing?: boolean;
+    }
   // Cross-unit recall session (plan 0016): practice-only over a sample of
   // the LINKED unit's tasks; onDone returns to the LINKING unit's Overview.
   | {
@@ -101,6 +111,22 @@ export type Screen =
   // Lesson summary (plan 0020 §5): shown after the unit session that
   // completed the lesson. Derived tiles only — nothing is persisted for it.
   | { screen: "lesson-summary"; bookId: string; lessonId: string }
+  // The exam run (plan 0027 §6): a sibling of `lesson` one level under the
+  // Book. At most one of `q`/`end`/`review`/`practice` is ever set; none of
+  // them means the intro.
+  | {
+      screen: "exam";
+      bookId: string;
+      examId: string;
+      /** The runner, 0-based question index. */
+      q?: number;
+      /** The report. */
+      end?: true;
+      /** Review mode: every question, untimed, with immediate feedback. */
+      review?: true;
+      /** Practise the questions the last result missed. */
+      practice?: true;
+    }
   // Review, Vocabulary, and ad-hoc study are domain-scoped (plan 0006): the
   // review queue, lists, and streak all key on the domain now, not the book.
   | { screen: "review"; domainId: string }
@@ -173,10 +199,19 @@ export function toPath(view: View): string {
       return `/books/${screen.bookId}/lessons/${screen.lessonId}/units/${screen.unitId}/tasks/${screen.taskId}${flags({ edit: e(screen.editing), sheet })}`;
     case "unit-session":
       return `/books/${screen.bookId}/lessons/${screen.lessonId}/units/${screen.unitId}/practice${flags({ edit: e(screen.editing), sheet })}`;
+    case "unit-check":
+      return `/books/${screen.bookId}/lessons/${screen.lessonId}/units/${screen.unitId}/check${flags({ edit: e(screen.editing), sheet })}`;
     case "recall-session":
       return `/books/${screen.bookId}/lessons/${screen.lessonId}/units/${screen.unitId}/recall/${screen.recallUnitId}${flags({ edit: e(screen.editing), sheet })}`;
     case "lesson-summary":
       return `/books/${screen.bookId}/lessons/${screen.lessonId}/summary`;
+    case "exam":
+      return `/books/${screen.bookId}/exams/${screen.examId}${flags({
+        q: screen.q !== undefined ? String(screen.q) : undefined,
+        end: on(screen.end),
+        review: on(screen.review),
+        practice: on(screen.practice),
+      })}`;
     case "review":
       return `/domains/${screen.domainId}/review${flags({ sheet })}`;
     case "vocab":
@@ -239,6 +274,25 @@ export function fromPath(path: string): View | null {
         atSettings: query.get("settings") === "1" ? true : undefined,
       });
     }
+    if (rest[1] === "exams" && rest[2] !== undefined && rest.length === 3) {
+      const examId = rest[2];
+      const qRaw = query.get("q");
+      const q = qRaw !== null && /^\d+$/.test(qRaw) ? Number(qRaw) : undefined;
+      const end = query.get("end") === "1" ? true : undefined;
+      const review = query.get("review") === "1" ? true : undefined;
+      const practice = query.get("practice") === "1" ? true : undefined;
+      // At most one of the four ever means anything; an unknown combination
+      // (more than one set) parses to the intro rather than to a rejected
+      // route — the caller decides what to do with a plain exam screen.
+      const set = [q !== undefined, end, review, practice].filter(
+        Boolean,
+      ).length;
+      return view(
+        set <= 1
+          ? { screen: "exam", bookId, examId, q, end, review, practice }
+          : { screen: "exam", bookId, examId },
+      );
+    }
     if (rest[1] !== "lessons" || rest[2] === undefined) {
       return null;
     }
@@ -267,6 +321,15 @@ export function fromPath(path: string): View | null {
     if (rest[5] === "practice" && rest.length === 6) {
       return view({
         screen: "unit-session",
+        bookId,
+        lessonId,
+        unitId,
+        editing,
+      });
+    }
+    if (rest[5] === "check" && rest.length === 6) {
+      return view({
+        screen: "unit-check",
         bookId,
         lessonId,
         unitId,

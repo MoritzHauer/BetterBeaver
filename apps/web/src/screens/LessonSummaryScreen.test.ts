@@ -70,6 +70,7 @@ const content: Content = {
   tasks: [taskA, taskB],
   resources: [],
   notes: [noteA],
+  exams: [],
 };
 
 describe("lessonSchedulingUnits", () => {

@@ -4,6 +4,7 @@ import type {
   BookDocument,
   Content,
   DomainDocument,
+  Exam,
   Item,
   Task,
   Unit,
@@ -19,11 +20,14 @@ import type {
 import type { AdhocMode } from "@betterbeaver/engine";
 import {
   buildAdhocSession,
+  buildFixedSession,
   buildRecallSession,
   buildReviewSession,
   buildTaskSession,
   advanceDrill,
   buildVisitQuestion,
+  checkTaskIds,
+  drillItemIds,
   nextVisit,
   shuffle,
   startDrill,
@@ -35,6 +39,7 @@ import {
   nextUnit,
   noteUnitId,
   recordGrade,
+  scoreExam,
   skipItem,
   symmetricLinks,
 } from "@betterbeaver/engine";
@@ -60,6 +65,7 @@ import { createLocalStorageProgressStore } from "./progress/local-storage";
 import { createLocalStorageVocabListStore } from "./progress/vocab-lists";
 import { createLocalStorageUserEntryStore } from "./progress/user-entries";
 import { getPinnedUnitIds, togglePinnedUnits } from "./progress/pinned-tasks";
+import { fitAnswers, readExamState } from "./progress/exam-attempts";
 import { AUTO_UPDATE_KEY, RECHECK_INTERVAL_MS } from "./autoUpdate";
 import { repetitionsPerWord, schedulingConfig } from "./learning";
 import { isOffline } from "./offline";
@@ -69,6 +75,9 @@ import { LibraryScreen } from "./screens/LibraryScreen";
 import { BookScreen } from "./screens/BookScreen";
 import { LessonScreen } from "./screens/LessonScreen";
 import { UnitScreen } from "./screens/UnitScreen";
+import { ExamScreen } from "./screens/ExamScreen";
+import { ExamRunner } from "./screens/ExamRunner";
+import { ExamReport } from "./screens/ExamReport";
 import { SessionScreen } from "./screens/SessionScreen";
 import type { SessionOutcome } from "./screens/session/useSessionQueue";
 import {
@@ -331,6 +340,9 @@ function UnitSession({
   nextAction?: { label: string; onClick: () => void };
 }) {
   const domainId = content.topic.domainId;
+  /** The domain's exercise allow-list (plan 0027 §10); absent means every
+   * exercise, so the draw is unrestricted. */
+  const allowedExercises = lookup.domainContent.domain.exercises;
 
   /**
    * Every word's level, read once (plan 0025 §4). The session is planned
@@ -414,6 +426,7 @@ function UnitSession({
         (id) => levels.get(id) ?? 0,
         rng,
         covered,
+        allowedExercises,
       );
       if (card === null) {
         continue;
@@ -426,7 +439,7 @@ function UnitSession({
       built.push(card);
     }
     return built;
-  }, [visits, unit, content, levels]);
+  }, [visits, unit, content, levels, allowedExercises]);
 
   // Opens the session once the levels are in: the whole plan is known — its
   // length included — but only the first visit is handed out.
@@ -435,8 +448,8 @@ function UnitSession({
       return;
     }
     const state = startDrill(
-      shuffle([...unit.itemIds], rngFor(unit.id)),
-      repetitionsPerWord(),
+      shuffle(drillItemIds(unit, content, allowedExercises), rngFor(unit.id)),
+      repetitionsPerWord(content.topic.practiceDepth),
     );
     drillRef.current = state;
     answeredRef.current = 0;
@@ -591,6 +604,322 @@ function RecallSession({
       onFinished={onDone}
       onExit={onDone}
       loadStreak={() => store.getStreak(domainId)}
+    />
+  );
+}
+
+/**
+ * Plan 0027 §12's "graded once, ever" rule, shared by `CheckSession` and the
+ * exam report's "practise what you missed" (`ExamPracticeSession`, §6):
+ * freezes which of `itemIds` are at level 0 when the session opens — never
+ * re-read mid-session — so a grade handler can look up whether *this*
+ * question was still unanswered before writing real SRS state for it. Only
+ * `resetKey` (and the store) reopen the read; a mid-session content edit
+ * must not re-freeze the set, which is why `itemIds` itself is not a dep.
+ */
+function useGradeOnceGate(
+  itemIds: string[],
+  store: ProgressStore,
+  resetKey: string,
+): {
+  ready: boolean;
+  firstTime: { current: ReadonlySet<string> | null };
+} {
+  const firstTime = useRef<ReadonlySet<string> | null>(null);
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    let live = true;
+    void Promise.all(
+      itemIds.map(async (itemId) => {
+        const state = await store.getItemState(itemId);
+        return [
+          itemId,
+          wordLevel(state ?? null, schedulingConfig().pace),
+        ] as const;
+      }),
+    ).then((entries) => {
+      if (live) {
+        firstTime.current = new Set(
+          entries.filter(([, level]) => level === 0).map(([id]) => id),
+        );
+        setReady(true);
+      }
+    });
+    return () => {
+      live = false;
+    };
+    // `itemIds` deliberately absent — see the doc comment above.
+  }, [resetKey, store]);
+  return { ready, firstTime };
+}
+
+/**
+ * Wires the engine's fixed-order unit Check (plan 0027 §12) to
+ * `SessionScreen`: every `choice`/`assign` question of the unit, once, in
+ * `unit.taskIds` order — no drill queue, no repetitions, no reinsertion.
+ * Modelled on `RecallSession`.
+ */
+function CheckSession({
+  store = progressStore,
+  content,
+  unit,
+  lookup,
+  onDone,
+  onSwipeBack,
+  nextAction,
+}: {
+  /** Preview passes a no-op store so the draft's questions play for real
+   * and record nothing (spec 0021-9 §1). */
+  store?: ProgressStore;
+  content: Content;
+  unit: Unit;
+  lookup: TapLookup;
+  onDone: () => void;
+  /** Exit back to the unit's Check page (owner request, the same shape as
+   * `UnitSession`'s back-swipe); forwarded to `SessionScreen`. */
+  onSwipeBack: () => void;
+  /** The ordinary post-Check exit, or "Practice" when the unit's drill still
+   * has something below level 1 (plan 0027 §12) — decided by the caller from
+   * levels read once when the unit-check screen opened, never re-read here. */
+  nextAction?: { label: string; onClick: () => void };
+}) {
+  const domainId = content.topic.domainId;
+  const allCheckTaskIds = useMemo(
+    () => checkTaskIds(unit, content),
+    [unit, content],
+  );
+
+  // "Grading: once per question, ever" (plan 0027 §12), via the gate shared
+  // with `ExamPracticeSession`: frozen at open, from the same per-item level
+  // read `UnitSession` does, so a same-visit retake of an already-passed
+  // question can't walk it from level 1 to 4 in one sitting.
+  const checkItemIds = allCheckTaskIds.flatMap((taskId) => {
+    const task = content.tasks.find((t) => t.id === taskId);
+    return task?.itemIds ?? [];
+  });
+  const { ready, firstTime } = useGradeOnceGate(checkItemIds, store, unit.id);
+
+  // The active run: every Check question on the first pass, or just the
+  // missed ones on "Retry the missed ones" (plan 0027 §12). `phase` remounts
+  // `SessionScreen` (its `key` below) on retry, so the new question set
+  // starts with a clean queue/summary rather than splicing into a finished
+  // one.
+  const [phase, setPhase] = useState(0);
+  const [taskIds, setTaskIds] = useState(allCheckTaskIds);
+  const missed = useRef<Set<string>>(new Set());
+  const [missCount, setMissCount] = useState(0);
+
+  const pairs = useMemo(
+    () => buildFixedSession(taskIds, content, rngFor(unit.id)),
+    [taskIds, content, unit.id],
+  );
+  const questions = useMemo(() => pairs.map((p) => p.question), [pairs]);
+  // Which task a graded question came from, so a wrong answer can be traced
+  // back to its task id for the retry set (plan 0027 §12 tracks misses by
+  // task, matching `buildFixedSession`'s own unit).
+  const taskIdByItemId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const { question, taskId } of pairs) {
+      if (question.kind === "choice" || question.kind === "assign") {
+        map.set(question.unitId, taskId);
+      }
+    }
+    return map;
+  }, [pairs]);
+
+  async function handleGrade(unitId: string, quality: Quality) {
+    // Plan 0027 §12, "Grading: once per question, ever": only a question
+    // that was still unanswered when this session opened writes real SRS
+    // state — every other grade here is feedback only.
+    if (firstTime.current?.has(unitId) === true) {
+      await recordGrade(
+        store,
+        unitId,
+        quality,
+        new Date(),
+        domainId,
+        schedulingConfig(),
+      );
+    }
+    if (quality === 2) {
+      const taskId = taskIdByItemId.get(unitId);
+      if (taskId !== undefined) {
+        missed.current.add(taskId);
+        setMissCount(missed.current.size);
+      }
+    }
+  }
+
+  // `SummaryPanel` carries a single forward action: "Retry the missed ones"
+  // takes that slot whenever this run missed something, otherwise it's the
+  // caller's ordinary exit (plan 0027 §12).
+  const retryAction =
+    missCount > 0
+      ? {
+          label: "Retry the missed ones",
+          onClick: () => {
+            const missedIds = allCheckTaskIds.filter((id) =>
+              missed.current.has(id),
+            );
+            missed.current = new Set();
+            setMissCount(0);
+            setTaskIds(missedIds);
+            setPhase((p) => p + 1);
+          },
+        }
+      : nextAction;
+
+  if (!ready) {
+    return (
+      <main>
+        <h1>Check</h1>
+        <p>Loading…</p>
+      </main>
+    );
+  }
+
+  return (
+    <SessionScreen
+      key={phase}
+      title="Check"
+      questions={questions}
+      bookId={content.topic.id}
+      lookup={lookup}
+      onGrade={handleGrade}
+      onFinished={onDone}
+      nextAction={retryAction}
+      onExit={onDone}
+      onSwipeBack={onSwipeBack}
+      loadStreak={() => store.getStreak(domainId)}
+    />
+  );
+}
+
+/**
+ * Exam review mode (plan 0027 §6): every question of the exam, in exam
+ * order, untimed, with immediate feedback — the ordinary graded session
+ * shape, run against the same no-op `ProgressStore` Preview uses (spec
+ * 0021-9 §1), always, not only while previewing a draft. Writes no SM-2
+ * state, no streak day, and no `bb.exam.*` key of its own.
+ */
+function ExamReviewSession({
+  content,
+  exam,
+  lookup,
+  onDone,
+}: {
+  content: Content;
+  exam: Exam;
+  lookup: TapLookup;
+  onDone: () => void;
+}) {
+  const domainId = content.topic.domainId;
+  const pairs = useMemo(
+    () =>
+      buildFixedSession(
+        exam.questions.map((entry) => entry.taskId),
+        content,
+        rngFor(exam.id),
+      ),
+    [exam, content],
+  );
+  const questions = useMemo(() => pairs.map((p) => p.question), [pairs]);
+
+  async function handleGrade(unitId: string, quality: Quality) {
+    await recordGrade(
+      PREVIEW_STORE,
+      unitId,
+      quality,
+      new Date(),
+      domainId,
+      schedulingConfig(),
+    );
+  }
+
+  return (
+    <SessionScreen
+      title={`Review: ${exam.title}`}
+      questions={questions}
+      bookId={content.topic.id}
+      lookup={lookup}
+      onGrade={handleGrade}
+      onFinished={onDone}
+      onExit={onDone}
+      loadStreak={() => PREVIEW_STORE.getStreak(domainId)}
+    />
+  );
+}
+
+/**
+ * "Practise the questions you missed" (plan 0027 §6): the report's missed
+ * task ids, in exam order, via `buildFixedSession`. Grading follows §12's
+ * once-per-question rule (shared with `CheckSession` via
+ * `useGradeOnceGate`) — the button never disappears, since `lastResult`
+ * never changes, so without the gate repeated runs would climb an
+ * already-answered question to level 4 in one sitting.
+ */
+function ExamPracticeSession({
+  content,
+  exam,
+  missedTaskIds,
+  lookup,
+  onDone,
+}: {
+  content: Content;
+  exam: Exam;
+  missedTaskIds: string[];
+  lookup: TapLookup;
+  onDone: () => void;
+}) {
+  const domainId = content.topic.domainId;
+  const itemIds = missedTaskIds.flatMap((taskId) => {
+    const task = content.tasks.find((t) => t.id === taskId);
+    return task?.itemIds ?? [];
+  });
+  const { ready, firstTime } = useGradeOnceGate(
+    itemIds,
+    progressStore,
+    exam.id,
+  );
+
+  const pairs = useMemo(
+    () => buildFixedSession(missedTaskIds, content, rngFor(exam.id)),
+    [missedTaskIds, content, exam.id],
+  );
+  const questions = useMemo(() => pairs.map((p) => p.question), [pairs]);
+
+  async function handleGrade(unitId: string, quality: Quality) {
+    if (firstTime.current?.has(unitId) === true) {
+      await recordGrade(
+        progressStore,
+        unitId,
+        quality,
+        new Date(),
+        domainId,
+        schedulingConfig(),
+      );
+    }
+  }
+
+  if (!ready) {
+    return (
+      <main>
+        <h1>Practise the questions you missed</h1>
+        <p>Loading&hellip;</p>
+      </main>
+    );
+  }
+
+  return (
+    <SessionScreen
+      title="Practise the questions you missed"
+      questions={questions}
+      bookId={content.topic.id}
+      lookup={lookup}
+      onGrade={handleGrade}
+      onFinished={onDone}
+      onExit={onDone}
+      loadStreak={() => progressStore.getStreak(domainId)}
     />
   );
 }
@@ -1247,8 +1576,131 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     [content, pinEpoch],
   );
 
+  // Every item level of the unit currently open on "unit"/"unit-session"/
+  // "unit-check" (plan 0027 §12), read once per visit and keyed on the unit
+  // id — `content` only takes on a new reference on a real navigation (the
+  // content-loading effect below depends on `screen`, not on anything a
+  // grade touches), so this never re-reads mid-session. Powers UnitScreen's
+  // "answered correctly: n/m" (`checkLevels`) and both sessions'
+  // "Take the check"/"Practice" `nextAction`, which the plan requires to be
+  // decided from levels read at open, never re-read after the summary.
+  const [openUnitLevels, setOpenUnitLevels] = useState<Map<
+    string,
+    number
+  > | null>(null);
+  const openUnitId =
+    screen.screen === "unit" ||
+    screen.screen === "unit-session" ||
+    screen.screen === "unit-check"
+      ? screen.unitId
+      : null;
+  // Keyed on the screen kind too, not only the unit id: unit → Check → unit
+  // keeps the id, and the unit screen must then show the Check it just
+  // passed, and Practice must not offer "Take the check" again. Relying on
+  // `content` taking a new reference on navigation was an unchecked
+  // assumption. One read per screen visit is still "read at open" (§12).
+  const openUnitScreen = openUnitId === null ? null : screen.screen;
+  useEffect(() => {
+    if (openUnitId === null || content === null) {
+      setOpenUnitLevels(null);
+      return;
+    }
+    const unit = content.units.find((u) => u.id === openUnitId);
+    if (unit === undefined) {
+      setOpenUnitLevels(null);
+      return;
+    }
+    let live = true;
+    setOpenUnitLevels(null);
+    void Promise.all(
+      unit.itemIds.map(async (itemId) => {
+        const state = await progressStore.getItemState(itemId);
+        return [
+          itemId,
+          wordLevel(state ?? null, schedulingConfig().pace),
+        ] as const;
+      }),
+    ).then((entries) => {
+      if (live) {
+        setOpenUnitLevels(new Map(entries));
+      }
+    });
+    return () => {
+      live = false;
+    };
+  }, [openUnitId, openUnitScreen, content]);
+
   function reloadUnitProgress() {
     setProgressEpoch((epoch) => epoch + 1);
+  }
+
+  /** The ordinary post-session exit (plan 0020 §4): "Next unit", or "Lesson
+   * complete" when finishing `unit` finishes its lesson too. Shared by the
+   * unit-session and unit-check branches — whichever half of the unit just
+   * ran, the other half's SRS state is untouched, so both read the lesson's
+   * completion the same way. */
+  function buildOrdinaryNextAction(
+    shown: Content,
+    target: { bookId: string; lessonId: string; unitId: string },
+    unit: Unit,
+  ): { label: string; onClick: () => void } {
+    const lesson = shown.lessons.find((l) => l.id === target.lessonId);
+    // Optimistic (assumes `unit` complete), so the label is right before the
+    // summary even renders; `onNext` below does its own fresh read for the
+    // actual navigation, and corrects for the times the two disagree.
+    const finishesLesson =
+      lesson !== undefined &&
+      isLessonComplete(
+        lesson,
+        shown.units,
+        new Map([
+          ...unitProgress,
+          [
+            unit.id,
+            { percent: 100, started: 0, total: 0, complete: true },
+          ] as const,
+        ]),
+      );
+    const onNext = async () => {
+      const fresh = await collectUnitProgress(
+        [shown],
+        progressStore,
+        schedulingConfig().pace,
+      );
+      setUnitProgress((current) => new Map([...current, ...fresh]));
+      if (
+        lesson !== undefined &&
+        isLessonComplete(lesson, shown.units, fresh)
+      ) {
+        setScreen({
+          screen: "lesson-summary",
+          bookId: target.bookId,
+          lessonId: target.lessonId,
+        });
+        return;
+      }
+      const next = nextUnit(shown, fresh);
+      // Never send the learner back into the unit they just finished (see
+      // the unit-session branch's original comment on this disagreement).
+      if (next === null || next.unitId === target.unitId) {
+        setScreen({
+          screen: "lesson",
+          bookId: target.bookId,
+          lessonId: target.lessonId,
+        });
+        return;
+      }
+      setScreen({
+        screen: "unit",
+        bookId: target.bookId,
+        lessonId: next.lessonId,
+        unitId: next.unitId,
+      });
+    };
+    return {
+      label: finishesLesson ? "Lesson complete" : "Next unit",
+      onClick: () => void onNext(),
+    };
   }
 
   function goToBook(bookId: string, editing?: boolean) {
@@ -1631,8 +2083,10 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
       screen.screen === "unit" ||
       screen.screen === "task" ||
       screen.screen === "unit-session" ||
+      screen.screen === "unit-check" ||
       screen.screen === "recall-session" ||
-      screen.screen === "lesson-summary";
+      screen.screen === "lesson-summary" ||
+      screen.screen === "exam";
     const contentPromise = isBookFamilyScreen
       ? loadBookOrBroken(contentSourceResult.source, screen.bookId)
       : undefined;
@@ -1741,6 +2195,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
       // or the task ids it just offered resolve against published content.
       screen.screen === "task" ||
       screen.screen === "unit-session" ||
+      screen.screen === "unit-check" ||
       screen.screen === "recall-session") &&
     screen.editing === true
       ? screen.bookId
@@ -2101,8 +2556,10 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     screen.screen === "unit" ||
     screen.screen === "task" ||
     screen.screen === "unit-session" ||
+    screen.screen === "unit-check" ||
     screen.screen === "recall-session" ||
-    screen.screen === "lesson-summary"
+    screen.screen === "lesson-summary" ||
+    screen.screen === "exam"
   ) {
     // domainContent is gated here too (not just content): unit notes and
     // task-session post-answer reveals need the domain's merged entry pool
@@ -2247,6 +2704,11 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
               editing: screen.editing,
             })
           }
+          // Exams have no `editing` flag on their route (plan Non-goals: no
+          // editor) — the card itself already renders read-only in edit mode.
+          onSelectExam={(examId) =>
+            setScreen({ screen: "exam", bookId: screen.bookId, examId })
+          }
           onReview={() =>
             setScreen({ screen: "review", domainId: shown.topic.domainId })
           }
@@ -2335,6 +2797,16 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
               editing: screen.editing,
             })
           }
+          onCheck={() =>
+            setScreen({
+              screen: "unit-check",
+              bookId: screen.bookId,
+              lessonId: screen.lessonId,
+              unitId: screen.unitId,
+              editing: screen.editing,
+            })
+          }
+          checkLevels={openUnitLevels}
           onRecall={(recallUnitId) =>
             setScreen({
               screen: "recall-session",
@@ -2390,6 +2862,30 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           </main>
         );
       }
+      const allowedExercises = lookup.domainContent.domain.exercises;
+      // Redirect (plan 0027 §12): an all-question unit (or one whose drill
+      // is otherwise empty) has nothing for this session to run — open the
+      // unit on its Check page instead of an empty session. `setScreen`
+      // during render is the documented "adjust state" escape hatch: React
+      // discards this render and retries immediately with the new screen,
+      // so the empty session is never painted.
+      // Only when a Check page exists: a notes-only unit's drill is empty
+      // too, and it runs the empty session (whose summary offers "Next
+      // unit") exactly as before this plan.
+      if (
+        checkTaskIds(unit, shown).length > 0 &&
+        drillItemIds(unit, shown, allowedExercises).length === 0
+      ) {
+        setScreen({
+          screen: "unit",
+          bookId: screen.bookId,
+          lessonId: screen.lessonId,
+          unitId: screen.unitId,
+          atPage: "check",
+          editing: screen.editing,
+        });
+        return null;
+      }
       const onDone = () => {
         reloadUnitProgress();
         setScreen({
@@ -2411,81 +2907,31 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           atEnd: true,
         });
       };
-      const lesson = shown.lessons.find((l) => l.id === screen.lessonId);
-      // Plan 0020 §4: does finishing THIS unit finish the lesson? Every
-      // OTHER unit's completion is already accurate in `unitProgress`
-      // (state), so assuming this one complete lets the existing
-      // isLessonComplete answer synchronously, before the summary even
-      // renders. No store read needed for the label; `onNext` below still
-      // does its own read for the actual navigation.
-      // The assumption is weaker than it was under the attempted-task set:
-      // completion now needs every word answered *correctly* (plan 0025
-      // §8), so a session with one word missed makes this label optimistic.
-      // `onNext`'s fresh read is what corrects it, and its "never send the
-      // learner back into the unit they just finished" branch below is what
-      // the disagreement lands on.
-      const finishesLesson =
-        lesson !== undefined &&
-        isLessonComplete(
-          lesson,
-          shown.units,
-          new Map([
-            ...unitProgress,
-            [
-              unit.id,
-              { percent: 100, started: 0, total: 0, complete: true },
-            ] as const,
-          ]),
-        );
-      // Plan 0020 §4: resolve the next step from the POST-session progress.
-      // `unitProgress` (state) is stale here by exactly this session's own
-      // grades, and `reloadUnitProgress()` can't be awaited — read the
-      // store directly.
-      const onNext = async () => {
-        const fresh = await collectUnitProgress(
-          [shown],
-          progressStore,
-          schedulingConfig().pace,
-        );
-        setUnitProgress((current) => new Map([...current, ...fresh]));
-        if (
-          lesson !== undefined &&
-          isLessonComplete(lesson, shown.units, fresh)
-        ) {
-          setScreen({
-            screen: "lesson-summary",
-            bookId: screen.bookId,
-            lessonId: screen.lessonId,
-          });
-          return;
-        }
-        // Two branches, and they're total (plan 0020 §4): an incomplete
-        // lesson always contains an incomplete unit, so `next` is null here
-        // only defensively.
-        const next = nextUnit(shown, fresh);
-        // Never send the learner back into the unit they just finished. That
-        // happens when `finishesLesson` (optimistic, computed by assuming
-        // this unit complete) and this fresh read disagree — a word answered
-        // wrong never reaches level 1, and a blocked-storage write is
-        // swallowed by design (spec 0019). The
-        // button then reads "Lesson complete" and the tap would land right
-        // back where it started, with no explanation. The lesson screen is
-        // the honest destination: it shows which unit is still open.
-        if (next === null || next.unitId === screen.unitId) {
-          setScreen({
-            screen: "lesson",
-            bookId: screen.bookId,
-            lessonId: screen.lessonId,
-          });
-          return;
-        }
-        setScreen({
-          screen: "unit",
-          bookId: screen.bookId,
-          lessonId: next.lessonId,
-          unitId: next.unitId,
+      // Plan 0027 §12: once this drill is done, does the unit's Check still
+      // have something below level 1? Read once, from the same open-time
+      // levels the unit-check branch below also reads — never re-read after
+      // the summary.
+      const anyCheckBelowLevel1 =
+        openUnitLevels !== null &&
+        checkTaskIds(unit, shown).some((taskId) => {
+          const task = shown.tasks.find((t) => t.id === taskId);
+          return (task?.itemIds ?? []).some(
+            (id) => (openUnitLevels.get(id) ?? 0) < 1,
+          );
         });
-      };
+      const nextAction = anyCheckBelowLevel1
+        ? {
+            label: "Take the check",
+            onClick: () =>
+              setScreen({
+                screen: "unit-check",
+                bookId: screen.bookId,
+                lessonId: screen.lessonId,
+                unitId: screen.unitId,
+                editing: screen.editing,
+              }),
+          }
+        : buildOrdinaryNextAction(shown, screen, unit);
       return withSessionEdit(
         <UnitSession
           store={shownStore}
@@ -2501,11 +2947,74 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           onOpenEdit={openSessionEdit}
           onDone={onDone}
           onSwipeBack={onSwipeBack}
-          nextAction={{
-            label: finishesLesson ? "Lesson complete" : "Next unit",
-            onClick: () => void onNext(),
-          }}
+          nextAction={nextAction}
         />,
+      );
+    }
+
+    if (screen.screen === "unit-check") {
+      const unit = shown.units.find((u) => u.id === screen.unitId);
+      if (unit === undefined) {
+        return (
+          <main>
+            <p>Unknown unit: {screen.unitId}</p>
+          </main>
+        );
+      }
+      const onDone = () => {
+        reloadUnitProgress();
+        setScreen({
+          screen: "unit",
+          bookId: screen.bookId,
+          lessonId: screen.lessonId,
+          unitId: screen.unitId,
+        });
+      };
+      // Same exit as `onDone`, but lands back on the Check page — the trail
+      // page this session was launched from (mirrors the unit-session
+      // branch's `atEnd` back-swipe).
+      const onSwipeBack = () => {
+        reloadUnitProgress();
+        setScreen({
+          screen: "unit",
+          bookId: screen.bookId,
+          lessonId: screen.lessonId,
+          unitId: screen.unitId,
+          atPage: "check",
+        });
+      };
+      // Plan 0027 §12: once the Check is done, does the unit's drill still
+      // have something below level 1? Read once, from the same open-time
+      // levels the unit-session branch above also reads.
+      const allowedExercises = lookup.domainContent.domain.exercises;
+      const anyDrillBelowLevel1 =
+        openUnitLevels !== null &&
+        drillItemIds(unit, shown, allowedExercises).some(
+          (id) => (openUnitLevels.get(id) ?? 0) < 1,
+        );
+      const nextAction = anyDrillBelowLevel1
+        ? {
+            label: "Practice",
+            onClick: () =>
+              setScreen({
+                screen: "unit-session",
+                bookId: screen.bookId,
+                lessonId: screen.lessonId,
+                unitId: screen.unitId,
+                editing: screen.editing,
+              }),
+          }
+        : buildOrdinaryNextAction(shown, screen, unit);
+      return (
+        <CheckSession
+          store={shownStore}
+          content={shown}
+          unit={unit}
+          lookup={lookup}
+          onDone={onDone}
+          onSwipeBack={onSwipeBack}
+          nextAction={nextAction}
+        />
       );
     }
 
@@ -2553,6 +3062,105 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           linkedUnit={linkedUnit}
           lookup={lookup}
           onDone={onDone}
+        />
+      );
+    }
+
+    if (screen.screen === "exam") {
+      const { bookId, examId } = screen;
+      const toIntro = () => setScreen({ screen: "exam", bookId, examId });
+      const toQuestion = (q: number) =>
+        setScreen({ screen: "exam", bookId, examId, q });
+      const toEnd = () =>
+        setScreen({ screen: "exam", bookId, examId, end: true });
+
+      if (screen.review === true) {
+        const exam = shown.exams.find((e) => e.id === examId);
+        if (exam === undefined) {
+          return (
+            <main>
+              <p>Unknown exam: {examId}</p>
+            </main>
+          );
+        }
+        return (
+          <ExamReviewSession
+            content={shown}
+            exam={exam}
+            lookup={lookup}
+            onDone={toIntro}
+          />
+        );
+      }
+
+      if (screen.practice === true) {
+        const exam = shown.exams.find((e) => e.id === examId);
+        if (exam === undefined) {
+          return (
+            <main>
+              <p>Unknown exam: {examId}</p>
+            </main>
+          );
+        }
+        // Recomputed against current content, same as the report itself
+        // (plan §6) — a stale attempt's answers are re-fitted first.
+        const lastResult = readExamState(exam.id).lastResult;
+        const missedTaskIds =
+          lastResult !== undefined
+            ? scoreExam(
+                exam,
+                fitAnswers(exam, shown, lastResult.answersByTaskId),
+                shown,
+              ).missedTaskIds
+            : [];
+        return (
+          <ExamPracticeSession
+            content={shown}
+            exam={exam}
+            missedTaskIds={missedTaskIds}
+            lookup={lookup}
+            onDone={toEnd}
+          />
+        );
+      }
+
+      if (screen.end === true) {
+        return (
+          <ExamReport
+            content={shown}
+            examId={examId}
+            onBack={toIntro}
+            onIntro={toIntro}
+            onPractice={() =>
+              setScreen({ screen: "exam", bookId, examId, practice: true })
+            }
+          />
+        );
+      }
+
+      if (screen.q !== undefined) {
+        return (
+          <ExamRunner
+            content={shown}
+            examId={examId}
+            q={screen.q}
+            onIntro={toIntro}
+            onOpenQuestion={toQuestion}
+            onSubmitted={toEnd}
+          />
+        );
+      }
+
+      return (
+        <ExamScreen
+          content={shown}
+          examId={examId}
+          onBack={() => setScreen({ screen: "book", bookId })}
+          onOpenQuestion={toQuestion}
+          onReview={() =>
+            setScreen({ screen: "exam", bookId, examId, review: true })
+          }
+          onEnd={toEnd}
         />
       );
     }

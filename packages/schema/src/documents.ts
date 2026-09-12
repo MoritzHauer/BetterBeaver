@@ -26,7 +26,14 @@
 /** Version 2: plan 0023 §7 renamed `lexemePayload.components[].script` to
  * `text`, which is breaking. The same plan's `entryId`, `bound` and
  * `variants` are additive and ride along on this one bump. */
-export const CONTENT_SCHEMA_VERSION = 2;
+/** Version 3 (plan 0027 §3/§7): the `question` item kind and the
+ * `choice`/`assign` task types join their respective strict discriminated
+ * unions, which an older client's union rejects outright — not an additive
+ * case the 0015 §6a exemption covers. A private Book authored before 3 holds
+ * none of them (private content is created only through this app or the
+ * `.bbbook` import path, both gated by the schema version it was authored
+ * under), so it needs no migration. */
+export const CONTENT_SCHEMA_VERSION = 3;
 
 /**
  * Backend/cache document identity: `<kind>:<content-id>` (e.g.
@@ -62,6 +69,10 @@ export interface BookDocument {
   tasks: unknown[];
   resources: unknown[];
   notes: BookDocumentNote[];
+  /** Optional because no stored document has it: cached catalog rows,
+   * backend rows, private Books and `.bbbook` files all lack the key.
+   * Every reader treats a missing key as `[]` (plan 0027 §3). */
+  exams?: unknown[];
 }
 
 export interface DomainDocument {

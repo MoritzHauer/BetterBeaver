@@ -13,13 +13,17 @@
 import { useId, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import type {
+  AssignQuestion,
   BuildQuestion,
+  ChoiceQuestion,
   MatchingQuestion,
   Question,
   QuestionOutcome,
   ScrambleQuestion,
 } from "@betterbeaver/engine";
 import {
+  checkAssignAnswer,
+  checkChoiceAnswer,
   checkMatchingPair,
   checkScrambleAnswer,
   checkTypedAnswer,
@@ -700,6 +704,290 @@ function MatchingBoard({
   );
 }
 
+/** The `choice` option list, presentational only (plan 0027 §5/§6): step 8's
+ * exam runner reuses this with no `graded` and no grading state, so nothing
+ * about checking may live here. Ungraded, a selected option is highlighted
+ * and every button forwards to `onToggle`; graded, the correct option(s) and
+ * any wrong pick are marked, buttons are inert, and each option's `why`
+ * (when it has one) appears underneath it. */
+export function ChoiceOptions({
+  choices,
+  selected,
+  onToggle,
+  graded,
+}: {
+  choices: readonly string[];
+  selected: readonly number[];
+  onToggle?: (index: number) => void;
+  graded?: {
+    correctIndices: readonly number[];
+    whys: readonly (string | undefined)[];
+  };
+}) {
+  return (
+    <ul className="card-list">
+      {choices.map((choice, index) => {
+        const isSelected = selected.includes(index);
+        let state = "";
+        if (graded !== undefined) {
+          state = graded.correctIndices.includes(index)
+            ? " correct"
+            : isSelected
+              ? " incorrect"
+              : "";
+        } else if (isSelected) {
+          state = " selected";
+        }
+        const why = graded?.whys[index];
+        return (
+          <li key={index} className={`card${state}`}>
+            <button
+              disabled={graded !== undefined || onToggle === undefined}
+              onClick={() => onToggle?.(index)}
+            >
+              {choice}
+            </button>
+            {why !== undefined ? <p className="option-why">{why}</p> : null}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** The `assign` row list, presentational only — the `assign` counterpart of
+ * `ChoiceOptions`, with the same no-grading-state contract for step 8. Each
+ * row picks one of two labels; graded, the row is marked correct or
+ * incorrect, a wrong row also shows the right label, and either way the
+ * row's `why` (if any) follows. */
+export function AssignRows({
+  rows,
+  labels,
+  picks,
+  onPick,
+  graded,
+}: {
+  rows: readonly string[];
+  labels: readonly [string, string];
+  picks: readonly (number | null)[];
+  onPick?: (row: number, label: 0 | 1) => void;
+  graded?: {
+    correctLabelIndex: readonly number[];
+    whys: readonly (string | undefined)[];
+  };
+}) {
+  return (
+    <ul className="card-list">
+      {rows.map((row, rowIndex) => {
+        const pick = picks[rowIndex] ?? null;
+        const correctLabel = graded?.correctLabelIndex[rowIndex];
+        const isCorrect = graded !== undefined && pick === correctLabel;
+        const state =
+          graded === undefined ? "" : isCorrect ? " correct" : " incorrect";
+        const why = graded?.whys[rowIndex];
+        return (
+          <li key={rowIndex} className={`assign-row${state}`}>
+            <p>{row}</p>
+            <div className="assign-labels">
+              {labels.map((label, labelIndex) => (
+                <button
+                  key={labelIndex}
+                  className={pick === labelIndex ? "selected" : ""}
+                  disabled={graded !== undefined || onPick === undefined}
+                  onClick={() => onPick?.(rowIndex, labelIndex as 0 | 1)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {graded !== undefined && !isCorrect ? (
+              <p className="option-why">
+                Answer: {correctLabel !== undefined ? labels[correctLabel] : ""}
+              </p>
+            ) : null}
+            {why !== undefined ? <p className="option-why">{why}</p> : null}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** The `choice`/`assign` post-grade explanation (plan 0027 §5): nothing when
+ * the question carries no `explanation`, otherwise the explanation plus,
+ * when `generated`, the same "generated" badge the app already shows for a
+ * generated example (`exampleGenerated`, `EntryPopup.tsx`) — except that one
+ * is a plain inline note (`span.status`), not a badge, so there is nothing to
+ * reuse here; this renders the dedicated badge instead. Shared verbatim by
+ * step 8's exam report and review mode. */
+export function QuestionFeedback({
+  explanation,
+  generated,
+}: {
+  explanation?: string;
+  generated: boolean;
+}) {
+  if (explanation === undefined) {
+    return null;
+  }
+  return (
+    <div className="question-feedback">
+      <p>{explanation}</p>
+      {generated ? <span className="badge-generated">KI-generiert</span> : null}
+    </div>
+  );
+}
+
+/** Stateful `choice` question (plan 0027 §5/§6): holds the selection, caps it
+ * at `selectCount` (over-selection is unreachable, per the scoring
+ * deviation), and grades once via `checkChoiceAnswer`. */
+function ChoiceInteraction({
+  question,
+  applyAuto,
+  advance,
+}: {
+  question: ChoiceQuestion;
+  applyAuto: (unitId: string, correct: boolean) => Promise<void>;
+  advance: () => void;
+}) {
+  const [selected, setSelected] = useState<number[]>([]);
+  const [result, setResult] = useState<Verdict | null>(null);
+
+  function toggle(index: number) {
+    if (result !== null) {
+      return;
+    }
+    setSelected((current) => {
+      if (current.includes(index)) {
+        return current.filter((i) => i !== index);
+      }
+      if (current.length === question.selectCount) {
+        return current;
+      }
+      return [...current, index];
+    });
+  }
+
+  async function check() {
+    if (result !== null || selected.length !== question.selectCount) {
+      return;
+    }
+    const correct = checkChoiceAnswer(question, selected);
+    setResult(correct ? "correct" : "incorrect");
+    await applyAuto(question.unitId, correct);
+  }
+
+  return (
+    <div>
+      {question.selectCount > 1 ? (
+        <p className="status">Choose {question.selectCount}</p>
+      ) : null}
+      <ChoiceOptions
+        choices={question.choices}
+        selected={selected}
+        onToggle={result === null ? toggle : undefined}
+        graded={
+          result === null
+            ? undefined
+            : { correctIndices: question.correctIndices, whys: question.whys }
+        }
+      />
+      {result === null ? (
+        <ActionBar>
+          <button
+            className="primary"
+            disabled={selected.length !== question.selectCount}
+            onClick={check}
+          >
+            Check
+          </button>
+        </ActionBar>
+      ) : (
+        <>
+          <QuestionFeedback
+            explanation={question.explanation}
+            generated={question.explanationGenerated}
+          />
+          <VerdictBar verdict={result} detail="" advance={advance} />
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Stateful `assign` question (plan 0027 §5/§6): one label pick per row,
+ * enabled once every row is picked, graded once via `checkAssignAnswer`. */
+function AssignInteraction({
+  question,
+  applyAuto,
+  advance,
+}: {
+  question: AssignQuestion;
+  applyAuto: (unitId: string, correct: boolean) => Promise<void>;
+  advance: () => void;
+}) {
+  const [picks, setPicks] = useState<(number | null)[]>(() =>
+    question.rows.map(() => null),
+  );
+  const [result, setResult] = useState<Verdict | null>(null);
+
+  function pick(row: number, label: 0 | 1) {
+    if (result !== null) {
+      return;
+    }
+    setPicks((current) =>
+      current.map((existing, index) => (index === row ? label : existing)),
+    );
+  }
+
+  async function check() {
+    if (result !== null || picks.some((p) => p === null)) {
+      return;
+    }
+    const correct = checkAssignAnswer(question, picks);
+    setResult(correct ? "correct" : "incorrect");
+    await applyAuto(question.unitId, correct);
+  }
+
+  return (
+    <div>
+      <AssignRows
+        rows={question.rows}
+        labels={question.labels}
+        picks={picks}
+        onPick={result === null ? pick : undefined}
+        graded={
+          result === null
+            ? undefined
+            : {
+                correctLabelIndex: question.correctLabelIndex,
+                whys: question.whys,
+              }
+        }
+      />
+      {result === null ? (
+        <ActionBar>
+          <button
+            className="primary"
+            disabled={picks.some((p) => p === null)}
+            onClick={check}
+          >
+            Check
+          </button>
+        </ActionBar>
+      ) : (
+        <>
+          <QuestionFeedback
+            explanation={question.explanation}
+            generated={question.explanationGenerated}
+          />
+          <VerdictBar verdict={result} detail="" advance={advance} />
+        </>
+      )}
+    </div>
+  );
+}
+
 /** Renders the interaction for one question, per the plan's per-kind table.
  * Views only render and forward answers; all checking/normalization is
  * engine code (`checkTypedAnswer`, `checkScrambleAnswer`,
@@ -887,6 +1175,28 @@ export function renderInteraction(
             target={question.target}
             unitId={question.unitId}
             extraChars={lookup.domainContent.domain.extraChars}
+            applyAuto={applyAuto}
+            advance={advance}
+          />
+        </>
+      );
+    case "choice":
+      return (
+        <>
+          <p className="prompt">{question.stem}</p>
+          <ChoiceInteraction
+            question={question}
+            applyAuto={applyAuto}
+            advance={advance}
+          />
+        </>
+      );
+    case "assign":
+      return (
+        <>
+          <p className="prompt">{question.stem}</p>
+          <AssignInteraction
+            question={question}
             applyAuto={applyAuto}
             advance={advance}
           />

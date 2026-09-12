@@ -126,6 +126,7 @@ function renderBook(session: EditSessionValue | null, book = BOOK) {
       epoch={0}
       onSelectLesson={() => {}}
       onPracticeTask={() => {}}
+      onSelectExam={() => {}}
       onPlay={() => {}}
       onReview={() => {}}
       onVocabulary={() => {}}

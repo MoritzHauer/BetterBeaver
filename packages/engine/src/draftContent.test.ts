@@ -231,6 +231,62 @@ describe("draftContent", () => {
     // reference error (spec 0021-4 §3b), proving the reference phase ran.
     expect(errors.length).toBeGreaterThan(0);
   });
+
+  it("checkReferences finds zero errors for an exam-only question and its exam (plan 0027 §3a)", () => {
+    const book: BookDocument = {
+      topic: {
+        id: "b",
+        code: "b",
+        title: "B",
+        description: "",
+        lessonIds: [],
+        examIds: ["b-exam-1"],
+        domainId: "d",
+      },
+      lessons: [],
+      units: [],
+      items: [
+        {
+          id: "b-item-q1",
+          kind: "question",
+          payload: {
+            stem: "Which is correct?",
+            options: [
+              { text: "A", correct: true },
+              { text: "B", correct: false },
+            ],
+          },
+          sourceRef: "b-resource-1",
+        },
+      ],
+      tasks: [
+        { id: "b-task-choice-1", type: "choice", itemIds: ["b-item-q1"] },
+      ],
+      resources: [
+        { id: "b-resource-1", title: "Manual", path: "https://example.com" },
+      ],
+      notes: [],
+      exams: [
+        {
+          id: "b-exam-1",
+          topicId: "b",
+          title: "Mock Exam",
+          description: "A mock exam.",
+          questions: [{ taskId: "b-task-choice-1", points: 1 }],
+          ruleset: {
+            passPercent: 60,
+            timeLimitMinutes: 75,
+            partialCredit: true,
+            negativeMarking: true,
+          },
+        },
+      ],
+    };
+
+    const { parsed } = draftContent(book, emptyDomain(), emptyAssets);
+
+    expect(checkReferences(parsed)).toEqual([]);
+  });
 });
 
 describe("draftContent: the Book's optional display fields", () => {
@@ -274,6 +330,31 @@ describe("draftContent: the Book's optional display fields", () => {
     ).content.topic;
     expect("icon" in without).toBe(false);
     expect("hasCoverArt" in without).toBe(false);
+  });
+
+  it("carries the fields Preview's practice session reads (plan 0027 §§10-11)", () => {
+    // Not edited in place, but a draft Preview that dropped them would
+    // practise a different Book than the one published.
+    const drafted = draftContent(
+      {
+        topic: { id: "b", code: "b", domainId: "d", practiceDepth: "fast" },
+        lessons: [],
+        units: [],
+        items: [],
+        tasks: [],
+        resources: [],
+        notes: [],
+      },
+      {
+        domain: { exercises: ["matching", "recall"], extraChars: ["ң"] },
+        entries: [],
+        families: [],
+      },
+      emptyAssets,
+    );
+    expect(drafted.content.topic.practiceDepth).toBe("fast");
+    expect(drafted.parsed.domain.exercises).toEqual(["matching", "recall"]);
+    expect(drafted.parsed.domain.extraChars).toEqual(["ң"]);
   });
 
   it("carries a lexeme's exampleGenerated flag through the draft", () => {

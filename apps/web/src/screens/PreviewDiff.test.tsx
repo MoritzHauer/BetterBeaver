@@ -168,6 +168,7 @@ function renderBook(
       epoch={0}
       onSelectLesson={onSelectLesson}
       onPracticeTask={() => {}}
+      onSelectExam={() => {}}
       onPlay={() => {}}
       onReview={() => {}}
       onVocabulary={() => {}}
@@ -410,6 +411,8 @@ describe("a deleted note in Diff", () => {
           unitId="bk-u1"
           lookup={lookup}
           onPractice={() => {}}
+          onCheck={() => {}}
+          checkLevels={null}
           onRecall={() => {}}
           onPinNote={() => {}}
           isNotePinned={async () => false}

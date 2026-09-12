@@ -64,10 +64,15 @@ function promptIsUnique(item: Item, content: Content): boolean {
  *
  * Unranked exercises are excluded — `shadowing` checks nothing, so it can
  * neither be drawn to advance a word nor stand in for one that would.
+ *
+ * `allowed`, when given, narrows the result to that set (plan 0027 §10): a
+ * domain's `exercises` allow-list, so unit practice only ever draws exercises
+ * a Book chose to curate.
  */
 export function availableExercises(
   item: Item,
   content: Content,
+  allowed?: readonly Exercise[],
 ): readonly Exercise[] {
   const unit = owningUnit(item.id, content);
   const found = new Set<Exercise>();
@@ -95,7 +100,12 @@ export function availableExercises(
     found.delete("recognize-produce");
   }
 
-  return [...found].filter((exercise) => EXERCISE_LEVEL[exercise] !== null);
+  const ranked = [...found].filter(
+    (exercise) => EXERCISE_LEVEL[exercise] !== null,
+  );
+  return allowed === undefined
+    ? ranked
+    : ranked.filter((exercise) => allowed.includes(exercise));
 }
 
 /** The subset of `available` sitting at exactly `level`. */

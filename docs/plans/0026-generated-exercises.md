@@ -53,6 +53,8 @@ Pure function over content: one item (kind, asset refs, cloze markup) + the doma
 exerciseAtLevel(item, level, content) → Question | null
 ```
 
+**Amended 2026-09-11 ([plan 0027](0027-authored-questions-and-exam-mode.md) §3a, §12):** `exerciseAtLevel` returns `null` for every `question` item, at every level. A question is answered only as itself, in its unit's Check, in Review or in an exam. An exam-only question must never be reachable outside its exam, and constructing one here would be the leak.
+
 No `Rng`; shuffling stays where it is, in session building. `null` means the content cannot build that level for that item — no audio for `listen`, too few same-kind siblings for an MCQ — which is exactly what 0025 §4's "a missing level is skipped, not waited for" already consumes.
 
 **Why one item and one level, rather than a unit and a task set.** 0025 §4 asks the session engine for an exercise *at a specific level* for a *specific word*: the early slot draws from `{level−1, level}`, the later slot is `level+1`. A generator that returns a unit's task set would then have to be filtered back down to a level — an indirection with no consumer. Nothing in the app wants a list of generated tasks; the session wants the next question, and the author wants a coverage grid (§8), which is this same function run over every (item, level) cell.

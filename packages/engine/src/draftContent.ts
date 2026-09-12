@@ -7,7 +7,9 @@ import type {
   Resource,
   Domain,
   Family,
+  Exam,
   DomainKind,
+  Exercise,
   TaskType,
   LinkType,
   Content,
@@ -15,6 +17,7 @@ import type {
   BookDocument,
   DomainDocument,
 } from "@betterbeaver/schema";
+import { EXERCISES, PRACTICE_DEPTHS } from "@betterbeaver/schema";
 import { noteImageStems } from "./noteBlocks.js";
 import type { AssetStems } from "./documentSource.js";
 
@@ -36,6 +39,7 @@ type LexemePayload = Extract<Item, { kind: "lexeme" }>["payload"];
 type ConceptPayload = Extract<Item, { kind: "concept" }>["payload"];
 type SentencePayload = Extract<Item, { kind: "sentence" }>["payload"];
 type PairPayload = Extract<Item, { kind: "pair" }>["payload"];
+type QuestionPayload = Extract<Item, { kind: "question" }>["payload"];
 
 /** The `components` breakdown, identical on both lexicon payloads (plan 0023
  * §4) — a second copy would drift. */
@@ -142,6 +146,40 @@ function draftPairPayload(p: Record<string, unknown>): PairPayload {
   };
 }
 
+/** A `question` payload's `options` and `labels` (plan 0027 §1); `labels`
+ * only counts when authored as a real two-string tuple, since a lone string
+ * or a wrong-length array is not the `assign` shape the schema expects. */
+function draftQuestionPayload(p: Record<string, unknown>): QuestionPayload {
+  const options = Array.isArray(p.options)
+    ? p.options.map((o) => {
+        const opt = obj(o);
+        return {
+          text: str(opt.text),
+          correct: opt.correct === true,
+          ...(typeof opt.why === "string" && opt.why !== ""
+            ? { why: opt.why }
+            : {}),
+        };
+      })
+    : [];
+  const labels =
+    Array.isArray(p.labels) &&
+    p.labels.length === 2 &&
+    p.labels.every((l): l is string => typeof l === "string")
+      ? (p.labels as [string, string])
+      : undefined;
+  return {
+    stem: str(p.stem),
+    options,
+    ...(labels !== undefined ? { labels } : {}),
+    ...(typeof p.explanation === "string" && p.explanation !== ""
+      ? { explanation: p.explanation }
+      : {}),
+    ...(p.generated === true ? { generated: true } : {}),
+    ...(p.explanationGenerated === true ? { explanationGenerated: true } : {}),
+  };
+}
+
 /**
  * Coerces one raw item entity into a renderable `Item`. Switches on
  * `str(e.kind)`; an unknown or missing kind defaults to `sentence` (spec
@@ -177,6 +215,13 @@ function draftItem(raw: unknown): Item {
         kind: "pair",
         sourceRef,
         payload: draftPairPayload(payload),
+      };
+    case "question":
+      return {
+        id,
+        kind: "question",
+        sourceRef,
+        payload: draftQuestionPayload(payload),
       };
     default:
       return {
@@ -239,6 +284,37 @@ function draftResource(raw: unknown): Resource {
   return { id: str(e.id), title: str(e.title), path: str(e.path) };
 }
 
+function draftExam(raw: unknown): Exam {
+  const e = obj(raw);
+  const ruleset = obj(e.ruleset);
+  return {
+    id: str(e.id),
+    topicId: str(e.topicId),
+    title: str(e.title),
+    description: str(e.description),
+    questions: (Array.isArray(e.questions) ? e.questions : []).map((q) => {
+      const question = obj(q);
+      return {
+        taskId: str(question.taskId),
+        points: typeof question.points === "number" ? question.points : 1,
+        ...(typeof question.lessonId === "string" && question.lessonId !== ""
+          ? { lessonId: question.lessonId }
+          : {}),
+      };
+    }),
+    ruleset: {
+      passPercent:
+        typeof ruleset.passPercent === "number" ? ruleset.passPercent : 0,
+      timeLimitMinutes:
+        typeof ruleset.timeLimitMinutes === "number"
+          ? ruleset.timeLimitMinutes
+          : 0,
+      partialCredit: ruleset.partialCredit === true,
+      negativeMarking: ruleset.negativeMarking === true,
+    },
+  };
+}
+
 function draftFamily(raw: unknown): Family {
   const e = obj(raw);
   return { id: str(e.id), name: str(e.name), entryIds: ids(e.entryIds) };
@@ -252,6 +328,7 @@ function draftBook(raw: unknown): Book {
     title: str(e.title),
     description: str(e.description),
     lessonIds: ids(e.lessonIds),
+    ...(Array.isArray(e.examIds) ? { examIds: ids(e.examIds) } : {}),
     domainId: str(e.domainId),
     // Both optional, and both are edited in place (plan 0021 §1a) — dropping
     // them here left their controls showing "(none)" and unchecked no matter
@@ -263,6 +340,14 @@ function draftBook(raw: unknown): Book {
       ? { icon: e.icon as Book["icon"] }
       : {}),
     ...(e.hasCoverArt === true ? { hasCoverArt: true } : {}),
+    // Not edited in place, but Preview's practice session reads it (plan
+    // 0027 §11); carried through as authored.
+    // Guarded, not cast: an unknown value would reach `repetitionsPerWord`
+    // as `undefined` and break this function's renderable-for-any-input
+    // promise.
+    ...(PRACTICE_DEPTHS.some((depth) => depth === e.practiceDepth)
+      ? { practiceDepth: e.practiceDepth as Book["practiceDepth"] }
+      : {}),
   };
 }
 
@@ -276,6 +361,19 @@ function draftDomain(raw: unknown): Domain {
     glossLanguage: str(e.glossLanguage),
     ...(typeof e.readAloudLang === "string" && e.readAloudLang !== ""
       ? { readAloudLang: e.readAloudLang }
+      : {}),
+    // Not edited in place, but read by the session a draft Preview plays
+    // (plan 0025 §10's key row, plan 0027 §10's exercise allow-list);
+    // dropping them made Preview practise a different Book than the one
+    // published. Carried through as authored — validation is not this
+    // function's job.
+    ...(Array.isArray(e.extraChars) ? { extraChars: ids(e.extraChars) } : {}),
+    ...(Array.isArray(e.exercises)
+      ? {
+          exercises: e.exercises.filter((x): x is Exercise =>
+            EXERCISES.some((known) => known === x),
+          ),
+        }
       : {}),
   };
 }
@@ -320,6 +418,7 @@ export function draftContent(
   const items = arr(b.items).map(draftItem);
   const tasks = arr(b.tasks).map(draftTask);
   const resources = arr(b.resources).map(draftResource);
+  const exams = (Array.isArray(b.exams) ? b.exams : []).map(draftExam);
   // Derived note ids, same rule as `validateContent` (§2d): the note's
   // markdown itself is not part of Content; slice 6 threads it separately.
   // Each note goes through `obj` before its fields are read — a `null` entry
@@ -346,6 +445,7 @@ export function draftContent(
     tasks,
     resources,
     notes,
+    exams,
     domain: draftedDomain,
     entries,
     families,
@@ -372,6 +472,7 @@ export function draftContent(
     tasks,
     resources,
     notes,
+    exams,
   };
 
   return { content, parsed };

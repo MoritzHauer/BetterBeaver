@@ -9,8 +9,11 @@ import {
   isLessonUnlocked,
   isUnitUnlocked,
   nextUnit,
+  readinessByLesson,
 } from "@betterbeaver/engine";
 import { BOOK_ICONS } from "@betterbeaver/schema";
+import { readExamState } from "../progress/exam-attempts";
+import { examAllGenerated, examMaxPoints } from "./ExamScreen";
 import { ConfirmSheet } from "../components/Sheet";
 import { SettingsSheet } from "../components/SettingsSheet";
 import { UndoToast, useUndoSnapshot } from "../components/UndoToast";
@@ -68,6 +71,7 @@ export function BookScreen({
   epoch,
   onSelectLesson,
   onPracticeTask,
+  onSelectExam,
   onPlay,
   onReview,
   onVocabulary,
@@ -89,6 +93,8 @@ export function BookScreen({
   epoch: number;
   onSelectLesson: (lessonId: string) => void;
   onPracticeTask: (target: PracticeTarget) => void;
+  /** Opens an exam (plan 0027 §6): the sibling list after the lessons. */
+  onSelectExam: (examId: string) => void;
   /** Play (plan 0020 §2): due > 0 → Daily Review, else the next incomplete
    * unit, else nothing (the trophy state below handles that in-place). */
   onPlay: () => void;
@@ -543,6 +549,65 @@ export function BookScreen({
                   due={dueByLesson.get(lesson.id)}
                 />
               </button>
+            </li>
+          );
+        })}
+        {/* Exams (plan 0027 §6): siblings of the lessons, after them, in
+            `examIds` order. No editor exists for them (plan Non-goals), so
+            edit mode gets the same card with no click-through. */}
+        {(content.topic.examIds ?? []).map((examId) => {
+          const exam = content.exams.find((e) => e.id === examId);
+          if (exam === undefined) {
+            return null;
+          }
+          // Once a result exists: the last percentage and the weakest
+          // lesson's title (owner decision 5) — from the *stored* points, not
+          // a fresh rescoring (readinessByLesson already leaves out anything
+          // the exam has since dropped).
+          const lastResult = readExamState(exam.id).lastResult;
+          let lastLine: string | null = null;
+          if (lastResult !== undefined) {
+            const { buckets, weakestLessonId } = readinessByLesson(
+              exam,
+              lastResult.pointsByTaskId,
+              content.topic.lessonIds,
+            );
+            const total = buckets.reduce((sum, b) => sum + b.points, 0);
+            const max = buckets.reduce((sum, b) => sum + b.maxPoints, 0);
+            if (max > 0) {
+              const weakestTitle =
+                weakestLessonId !== null
+                  ? lessonById.get(weakestLessonId)?.title
+                  : undefined;
+              lastLine = `Last: ${Math.round((total / max) * 100)} %${
+                weakestTitle !== undefined ? ` · weakest: ${weakestTitle}` : ""
+              }`;
+            }
+          }
+          const cardBody = (
+            <>
+              <strong>
+                {exam.title}{" "}
+                {examAllGenerated(exam, content) ? (
+                  <span className="badge-generated">KI-generiert</span>
+                ) : null}
+              </strong>
+              <p>
+                {exam.ruleset.timeLimitMinutes} min · {examMaxPoints(exam)}{" "}
+                points
+              </p>
+              {lastLine !== null ? <p className="status">{lastLine}</p> : null}
+            </>
+          );
+          return (
+            <li key={exam.id} className="card">
+              {edit !== null ? (
+                cardBody
+              ) : (
+                <button onClick={() => onSelectExam(exam.id)}>
+                  {cardBody}
+                </button>
+              )}
             </li>
           );
         })}

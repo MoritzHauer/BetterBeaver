@@ -3,6 +3,7 @@ import {
   DEFAULT_LEARNING,
   LEARNING_KEY,
   getLearning,
+  repetitionsPerWord,
   schedulingConfig,
   setLearning,
 } from "./learning";
@@ -18,7 +19,7 @@ describe("learning settings", () => {
       skip: "week",
       extraKeys: false,
       keyboardHelpDismissed: false,
-      progression: "normal",
+      progression: "book",
     });
     expect(getLearning()).toEqual(DEFAULT_LEARNING);
   });
@@ -31,7 +32,7 @@ describe("learning settings", () => {
       skip: "year",
       extraKeys: false,
       keyboardHelpDismissed: false,
-      progression: "normal",
+      progression: "book",
     });
   });
 
@@ -48,7 +49,7 @@ describe("learning settings", () => {
       skip: "week",
       extraKeys: false,
       keyboardHelpDismissed: false,
-      progression: "normal",
+      progression: "book",
     });
   });
 
@@ -71,6 +72,26 @@ describe("learning settings", () => {
     expect(schedulingConfig().levelsPerDay).toBe(1);
     setLearning({ progression: "careful" });
     expect(schedulingConfig().levelsPerDay).toBe(1);
+  });
+
+  it("schedules Book's choice as Normal (plan 0027 §11)", () => {
+    expect(schedulingConfig().levelsPerDay).toBe(1);
+  });
+
+  it("defers repetitions to the open Book's practiceDepth under Book's choice", () => {
+    expect(repetitionsPerWord("fast")).toBe(1);
+    expect(repetitionsPerWord()).toBe(2);
+    expect(repetitionsPerWord("careful")).toBe(3);
+  });
+
+  it("ignores the Book's practiceDepth once the learner picks a preset", () => {
+    setLearning({ progression: "careful" });
+    expect(repetitionsPerWord("fast")).toBe(3);
+  });
+
+  it("round-trips a stored 'book' progression", () => {
+    setLearning({ progression: "book" });
+    expect(getLearning().progression).toBe("book");
   });
 
   it("rides the bb.* backup sweep", () => {

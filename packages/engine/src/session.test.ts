@@ -84,6 +84,7 @@ const conceptContent: Content = {
   tasks: [recognizeTask],
   resources: [],
   notes: [],
+  exams: [],
 };
 
 describe("buildTaskSession: recognize", () => {
@@ -200,6 +201,7 @@ const lexemeContent: Content = {
   tasks: [recallTask],
   resources: [],
   notes: [],
+  exams: [],
 };
 
 describe("buildTaskSession: recall", () => {
@@ -274,6 +276,7 @@ const lexemeRecognizeContent: Content = {
   tasks: [recognizeLexemeTask],
   resources: [],
   notes: [],
+  exams: [],
 };
 
 describe("buildTaskSession: recognize over lexeme items", () => {
@@ -357,6 +360,7 @@ const clozeContent: Content = {
   tasks: [clozeTask],
   resources: [],
   notes: [],
+  exams: [],
 };
 
 describe("buildTaskSession: cloze", () => {
@@ -433,6 +437,7 @@ const matchingContent: Content = {
   tasks: [matchingTask],
   resources: [],
   notes: [],
+  exams: [],
 };
 
 describe("buildTaskSession: matching", () => {
@@ -546,6 +551,7 @@ const scrambleContent: Content = {
   tasks: [scrambleTask],
   resources: [],
   notes: [],
+  exams: [],
 };
 
 describe("buildTaskSession: scramble", () => {
@@ -635,6 +641,7 @@ function buildContentWith(unitItems: Item[]): Content {
     tasks: [buildTask],
     resources: [],
     notes: [],
+    exams: [],
   };
 }
 
@@ -750,6 +757,7 @@ const listenContent: Content = {
   tasks: [listenTask],
   resources: [],
   notes: [],
+  exams: [],
 };
 
 describe("buildTaskSession: listen", () => {
@@ -860,6 +868,7 @@ const pictureContent: Content = {
   tasks: [pictureTask],
   resources: [],
   notes: [],
+  exams: [],
 };
 
 describe("buildTaskSession: picture", () => {
@@ -956,6 +965,7 @@ const minimalPairContent: Content = {
   tasks: [minimalPairTask],
   resources: [],
   notes: [],
+  exams: [],
 };
 
 describe("buildTaskSession: minimal-pair", () => {
@@ -1282,6 +1292,7 @@ describe("buildUnitSession", () => {
       tasks: [recallTaskU, recognizeTask],
       resources: [],
       notes: [],
+      exams: [],
     };
 
     // First 6 draws reproduce the recognize task's two questions exactly as
@@ -1390,6 +1401,7 @@ describe("countUnitQuestions", () => {
       tasks: [recallTaskU, recognizeTask],
       resources: [],
       notes: [],
+      exams: [],
     };
     expect(countUnitQuestions(unit, content)).toBe(
       buildUnitSession(
@@ -1443,6 +1455,7 @@ describe("buildRecallSession", () => {
     tasks: recallTasks,
     resources: [],
     notes: [],
+    exams: [],
   };
 
   it("samples exactly RECALL_SESSION_MAX_TASKS (5) distinct tasks when the linked unit has more than 5", () => {

@@ -68,6 +68,7 @@ export function loadContentDocuments(): {
       continue;
     }
     const dir = join(CONTENT_DIR, entry.name);
+    const examsDir = join(dir, "exams");
     books.set(entry.name, {
       topic: readJson(join(dir, "topic.json")),
       lessons: readJsonFilesIn(join(dir, "lessons")),
@@ -76,6 +77,9 @@ export function loadContentDocuments(): {
       tasks: readJsonFilesIn(join(dir, "tasks")),
       resources: readJson(join(dir, "resources.json")) as unknown[],
       notes: readNotes(join(dir, "notes")),
+      // Absent, not `[]`, when the dir doesn't exist (plan 0027 §3): every
+      // existing tree must load byte-identically to before this field existed.
+      ...(existsSync(examsDir) ? { exams: readJsonFilesIn(examsDir) } : {}),
     });
   }
   const lexiconDir = join(CONTENT_DIR, "lexicon");
@@ -124,6 +128,9 @@ export function writeBookDocument(id: string, doc: BookDocument): void {
   writeEntityDir(join(dir, "units"), doc.units);
   writeEntityDir(join(dir, "items"), doc.items);
   writeEntityDir(join(dir, "tasks"), doc.tasks);
+  if (doc.exams !== undefined && doc.exams.length > 0) {
+    writeEntityDir(join(dir, "exams"), doc.exams);
+  }
   const notesDir = join(dir, "notes");
   rmSync(notesDir, { recursive: true, force: true });
   if (doc.notes.length > 0) {

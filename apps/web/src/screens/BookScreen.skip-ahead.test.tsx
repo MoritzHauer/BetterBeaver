@@ -68,6 +68,7 @@ const content: Content = {
   tasks: [task],
   resources: [],
   notes: [],
+  exams: [],
 };
 
 const store: ProgressStore = {
@@ -87,6 +88,7 @@ function renderBookScreen(onSelectLesson: (lessonId: string) => void) {
       epoch={0}
       onSelectLesson={onSelectLesson}
       onPracticeTask={() => {}}
+      onSelectExam={() => {}}
       onPlay={() => {}}
       onReview={() => {}}
       onVocabulary={() => {}}

@@ -164,6 +164,8 @@ Two consumers, same loop, different configuration:
 
 ### 7. What review asks
 
+**Noted 2026-09-11:** this section describes a design the code does not implement. The shipped `buildReviewSession` does not draw. It asks each kind in a fixed presentation: recall card, cloze blank, minimal pair, a sentence's production exercise (see `design.md`'s review-queue row). [Plan 0027](0027-authored-questions-and-exam-mode.md) §10's domain exercise allow-list is written against the shipped behaviour and does not govern review. If this section is ever implemented, it must read that list too.
+
 The word's level picks the exercise by §4's draw, with one floor: **review never asks an exercise weaker than the one it uses today.** A due lexeme at a low level is not dropped to an MCQ, because plan 0022 §6 established that MCQ is weaker retrieval than the recall card it currently gets.
 
 A due cloze blank and a due `pair` keep their own single question — a cloze question grades the *blank's* scheduling unit (`blankUnitId`), so it can never stand in for the sentence's own card without leaving that card ungraded and permanently due.

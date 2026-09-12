@@ -160,6 +160,38 @@ export interface NoteQuestion {
   stem: string;
 }
 
+/** An authored MCQ over a `question` item with no `labels` (plan 0027 §5):
+ * one or more of `choices` is correct, `selectCount` many. Option order is
+ * the authored order, never shuffled, so a question reads the same in
+ * practice as in the exam. Auto-graded via `checkChoiceAnswer`. */
+export interface ChoiceQuestion {
+  kind: "choice";
+  unitId: string;
+  stem: string;
+  choices: string[];
+  correctIndices: number[];
+  selectCount: number;
+  /** Per choice, aligned with `choices`; undefined where the option has none. */
+  whys: (string | undefined)[];
+  explanation?: string;
+  explanationGenerated: boolean;
+}
+
+/** An authored true/false-per-row question over a `question` item with
+ * `labels` (plan 0027 §5): each of `rows` is assigned `labels[0]` or
+ * `labels[1]`. Auto-graded via `checkAssignAnswer`. */
+export interface AssignQuestion {
+  kind: "assign";
+  unitId: string;
+  stem: string;
+  rows: string[];
+  labels: [string, string];
+  correctLabelIndex: number[];
+  whys: (string | undefined)[];
+  explanation?: string;
+  explanationGenerated: boolean;
+}
+
 export type Question =
   | WriteQuestion
   | RecognizeQuestion
@@ -173,7 +205,9 @@ export type Question =
   | MinimalPairQuestion
   | PictureQuestion
   | BuildQuestion
-  | NoteQuestion;
+  | NoteQuestion
+  | ChoiceQuestion
+  | AssignQuestion;
 
 /** One `(schedulingUnitId, quality)` grading outcome (the outcome-list contract, plan 0002). */
 export type QuestionOutcome = [unitId: string, quality: Quality];
@@ -185,6 +219,52 @@ function recallQuestion(item: Item): RecallQuestion {
     unitId: item.id,
     prompt: recallPrompt(item),
     reveal: recallReveal(item),
+  };
+}
+
+/**
+ * Builds the `choice`/`assign` question for one `question` item (plan 0027
+ * §5): `labels` absent means `choice`, present means `assign`. Both shapes
+ * share `whys`/`explanation`/`explanationGenerated` and the item's own id as
+ * `unitId` — one scheduling unit per question item, no `::` suffix.
+ */
+function questionItemQuestion(
+  item: Extract<Item, { kind: "question" }>,
+): ChoiceQuestion | AssignQuestion {
+  const { payload } = item;
+  const whys = payload.options.map((option) => option.why);
+  const explanationGenerated =
+    payload.generated === true || payload.explanationGenerated === true;
+
+  if (payload.labels === undefined) {
+    const correctIndices = payload.options.flatMap((option, index) =>
+      option.correct ? [index] : [],
+    );
+    return {
+      kind: "choice",
+      unitId: item.id,
+      stem: payload.stem,
+      choices: payload.options.map((option) => option.text),
+      correctIndices,
+      selectCount: correctIndices.length,
+      whys,
+      explanation: payload.explanation,
+      explanationGenerated,
+    };
+  }
+
+  return {
+    kind: "assign",
+    unitId: item.id,
+    stem: payload.stem,
+    rows: payload.options.map((option) => option.text),
+    labels: payload.labels,
+    correctLabelIndex: payload.options.map((option) =>
+      option.correct ? 0 : 1,
+    ),
+    whys,
+    explanation: payload.explanation,
+    explanationGenerated,
   };
 }
 
@@ -254,6 +334,9 @@ function requiredAudioStem(item: Item): string {
   if (item.kind === "pair") {
     throw new Error(`item "${item.id}" is a pair; use its own a/b audioRef`);
   }
+  if (item.kind === "question") {
+    throw new Error(`item "${item.id}" is a question; it has no audioRef`);
+  }
   const stem = item.payload.audioRef;
   if (stem === undefined) {
     throw new Error(`item "${item.id}" is missing audioRef`);
@@ -285,6 +368,10 @@ function shadowingTranscript(item: Item): string[] {
     case "pair":
       throw new Error(
         `item "${item.id}" is a pair; shadowing never uses pair items`,
+      );
+    case "question":
+      throw new Error(
+        `item "${item.id}" is a question; shadowing never uses question items`,
       );
   }
 }
@@ -322,6 +409,26 @@ function buildMinimalPairQuestion(
 /** Checks a typed answer (cloze/dictation) against a target, both normalized via `normalizeTypedInput`. */
 export function checkTypedAnswer(target: string, answer: string): boolean {
   return normalizeTypedInput(answer) === normalizeTypedInput(target);
+}
+
+/** Checks a `choice` answer: true iff the set of selected indices equals the set of `correctIndices` (plan 0027 §5 — partial credit counts as wrong in practice). */
+export function checkChoiceAnswer(
+  q: ChoiceQuestion,
+  selected: readonly number[],
+): boolean {
+  const chosen = new Set(selected);
+  const correct = new Set(q.correctIndices);
+  return (
+    chosen.size === correct.size && [...chosen].every((i) => correct.has(i))
+  );
+}
+
+/** Checks an `assign` answer: true iff every row's pick equals `correctLabelIndex[i]`; a `null` (unanswered) pick is always wrong. */
+export function checkAssignAnswer(
+  q: AssignQuestion,
+  picks: readonly (number | null)[],
+): boolean {
+  return q.correctLabelIndex.every((correct, i) => picks[i] === correct);
 }
 
 /** Checks a scramble/build answer: the learner's ordered token strings joined with single spaces must equal the target's (duplicate tokens interchangeable by construction; build bank distractors may stay unused). */
@@ -601,6 +708,17 @@ export function buildTaskSession(
       });
     }
 
+    case "choice":
+    case "assign":
+      // Drafts can leave a task referencing an item that no longer resolves
+      // as a `question` (e.g. mid-edit item-kind change); skip it rather
+      // than throw, the same tolerance every other case gets from the
+      // `resolves` filter above.
+      return task.itemIds.flatMap((itemId): Question[] => {
+        const item = itemById.get(itemId)!;
+        return item.kind === "question" ? [questionItemQuestion(item)] : [];
+      });
+
     default:
       task.type satisfies never;
       throw new Error(`unknown task type: ${task.type as string}`);
@@ -747,6 +865,46 @@ export function buildUnitSession(
 }
 
 /**
+ * Builds a fixed-order session over the given tasks (plan 0027 §5):
+ * `buildTaskSession` run for each id in order, flattened and tagged with its
+ * task id — **not shuffled**, unlike `buildUnitSession`. The Check, exam
+ * review mode and "practise what you missed" all need the questions to stay
+ * in a chosen order. Unknown task ids are skipped.
+ */
+export function buildFixedSession(
+  taskIds: readonly string[],
+  content: Content,
+  rng: Rng,
+): { question: Question; taskId: string }[] {
+  const taskById = new Map(content.tasks.map((task) => [task.id, task]));
+  return taskIds.flatMap((taskId) => {
+    const task = taskById.get(taskId);
+    if (task === undefined) {
+      return [];
+    }
+    return buildTaskSession(task, content, rng).map((question) => ({
+      question,
+      taskId,
+    }));
+  });
+}
+
+/**
+ * `unit`'s `choice`/`assign` task ids, in `unit.taskIds` order (plan 0027
+ * §12): the tasks the Check page asks, via `buildFixedSession`. A unit with
+ * none of these has no Check.
+ */
+export function checkTaskIds(unit: Unit, content: Content): string[] {
+  const taskById = new Map(content.tasks.map((task) => [task.id, task]));
+  return unit.taskIds.filter((taskId) => {
+    const task = taskById.get(taskId);
+    return (
+      task !== undefined && (task.type === "choice" || task.type === "assign")
+    );
+  });
+}
+
+/**
  * Counts the actual questions/flashcards `buildUnitSession` would produce
  * for `unit`, without building any `Question` objects or requiring an `Rng`
  * (plan 0011): mirrors `buildTaskSession`'s per-type question count, since
@@ -777,11 +935,41 @@ function countTaskQuestions(task: Task, itemById: Map<string, Item>): number {
     case "minimal-pair":
     case "picture":
     case "build":
+    case "choice":
+    case "assign":
       return task.itemIds.length;
     default:
       task.type satisfies never;
       throw new Error(`unknown task type: ${task.type as string}`);
   }
+}
+
+/**
+ * The unit's items a drill can actually build a card for (plan 0027 §5,
+ * §10): `question` items are excluded — they are answered in the unit's
+ * Check instead, never drilled — and so is any item whose only exercise
+ * (once `allowed`, a domain's exercise allow-list, narrows the field) is
+ * `matching`. `buildVisitQuestion` drops `matching` for a word a board
+ * already covered, so such an item would draw `null` on its second visit,
+ * and the drill cannot skip a card it cannot build (`extend` only runs after
+ * an answered card). Filtering both out before the drill starts is what
+ * makes §10's "an item left with nothing" safe. Order is preserved.
+ */
+export function drillItemIds(
+  unit: Unit,
+  content: Content,
+  allowed?: readonly Exercise[],
+): string[] {
+  const itemById = new Map(content.items.map((item) => [item.id, item]));
+  return unit.itemIds.filter((itemId) => {
+    const item = itemById.get(itemId);
+    if (item === undefined || item.kind === "question") {
+      return false;
+    }
+    return availableExercises(item, content, allowed).some(
+      (exercise) => exercise !== "matching",
+    );
+  });
 }
 
 /**
@@ -801,6 +989,9 @@ function countTaskQuestions(task: Task, itemById: Map<string, Item>): number {
  * already answered for. A board answers for every word on it, so without
  * this a unit of four new words would open with four identical boards; a
  * covered word draws its next exercise up instead.
+ *
+ * `allowedExercises`, when given, is a domain's exercise allow-list (plan
+ * 0027 §10), narrowing what the draw can pick for this word.
  */
 export function buildVisitQuestion(
   visit: PlannedVisit,
@@ -809,13 +1000,14 @@ export function buildVisitQuestion(
   levelOf: (schedulingUnitId: string) => number,
   rng: Rng,
   coveredByBoard: ReadonlySet<string> = new Set(),
+  allowedExercises?: readonly Exercise[],
 ): { question: Question; taskId: string } | null {
   const item = content.items.find((candidate) => candidate.id === visit.unitId);
   if (item === undefined) {
     return null;
   }
 
-  let available = availableExercises(item, content);
+  let available = availableExercises(item, content, allowedExercises);
   if (coveredByBoard.has(visit.unitId)) {
     available = available.filter((exercise) => exercise !== "matching");
   }
@@ -965,6 +1157,9 @@ export function buildReviewSession(
         return exercise;
       }
     }
+    if (unit.item.kind === "question") {
+      return questionItemQuestion(unit.item);
+    }
     return recallQuestion(unit.item);
   });
 }
@@ -973,21 +1168,41 @@ export function buildReviewSession(
 const RECALL_SESSION_MAX_TASKS = 5;
 
 /**
+ * `unit`'s tasks whose type is neither `choice` nor `assign` (plan 0027 §5):
+ * the ones cross-unit recall may sample. A Check question is graded from its
+ * own unit's Check, never shuffled in from another unit's "Remember: …", so
+ * `buildRecallSession` filters to this set **before** its shuffle-and-take-5
+ * — filtering after would let a mixed unit draw five question tasks and
+ * produce no cards. Exported so the web can tell an all-question link has
+ * nothing to recall and hide it, rather than opening an empty session.
+ */
+export function recallableTaskIds(unit: Unit, content: Content): string[] {
+  const taskById = new Map(content.tasks.map((task) => [task.id, task]));
+  return unit.taskIds.filter((taskId) => {
+    const task = taskById.get(taskId);
+    return (
+      task !== undefined && task.type !== "choice" && task.type !== "assign"
+    );
+  });
+}
+
+/**
  * Builds a practice-only "Remember: …" recall session (plan 0016) over a
  * random sample of up to `RECALL_SESSION_MAX_TASKS` of `linkedUnit`'s own
- * tasks — reusing `buildUnitSession` unchanged (it reads only `unit.taskIds`
- * plus `content`), so the per-task question shape is identical to practicing
- * the linked unit directly. No content is authored for the link itself.
+ * recallable tasks (`recallableTaskIds`) — reusing `buildUnitSession`
+ * unchanged (it reads only `unit.taskIds` plus `content`), so the per-task
+ * question shape is identical to practicing the linked unit directly. No
+ * content is authored for the link itself.
  */
 export function buildRecallSession(
   linkedUnit: Unit,
   content: Content,
   rng: Rng,
 ): { question: Question; taskId: string }[] {
-  const sampledTaskIds = shuffle(linkedUnit.taskIds, rng).slice(
-    0,
-    RECALL_SESSION_MAX_TASKS,
-  );
+  const sampledTaskIds = shuffle(
+    recallableTaskIds(linkedUnit, content),
+    rng,
+  ).slice(0, RECALL_SESSION_MAX_TASKS);
   return buildUnitSession(
     { ...linkedUnit, taskIds: sampledTaskIds },
     content,

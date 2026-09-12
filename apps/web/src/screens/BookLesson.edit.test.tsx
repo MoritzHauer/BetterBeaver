@@ -115,6 +115,7 @@ function renderBook(
       epoch={0}
       onSelectLesson={onSelectLesson}
       onPracticeTask={() => {}}
+      onSelectExam={() => {}}
       onPlay={() => {}}
       onReview={() => {}}
       onVocabulary={() => {}}

@@ -8,7 +8,13 @@ import {
 import { ConfirmSheet } from "../components/Sheet";
 import { SettingsSheet } from "../components/SettingsSheet";
 import { UndoToast, useUndoSnapshot } from "../components/UndoToast";
-import { countUnitQuestions, diffNoteBlocks } from "@betterbeaver/engine";
+import {
+  checkTaskIds,
+  countUnitQuestions,
+  diffNoteBlocks,
+  drillItemIds,
+  recallableTaskIds,
+} from "@betterbeaver/engine";
 import type { TapLookup } from "../components/TappableText";
 import { TappableText } from "../components/TappableText";
 import { NoteView } from "../components/NoteView";
@@ -68,6 +74,11 @@ type PageKind =
   | "vocabulary"
   | "concepts"
   | "examples"
+  // The unit Check (plan 0027 §12): the unit's choice/assign questions, the
+  // last page a learner sees, present whenever the unit has any — including
+  // in edit mode, unlike the pages above, since there is no question editor
+  // to make an empty page useful there.
+  | "check"
   // Edit-only (spec 0021-8 §3): a task has no learner surface — it only
   // exists inside a running session — so this dot appears after the content
   // pages, and only while a session is open.
@@ -783,6 +794,8 @@ export function UnitScreen({
   unitId,
   lookup,
   onPractice,
+  onCheck,
+  checkLevels,
   onRecall,
   onPinNote,
   isNotePinned,
@@ -800,6 +813,12 @@ export function UnitScreen({
   /** Unit-scoped now (plan 0010): launches one pooled, shuffled session
    * across the whole unit's task set, rather than picking a single task. */
   onPractice: () => void;
+  /** Launches the unit Check (plan 0027 §12): every choice/assign question,
+   * once, in order. */
+  onCheck: () => void;
+  /** Every Check item's level, read once by the caller on unit-screen open —
+   * `null` while loading, which the Check page shows as "…" (plan 0027 §12). */
+  checkLevels: ReadonlyMap<string, number> | null;
   /** Launches a practice-only recall session over the linked unit's tasks (plan 0016). */
   onRecall: (linkedUnitId: string) => void;
   /** Pins a note for review — schedules it, entering it into the domain's
@@ -979,9 +998,27 @@ export function UnitScreen({
       item.kind === "sentence" || item.kind === "pair",
   );
 
-  // Edit mode shows all five pages whether or not they have content yet:
-  // each page owns its own add control, so an empty page hidden is a page
-  // you can never put the first word, concept or example on.
+  // The unit Check (plan 0027 §12): its choice/assign task ids, and whether
+  // it has any. `checkOnly` is a Check page ending the trail with nothing
+  // to drill (an all-question unit, or an allow-list that leaves no other
+  // word drillable) — only then is Practice withdrawn. It must stay gated
+  // on `hasCheck`: a notes-only unit also has an empty drill, and without a
+  // Check page there is no other way forward, so it keeps its Practice and
+  // the empty session's summary still offers "Next unit".
+  const checkIds = unit === undefined ? [] : checkTaskIds(unit, content);
+  const hasCheck = checkIds.length > 0;
+  const domainExercises = lookup.domainContent.domain.exercises;
+  const checkOnly =
+    hasCheck &&
+    (unit === undefined ||
+      drillItemIds(unit, content, domainExercises).length === 0);
+
+  // Edit mode shows all five content pages whether or not they have content
+  // yet: each page owns its own add control, so an empty page hidden is a
+  // page you can never put the first word, concept or example on. The Check
+  // page is the one exception (plan 0027 §12): it exists only when there are
+  // questions, in edit mode too, since there is no question editor to make
+  // an empty page useful.
   const pages: PageKind[] = [
     "overview",
     // `diff !== null` too: a unit whose only change is a deleted note has
@@ -992,6 +1029,7 @@ export function UnitScreen({
     ...(lexemes.length > 0 || edit !== null ? (["vocabulary"] as const) : []),
     ...(concepts.length > 0 || edit !== null ? (["concepts"] as const) : []),
     ...(examples.length > 0 || edit !== null ? (["examples"] as const) : []),
+    ...(hasCheck ? (["check"] as const) : []),
     ...(edit !== null || diff !== null ? (["exercises"] as const) : []),
   ];
   // Never read `page` directly below: it may still hold `startAtEnd`'s
@@ -1005,9 +1043,13 @@ export function UnitScreen({
   }
   function goNext() {
     // Practice is the trail's last dot (owner request): advancing past the
-    // final page starts the unit's tasks instead of going nowhere.
+    // final page starts the unit's tasks instead of going nowhere. Unless
+    // that page is a Check with nothing to drill (plan 0027 §12) — then the
+    // page's own Start check button is the only action.
     if (atLastPage) {
-      onPractice();
+      if (!checkOnly) {
+        onPractice();
+      }
       return;
     }
     setPage(pageIndex + 1);
@@ -1076,6 +1118,20 @@ export function UnitScreen({
     );
   }
 
+  // The Check page's own tally (plan 0027 §12): `m` is the question count,
+  // derived from content alone so it never waits on `checkLevels`; `n` is
+  // how many of those already read level ≥ 1 (0025 §8's completion rule) —
+  // "…" on the page until `checkLevels` arrives.
+  const checkItemIds = checkIds.flatMap((taskId) => {
+    const task = content.tasks.find((t) => t.id === taskId);
+    return task?.itemIds ?? [];
+  });
+  const checkQuestionCount = checkItemIds.length;
+  const checkCorrectCount =
+    checkLevels === null
+      ? 0
+      : checkItemIds.filter((id) => (checkLevels.get(id) ?? 0) >= 1).length;
+
   const conceptChunks = chunk(concepts, CONCEPT_CHUNK_SIZE);
   const conceptRows =
     conceptChunks[Math.min(conceptPage, conceptChunks.length - 1)] ?? [];
@@ -1134,12 +1190,16 @@ export function UnitScreen({
               onClick={() => setPage(index)}
             />
           ))}
-          <button
-            type="button"
-            className="dot practice"
-            aria-label="Practice"
-            onClick={onPractice}
-          />
+          {/* Hidden when the drill is empty (plan 0027 §12): nothing left
+              to practice, so the dot would open nothing. */}
+          {!checkOnly && (
+            <button
+              type="button"
+              className="dot practice"
+              aria-label="Practice"
+              onClick={onPractice}
+            />
+          )}
         </div>
         {onEdit !== undefined && (
           <button
@@ -1195,7 +1255,13 @@ export function UnitScreen({
             )}
             {(unit.recallUnitIds ?? []).flatMap((id) => {
               const linkedUnit = content.units.find((u) => u.id === id);
-              if (linkedUnit === undefined) {
+              // An all-question linked unit has nothing recallable (plan
+              // 0027 §5): its tasks are excluded from `buildRecallSession`,
+              // so opening one would start an empty session.
+              if (
+                linkedUnit === undefined ||
+                recallableTaskIds(linkedUnit, content).length === 0
+              ) {
                 return [];
               }
               return [
@@ -1816,6 +1882,27 @@ export function UnitScreen({
         </>
       ) : null}
 
+      {currentPage === "check" ? (
+        <>
+          <p className="eyebrow">
+            <img
+              className="icon-glyph"
+              src={`${import.meta.env.BASE_URL}art/icons/beaver_pencil.png`}
+              alt=""
+            />{" "}
+            Check
+          </p>
+          <p>{checkQuestionCount} questions</p>
+          <p>
+            answered correctly: {checkLevels === null ? "…" : checkCorrectCount}{" "}
+            / {checkQuestionCount}
+          </p>
+          <button type="button" className="primary" onClick={onCheck}>
+            Start check
+          </button>
+        </>
+      ) : null}
+
       {currentPage === "exercises" && diff !== null ? (
         <>
           <p className="eyebrow">Exercises</p>
@@ -1923,20 +2010,32 @@ export function UnitScreen({
           Hidden in edit mode (spec 0021-6 §1): practising a draft is what
           Preview is for (slice 9), and a Practice button that starts a
           session over half-typed content is a trap. */}
-      {(session === null || session.view === "preview") && (
-        <div className="action-bar unit-practice-bar">
-          <div className="action-bar-inner unit-practice-bar-inner">
-            <button className="unit-practice-button" onClick={goNext}>
-              <span>{atLastPage ? "Practice" : "Next"}</span>
-              {atLastPage && (
-                <span className="unit-practice-count">
-                  {countUnitQuestions(unit, content)}
-                </span>
-              )}
-            </button>
+      {(session === null || session.view === "preview") &&
+        // Hidden on the Check page once the drill is empty (plan 0027 §12):
+        // there is nothing left for the bar to launch, so the page's own
+        // Start check button is the only action.
+        !(atLastPage && checkOnly) && (
+          <div className="action-bar unit-practice-bar">
+            <div className="action-bar-inner unit-practice-bar-inner">
+              <button className="unit-practice-button" onClick={goNext}>
+                <span>{atLastPage ? "Practice" : "Next"}</span>
+                {atLastPage && (
+                  <span className="unit-practice-count">
+                    {countUnitQuestions(
+                      {
+                        ...unit,
+                        taskIds: unit.taskIds.filter(
+                          (id) => !checkIds.includes(id),
+                        ),
+                      },
+                      content,
+                    )}
+                  </span>
+                )}
+              </button>
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
       {openEntryId !== null ? (
         <EntryPopup

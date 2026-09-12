@@ -694,6 +694,82 @@ tr.diff-new > td {
   border-color: var(--primary);
 }
 
+/* `choice`/`assign` question feedback (plan 0027 §5/§6). `.option-why`: a
+ * `why` (or a wrong assign row's correct-label line) under an option, sized
+ * down from body text like the session's other secondary lines (`.status`)
+ * but without its caps/letter-spacing, since this is a sentence. */
+.option-why {
+  margin: 0;
+  padding: 0 1rem 0.85rem;
+  font-size: 0.85rem;
+  opacity: 0.75;
+}
+
+/* `.assign-row`: one `assign` question row, a self-contained card (unlike
+ * `.card`, which pads only its button) since it holds row text, a label pair
+ * and, once graded, feedback lines. `.assign-labels`: the two label buttons
+ * side by side, wrapping on a narrow screen; the button system already
+ * floors every button at 44px. */
+.assign-row {
+  border: 1px solid var(--card-border);
+  border-radius: 0.75rem;
+  background: var(--card-bg);
+  padding: 1rem;
+}
+
+.assign-row.correct {
+  border-color: var(--correct-border);
+  background: var(--correct-bg);
+}
+
+.assign-row.incorrect {
+  border-color: var(--incorrect-border);
+  background: var(--incorrect-bg);
+}
+
+.assign-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.assign-labels button {
+  flex: 1;
+}
+
+.assign-labels button.selected {
+  border-color: var(--primary);
+}
+
+/* A subtle panel under a graded `choice`/`assign` question, holding the
+ * `explanation` and, when generated, the badge below. */
+.question-feedback {
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--card-border);
+  border-radius: 0.75rem;
+  background: var(--card-bg);
+}
+
+.question-feedback p {
+  margin: 0;
+}
+
+/* The "generated" badge (plan 0027 §5/§6): marks an AI-written explanation
+ * (or, in the exam, a whole generated exam) wherever the feedback component
+ * appears — practice, the Check, Review, exam review mode and the report. */
+.badge-generated {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 800;
+  background: var(--fg);
+  color: var(--bg);
+}
+
 /* Session screen (plan 0003 step 3): fixed bottom action bar is the single
  * action zone, thin top progress bar with an ✕ exit beside it, and a
  * slide-in on question advance (the key={index} remount). */

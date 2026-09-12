@@ -128,6 +128,7 @@ const content: Content = {
   tasks: [clozeTask, dictationTask, scrambleTask, recallTask, minimalPairTask],
   resources: [],
   notes: [],
+  exams: [],
 };
 
 describe("schedulingUnits", () => {
@@ -196,6 +197,7 @@ describe("schedulingUnits — notes (plan 0008 step 7)", () => {
     tasks: [],
     resources: [],
     notes: [note, otherNote],
+    exams: [],
   };
 
   it("emits one unit per note referenced by a unit, id `note:<id>`", () => {
@@ -261,6 +263,7 @@ describe("domainSchedulingUnits", () => {
     ],
     resources: [],
     notes: [],
+    exams: [],
   };
   const unreferencedEntry: Item = {
     id: "t-item-unreferenced",
@@ -331,6 +334,7 @@ describe("domainSchedulingUnits — notes across books (plan 0008 step 7)", () =
     tasks: [],
     resources: [],
     notes: [sharedNote],
+    exams: [],
   };
   const noteUnitB: Unit = {
     id: "t-unit-notes-b",
@@ -356,6 +360,7 @@ describe("domainSchedulingUnits — notes across books (plan 0008 step 7)", () =
     tasks: [],
     resources: [],
     notes: [sharedNote],
+    exams: [],
   };
 
   it("a note referenced by units of two books is one scheduling unit, not two", () => {

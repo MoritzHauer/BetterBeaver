@@ -72,6 +72,7 @@ function makeContent(args: {
     tasks: [],
     resources: [],
     notes: [],
+    exams: [],
   };
 }
 

@@ -233,6 +233,8 @@ function itemTitle(item: Content["items"][number]): string {
       return item.payload.translation;
     case "pair":
       return `${item.payload.a.script} / ${item.payload.b.script}`;
+    case "question":
+      return item.payload.stem;
   }
 }
 
