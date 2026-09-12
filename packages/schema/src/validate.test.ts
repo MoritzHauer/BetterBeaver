@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { validateContent, type ValidateContentResult } from "./validate.js";
-import { bookSchema, BOOK_ICONS } from "./entities.js";
+import { bookSchema, domainSchema, BOOK_ICONS } from "./entities.js";
 
 type LinkLike = { type: string; entryId: string };
 type ComponentLike = {
@@ -63,9 +63,11 @@ type QuestionItemLike = {
   kind: "question";
   payload: {
     stem: string;
-    options: { text: string; correct: boolean }[];
+    options: { text: string; correct: boolean; why?: string }[];
     labels?: [string, string];
+    explanation?: string;
     generated?: boolean;
+    explanationGenerated?: boolean;
   };
   sourceRef: string;
 };
@@ -80,7 +82,7 @@ type ExamLike = {
   topicId: string;
   title: string;
   description: string;
-  questions: { taskId: string; points: number }[];
+  questions: { taskId: string; points: number; lessonId?: string }[];
   ruleset: {
     passPercent: number;
     timeLimitMinutes: number;
@@ -1380,6 +1382,83 @@ describe("bookSchema hasCoverArt (UI polish batch, 2026-07-25)", () => {
   });
 });
 
+describe("bookSchema practiceDepth (plan 0027 §11)", () => {
+  const baseBook = {
+    id: "kyrgyz",
+    code: "ky",
+    title: "Kyrgyz",
+    description: "Kyrgyz language book",
+    lessonIds: [] as string[],
+    domainId: "ky",
+  };
+
+  it("parses with a valid preset", () => {
+    const result = bookSchema.safeParse({ ...baseBook, practiceDepth: "fast" });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.practiceDepth).toBe("fast");
+    }
+  });
+
+  it("rejects an unknown preset", () => {
+    const result = bookSchema.safeParse({
+      ...baseBook,
+      practiceDepth: "turbo",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("parses with practiceDepth absent", () => {
+    const result = bookSchema.safeParse(baseBook);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.practiceDepth).toBeUndefined();
+    }
+  });
+});
+
+describe("domainSchema exercises (plan 0027 §10)", () => {
+  const baseDomain = {
+    id: "ky",
+    code: "ky",
+    kind: "language" as const,
+    title: "Kyrgyz",
+    glossLanguage: "en",
+  };
+
+  it("parses with a valid allow-list", () => {
+    const result = domainSchema.safeParse({
+      ...baseDomain,
+      exercises: ["matching"],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.exercises).toEqual(["matching"]);
+    }
+  });
+
+  it("rejects an empty allow-list", () => {
+    const result = domainSchema.safeParse({ ...baseDomain, exercises: [] });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects an unknown exercise name", () => {
+    const result = domainSchema.safeParse({
+      ...baseDomain,
+      exercises: ["bogus"],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("parses with exercises absent", () => {
+    const result = domainSchema.safeParse(baseDomain);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.exercises).toBeUndefined();
+    }
+  });
+});
+
 /**
  * Plan 0027: authored-option questions and exams — classes (ae) the payload,
  * (af) the task/payload pairing, (ag) the exam.
@@ -1608,5 +1687,124 @@ describe("authored questions and exams (plan 0027)", () => {
     const { input, rowQuestion, question } = withExam();
     rowQuestion.payload.stem = question.payload.stem;
     expect("content" in validateContent(input)).toBe(true);
+  });
+
+  // --- class (ae), amended 2026-09-11: explanation and per-option why ---
+
+  it("accepts a question with why and explanation", () => {
+    const { input, question } = withExam();
+    question.payload.explanation = "Presentation and Domain are layers.";
+    question.payload.options[0]!.why = "It is a layer.";
+    expect("content" in validateContent(input)).toBe(true);
+  });
+
+  it("rejects a blank explanation", () => {
+    const { input, question } = withExam();
+    question.payload.explanation = "   ";
+    expect(expectErrors(validateContent(input)).join("\n")).toContain(
+      "question explanation is blank",
+    );
+  });
+
+  it("rejects a blank option why", () => {
+    const { input, question } = withExam();
+    question.payload.options[0]!.why = "   ";
+    expect(expectErrors(validateContent(input)).join("\n")).toContain(
+      'question option 1 "why" is blank',
+    );
+  });
+
+  // --- class (ag), amended 2026-09-11: questions[].lessonId ---
+
+  it("accepts an exam question with a resolving lessonId", () => {
+    const { input, exam, lesson } = withExam();
+    exam.questions[0]!.lessonId = lesson.id;
+    expect("content" in validateContent(input)).toBe(true);
+  });
+
+  it("rejects a dangling lessonId, naming the exam", () => {
+    const { input, exam } = withExam();
+    exam.questions[0]!.lessonId = "ky-lesson-ghost";
+    expect(expectErrors(validateContent(input)).join("\n")).toContain(
+      `${exam.id}: dangling lessonId reference "ky-lesson-ghost" in questions`,
+    );
+  });
+
+  // --- class (ah): exam-only ownership (plan 0027 §3a) ---
+
+  /** A `choice` task and its item that belong to no unit — only the exam
+   * references either of them. */
+  function withExamOnlyTask() {
+    const fixture = makeFixture();
+    const question: QuestionItemLike = {
+      id: "ky-item-q1",
+      kind: "question",
+      payload: {
+        stem: "Which of these are layers?",
+        options: [
+          { text: "Presentation", correct: true },
+          { text: "Domain", correct: true },
+          { text: "Tuesday", correct: false },
+        ],
+      },
+      sourceRef: fixture.resource.id,
+    };
+    const choiceTask: TaskLike = {
+      id: "ky-task-choice-1",
+      type: "choice",
+      itemIds: [question.id],
+    };
+    const exam: ExamLike = {
+      id: "ky-exam-1",
+      topicId: fixture.book.id,
+      title: "Mock exam",
+      description: "iSAQB CPSA-F, © iSAQB e.V.",
+      questions: [{ taskId: choiceTask.id, points: 2 }],
+      ruleset: {
+        passPercent: 60,
+        timeLimitMinutes: 75,
+        partialCredit: true,
+        negativeMarking: true,
+      },
+    };
+    fixture.input.items.push(question);
+    fixture.input.tasks.push(choiceTask);
+    fixture.input.exams = [exam];
+    fixture.book.examIds = [exam.id];
+    // Deliberately not added to fixture.unit.itemIds/taskIds: this task and
+    // its item belong to no unit, only to the exam.
+    return { ...fixture, question, choiceTask, exam };
+  }
+
+  it("passes: an exam-only task and its item, owned by no unit", () => {
+    const { input } = withExamOnlyTask();
+    expect("content" in validateContent(input)).toBe(true);
+  });
+
+  it("fails as orphaned when the same task is referenced by no exam", () => {
+    const { input, choiceTask } = withExamOnlyTask();
+    input.exams = [];
+    input.topic.examIds = [];
+    expect(expectErrors(validateContent(input)).join("\n")).toContain(
+      `${choiceTask.id}: task is orphaned (owned by no unit)`,
+    );
+  });
+
+  it("fails when an exam-only task's item also sits in a unit's itemIds", () => {
+    const { input, question, unit } = withExamOnlyTask();
+    unit.itemIds.push(question.id);
+    expect(expectErrors(validateContent(input)).join("\n")).toContain(
+      `exam-only task's item "${question.id}" is owned by a unit`,
+    );
+  });
+
+  it("(af) runs even for an exam-only task with no owning unit", () => {
+    // Before the move, (af) sat after the owning-unit guard and never saw
+    // an exam-only task — this exact case silently passed.
+    const { input, question } = withExamOnlyTask();
+    question.payload.labels = ["Richtig", "Falsch"];
+    expect(expectErrors(validateContent(input)).join("\n")).toContain(
+      'choice task item "ky-item-q1" has "labels"',
+    );
   });
 });
