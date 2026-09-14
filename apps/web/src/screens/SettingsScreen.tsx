@@ -15,6 +15,7 @@ import { SOUND_KEY } from "../sounds";
 import { AUTO_UPDATE_KEY } from "../autoUpdate";
 import { OFFLINE_KEY, isOffline } from "../offline";
 import { getThemePref, setThemePref, type ThemePref } from "../theme";
+import { getTextSize, setTextSize, type TextSize } from "../text-size";
 import { getDisplayName, setDisplayName } from "../identity";
 import { APP_COMMIT, APP_VERSION, REPO_URL } from "../version";
 import {
@@ -35,6 +36,14 @@ const THEME_OPTIONS: { pref: ThemePref; label: string }[] = [
   { pref: "system", label: "System" },
   { pref: "light", label: "Light" },
   { pref: "dark", label: "Dark" },
+];
+
+/** The in-app answer to `user-scalable=no` (ui-review 2026-09-13, sy-zoom).
+ * Labels, not percentages: a learner knows "too small", not "112.5%". */
+const TEXT_SIZE_OPTIONS: { size: TextSize; label: string }[] = [
+  { size: "default", label: "Default" },
+  { size: "large", label: "Large" },
+  { size: "larger", label: "Larger" },
 ];
 
 /** Named presets, never typed intervals (plan 0022 §8): a learner looking at
@@ -98,6 +107,7 @@ export function SettingsScreen({
   ) => Promise<void>;
 }) {
   const [themePref, setThemePrefState] = useState<ThemePref>(getThemePref);
+  const [textSize, setTextSizeState] = useState<TextSize>(getTextSize);
   const [displayName, setDisplayNameState] = useState(getDisplayName);
   const [soundOn, setSoundOn] = useState(
     () => localStorage.getItem(SOUND_KEY) !== "off",
@@ -338,6 +348,26 @@ export function SettingsScreen({
             </button>
           ))}
         </div>
+        <h3 className="setting-subhead">Text size</h3>
+        <div className="grade-buttons">
+          {TEXT_SIZE_OPTIONS.map(({ size, label }) => (
+            <button
+              key={size}
+              className={textSize === size ? "primary" : "plain"}
+              aria-pressed={textSize === size}
+              onClick={() => {
+                setTextSize(size);
+                setTextSizeState(size);
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <p className="setting-hint">
+          Makes everything bigger, not just the words — spacing and buttons grow
+          with the text.
+        </p>
       </section>
 
       <section className="card">

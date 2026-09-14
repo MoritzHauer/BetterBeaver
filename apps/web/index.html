@@ -4,10 +4,17 @@
     <meta charset="UTF-8" />
     <!-- user-scalable=no: an installed PWA should feel like an app, not a
          zoomable page. iOS honours it only in standalone mode; the
-         touch-action rule in styles.css kills double-tap zoom everywhere. -->
+         touch-action rule in styles.css kills double-tap zoom everywhere.
+         Because that also removes the platform's own way to enlarge text,
+         Settings > Appearance > Text size is the in-app replacement
+         (src/text-size.ts) — the two are not alternatives, and dropping the
+         lock would restore layout zoom on top of it.
+         viewport-fit=cover is what makes env(safe-area-inset-*) resolve to
+         anything; without it the insets styles.css applies to the three
+         fixed bottom bars are always 0. -->
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
     />
     <meta name="theme-color" content="#e08820" />
     <!-- ?v= busts the browser's sticky favicon cache; bump on future icon changes. -->
@@ -41,6 +48,18 @@
           document.documentElement.dataset.theme = dark ? "dark" : "light";
         } catch (e) {
           /* localStorage/matchMedia unavailable: CSS falls back to the OS. */
+        }
+        try {
+          /* Text size, same rule: stored raw under bb.textSize, absent =
+             browser default. Applied here so the app does not launch at one
+             size and reflow to another. Mirrors apps/web/src/text-size.ts. */
+          var size = localStorage.getItem("bb.textSize");
+          if (size === "large" || size === "larger") {
+            document.documentElement.style.fontSize =
+              size === "large" ? "112.5%" : "125%";
+          }
+        } catch (e) {
+          /* localStorage unavailable: the browser default stands. */
         }
       })();
     </script>

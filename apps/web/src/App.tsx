@@ -1068,6 +1068,7 @@ function ReviewSession({
   lookup,
   canEdit,
   onOpenEdit,
+  onKeepStudying,
   onDone,
 }: {
   domainContent: DomainContent;
@@ -1082,6 +1083,10 @@ function ReviewSession({
   canEdit: boolean;
   /** Opens the scoped edit sheet on the given target (decision 13). */
   onOpenEdit: (docId: string, target: EditTarget) => void;
+  /** Forward path out of the "nothing due" state, when the domain has exactly
+   * one Book to go forward *to*. Undefined for a multi-Book domain, where
+   * there is no single right destination (ui-review 2026-09-13, rv-dead). */
+  onKeepStudying?: () => void;
   onDone: () => void;
 }) {
   const domainId = domainContent.domain.id;
@@ -1175,22 +1180,33 @@ function ReviewSession({
   if (questions.length === 0) {
     return (
       <main>
+        {/* "You're done for today" is worth keeping, but it was also a dead
+            end: the only control was a Back button that broke the centred
+            layout by sitting hard against the left edge (ui-review
+            2026-09-13, finding rv-dead). */}
         <p className="empty-state">
           <img
             className="empty-state-icon"
             src={`${import.meta.env.BASE_URL}art/icons/beaver_sleeping_floating.png`}
             alt=""
           />
-          Nothing due right now.
+          Nothing due right now — you are caught up.
         </p>
-        <button onClick={onDone}>
-          <img
-            className="icon-glyph"
-            src={`${import.meta.env.BASE_URL}art/icons/arrow_W.png`}
-            alt=""
-          />{" "}
-          Back
-        </button>
+        <div className="empty-state-actions">
+          {onKeepStudying !== undefined && (
+            <button className="primary" onClick={onKeepStudying}>
+              Keep studying
+            </button>
+          )}
+          <button onClick={onDone}>
+            <img
+              className="icon-glyph"
+              src={`${import.meta.env.BASE_URL}art/icons/arrow_W.png`}
+              alt=""
+            />{" "}
+            Back
+          </button>
+        </div>
       </main>
     );
   }
@@ -2328,7 +2344,17 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   if (screen.screen === "about") {
     const back = screen.back ?? { screen: "books" as const };
     const onBack = () => setScreen(back);
-    return <AboutScreen onBack={onBack} />;
+    // About names the Impressum and Datenschutz pages; before it could also
+    // navigate to them, a reader had to back out to home and hunt the footer
+    // (ui-review 2026-09-13, finding sc-legal). Both carry `back` so they
+    // return here, not to home.
+    return (
+      <AboutScreen
+        onBack={onBack}
+        onImpressum={() => setScreen({ screen: "impressum" })}
+        onPrivacy={() => setScreen({ screen: "privacy", back: screen })}
+      />
+    );
   }
   if (screen.screen === "privacy") {
     const back = screen.back ?? { screen: "books" as const };
@@ -3261,6 +3287,12 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
   }
 
   const onReviewDone = () => setScreen({ screen: "books" });
+  // Only a single-Book domain has an unambiguous "forward" from an empty
+  // review; captured here so the callback closes over a defined id.
+  const soleDomainBookId =
+    domainBooksContent.length === 1
+      ? domainBooksContent[0]?.topic.id
+      : undefined;
   return withSessionEdit(
     <ReviewSession
       domainContent={domainContent}
@@ -3277,6 +3309,11 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
         )
       }
       onOpenEdit={openSessionEdit}
+      onKeepStudying={
+        soleDomainBookId
+          ? () => setScreen({ screen: "book", bookId: soleDomainBookId })
+          : undefined
+      }
       onDone={onReviewDone}
     />,
   );

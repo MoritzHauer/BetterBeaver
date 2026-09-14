@@ -808,7 +808,14 @@ main.session {
 .action-bar-inner {
   max-width: 60ch;
   margin: 0 auto;
+  /* The bottom ~34px of a notched phone is system gesture territory, and
+   * this bar owns the bottom edge. `env()` resolves to 0 wherever there is
+   * no inset, so this costs nothing on desktop or a non-notched device —
+   * and it has to be here before `display: standalone` lands, or the first
+   * installed build ships with Continue under the home indicator
+   * (ui-review 2026-09-13, finding sy-safe). */
   padding: 1rem;
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
@@ -959,6 +966,17 @@ input[type="text"] {
   align-items: center;
   text-align: center;
   gap: 0.5rem;
+}
+
+/* Actions under an empty state stay on the empty state's centre line; a
+ * left-aligned button under a centred column reads as a layout bug
+ * (ui-review 2026-09-13, finding rv-dead). */
+.empty-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
 }
 
 .empty-state-icon {
@@ -1524,11 +1542,15 @@ main.unit-screen {
   bottom: 0;
   z-index: 2;
   box-sizing: border-box;
-  height: var(--edit-bar-height);
+  /* Grows by the safe-area inset rather than sitting inside it; the three
+   * rules that offset themselves by --edit-bar-height read the same value,
+   * so they follow automatically (ui-review 2026-09-13, sy-safe). */
+  height: calc(var(--edit-bar-height) + env(safe-area-inset-bottom));
   display: flex;
   align-items: center;
   gap: 0.5rem;
   padding: 0.25rem 0.9rem;
+  padding-bottom: calc(0.25rem + env(safe-area-inset-bottom));
   background: var(--bg);
   border-top: 1px solid var(--card-border);
 }
@@ -1538,11 +1560,11 @@ main.unit-screen {
  * Unit trail's Practice bar is `.action-bar` at `bottom: 0` too, and its
  * button was fully covered. `EditSession` sets the class for its lifetime. */
 body.bb-editing .action-bar {
-  bottom: var(--edit-bar-height);
+  bottom: calc(var(--edit-bar-height) + env(safe-area-inset-bottom));
 }
 
 body.bb-editing main {
-  padding-bottom: var(--edit-bar-height);
+  padding-bottom: calc(var(--edit-bar-height) + env(safe-area-inset-bottom));
 }
 
 .edit-bar .status {
@@ -1573,7 +1595,7 @@ body.bb-editing main {
   position: fixed;
   left: 0;
   right: 0;
-  top: calc(1rem + 44px);
+  top: calc(1rem + 44px + env(safe-area-inset-top));
   z-index: 2;
   display: flex;
   align-items: center;
@@ -2070,6 +2092,14 @@ button.danger-outline {
   color: var(--locked-fg);
   font-size: 0.85rem;
   margin: 0.15rem 0 0;
+}
+
+/* A second control group inside one settings card (Appearance holds theme
+ * and text size). Smaller than the card's h2 so the card still reads as one
+ * section rather than two. */
+.setting-subhead {
+  font-size: 1rem;
+  margin: 1.25rem 0 0.5rem;
 }
 .stat-figure {
   font-size: 2rem;

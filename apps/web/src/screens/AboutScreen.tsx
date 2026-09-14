@@ -17,7 +17,15 @@ import {
  * report actionable — hence both, and hence the plain text rather than a
  * badge nobody can copy out of a screenshot.
  */
-export function AboutScreen({ onBack }: { onBack: () => void }) {
+export function AboutScreen({
+  onBack,
+  onImpressum,
+  onPrivacy,
+}: {
+  onBack: () => void;
+  onImpressum: () => void;
+  onPrivacy: () => void;
+}) {
   const [diary, setDiary] = useState(readNavDiary);
   const diaryText = formatNavDiary(diary);
   return (
@@ -76,9 +84,26 @@ export function AboutScreen({ onBack }: { onBack: () => void }) {
         <p>
           <a href="mailto:info@betterbeaver.de">info@betterbeaver.de</a>
         </p>
+        {/* These were named in prose and reachable only by backing out to
+            home and finding the footer (ui-review 2026-09-13, sc-legal). */}
         <p className="status">
-          Legal details are on the Impressum page; what the app stores and sends
-          is on the Datenschutz page.
+          Legal details are on the{" "}
+          <button
+            type="button"
+            className="plain link-button"
+            onClick={onImpressum}
+          >
+            Impressum
+          </button>{" "}
+          page; what the app stores and sends is on the{" "}
+          <button
+            type="button"
+            className="plain link-button"
+            onClick={onPrivacy}
+          >
+            Datenschutz
+          </button>{" "}
+          page.
         </p>
       </section>
 
@@ -87,42 +112,46 @@ export function AboutScreen({ onBack }: { onBack: () => void }) {
           leaves nothing to inspect. This is the device's own account of what
           happened, kept on the device — it is never sent anywhere. */}
       <section className="card">
-        <h2>Diagnostics</h2>
-        <p className="status">
-          The last few navigation events on this device, newest at the bottom.
-          Nothing here leaves your phone; it is only useful if you are reporting
-          a bug.
-        </p>
-        <p className="status">
-          Display mode: {isStandalone() ? "installed app" : "browser"}
-        </p>
-        {diary.length === 0 ? (
-          <p className="status">Nothing recorded yet.</p>
-        ) : (
-          <pre className="diagnostics-log">{diaryText}</pre>
-        )}
-        <div className="grade-buttons">
-          <button
-            className="plain"
-            onClick={() => {
-              // Clipboard access can be refused or absent; the text is on
-              // screen and selectable either way, so a failure is silent
-              // rather than an error the reader can do nothing about.
-              void navigator.clipboard?.writeText(diaryText).catch(() => {});
-            }}
-          >
-            Copy
-          </button>
-          <button
-            className="plain"
-            onClick={() => {
-              clearNavDiary();
-              setDiary([]);
-            }}
-          >
-            Clear
-          </button>
-        </div>
+        <details>
+          <summary>
+            <h2>Diagnostics</h2>
+          </summary>
+          <p className="status">
+            The last few navigation events on this device, newest at the bottom.
+            Nothing here leaves your phone; it is only useful if you are
+            reporting a bug.
+          </p>
+          <p className="status">
+            Display mode: {isStandalone() ? "installed app" : "browser"}
+          </p>
+          {diary.length === 0 ? (
+            <p className="status">Nothing recorded yet.</p>
+          ) : (
+            <pre className="diagnostics-log">{diaryText}</pre>
+          )}
+          <div className="grade-buttons">
+            <button
+              className="plain"
+              onClick={() => {
+                // Clipboard access can be refused or absent; the text is on
+                // screen and selectable either way, so a failure is silent
+                // rather than an error the reader can do nothing about.
+                void navigator.clipboard?.writeText(diaryText).catch(() => {});
+              }}
+            >
+              Copy
+            </button>
+            <button
+              className="plain"
+              onClick={() => {
+                clearNavDiary();
+                setDiary([]);
+              }}
+            >
+              Clear
+            </button>
+          </div>
+        </details>
       </section>
     </main>
   );
