@@ -1949,6 +1949,15 @@ button.danger {
   color: var(--error-text);
 }
 
+/* The destructive ConfirmSheet's confirming action: an outline in the error
+ * colour rather than a fill, so it reads as the consequential choice without
+ * being the loud one — cancel carries the primary fill in that variant. */
+button.danger-outline {
+  color: var(--error-text);
+  border-color: var(--error-text);
+  background: none;
+}
+
 .link-button {
   display: inline;
   padding: 0;

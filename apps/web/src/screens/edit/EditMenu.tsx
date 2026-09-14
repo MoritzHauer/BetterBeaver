@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Sheet } from "../../components/Sheet";
+import { ConfirmSheet, Sheet } from "../../components/Sheet";
 import type {
   EditMode,
   EditView,
@@ -86,6 +86,11 @@ export function EditMenu({
   onOpenError: (error: string) => (() => void) | null;
 }) {
   const [open, setOpen] = useState(false);
+  /* Discard throws away every unpublished change across both the Book and its
+   * lexicon, and it sat in a list of harmless rows (Assets, Feedback, What
+   * changed) one thumb-width from them. Deleting a single asset already asks;
+   * this did not (ui-review 2026-09-13, finding au-discard). */
+  const [confirmingDiscard, setConfirmingDiscard] = useState(false);
   const busy = publishState.s === "checking" || publishState.s === "publishing";
 
   const status = loading
@@ -291,7 +296,7 @@ export function EditMenu({
                   className="plain danger"
                   onClick={() => {
                     setOpen(false);
-                    void onDiscardDraft();
+                    setConfirmingDiscard(true);
                   }}
                 >
                   Discard draft
@@ -308,6 +313,24 @@ export function EditMenu({
             Done editing
           </button>
         </Sheet>
+      )}
+      {confirmingDiscard && onDiscardDraft !== null && (
+        <ConfirmSheet
+          destructive
+          title="Discard your draft?"
+          body={
+            changedCount === 0
+              ? "Everything unpublished goes back to the published version — the Book and the words it uses. This cannot be undone."
+              : `${changedCount} unpublished ${changedCount === 1 ? "change goes" : "changes go"} back to the published version, across the Book and the words it uses. This cannot be undone.`
+          }
+          cancelLabel="Keep editing"
+          confirmLabel="Discard"
+          onCancel={() => setConfirmingDiscard(false)}
+          onConfirm={() => {
+            setConfirmingDiscard(false);
+            void onDiscardDraft();
+          }}
+        />
       )}
     </>
   );

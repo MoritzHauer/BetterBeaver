@@ -59,11 +59,20 @@ export function Sheet({
 }
 
 /**
- * Confirmation sheet: the in-app replacement for `window.confirm`. Both
- * current callers are soft, skippable locks, so the icon is required and the
- * confirming action is the primary one. A destructive variant (no icon, the
- * `--error-text` outline rather than a primary fill, so a mis-tap lands on
- * cancel) is designed but not built — nothing destructive has migrated yet.
+ * Confirmation sheet: the in-app replacement for `window.confirm`.
+ *
+ * Two variants, because a soft lock and an irreversible delete want opposite
+ * emphasis. The default is the soft one: an icon, and the confirming action
+ * carries the primary fill. `destructive` is the variant this file described
+ * as designed-but-unbuilt until the UI/UX review of 2026-09-13 found the
+ * callers — it drops the icon (there is no reassuring picture of losing your
+ * data), gives **cancel** the primary fill and leaves confirm as an
+ * `--error-text` outline, so the loud button is the safe one and a mis-tap
+ * lands on "keep". Confirm stays first in the DOM order it has in the soft
+ * variant, so only the emphasis moves, not the layout.
+ *
+ * `body` is the place to name what is actually lost — "and its review
+ * history", "3 changes since version 4" — not to restate the title.
  */
 export function ConfirmSheet({
   icon,
@@ -71,31 +80,47 @@ export function ConfirmSheet({
   body,
   cancelLabel,
   confirmLabel,
+  destructive = false,
   onCancel,
   onConfirm,
 }: {
-  /** Icon stem under `art/icons`, shown in the 96px `.summary-icon` slot. */
-  icon: string;
+  /**
+   * Icon stem under `art/icons`, shown in the 96px `.summary-icon` slot.
+   * Omitted by the destructive variant, which deliberately has no icon.
+   */
+  icon?: string;
   title: string;
   body: string;
   cancelLabel: string;
   confirmLabel: string;
+  /** Flip the emphasis so cancel is primary and confirm reads as danger. */
+  destructive?: boolean;
   onCancel: () => void;
   onConfirm: () => void;
 }) {
   return (
     <Sheet label={title} onDismiss={onCancel}>
       <div className="sheet-prompt">
-        <img
-          className="summary-icon"
-          src={`${import.meta.env.BASE_URL}art/icons/${icon}.png`}
-          alt=""
-        />
+        {icon !== undefined && !destructive && (
+          <img
+            className="summary-icon"
+            src={`${import.meta.env.BASE_URL}art/icons/${icon}.png`}
+            alt=""
+          />
+        )}
         <h2>{title}</h2>
         <p>{body}</p>
         <div className="sheet-actions">
-          <button onClick={onCancel}>{cancelLabel}</button>
-          <button className="primary" onClick={onConfirm}>
+          <button
+            className={destructive ? "primary" : undefined}
+            onClick={onCancel}
+          >
+            {cancelLabel}
+          </button>
+          <button
+            className={destructive ? "danger-outline" : "primary"}
+            onClick={onConfirm}
+          >
             {confirmLabel}
           </button>
         </div>

@@ -11,6 +11,7 @@ import type {
 import { ADHOC_MODES, availableModes, shuffle } from "@betterbeaver/engine";
 import { AddWordForm } from "../components/AddWordForm";
 import { EntryPopup } from "../components/EntryPopup";
+import { ConfirmSheet } from "../components/Sheet";
 import type { TapLookup } from "../components/TappableText";
 import { TappableText } from "../components/TappableText";
 import { getLexiconAssetUrl } from "../content/bundled";
@@ -154,7 +155,9 @@ function MyWordRow({
       />
       <div className="grade-buttons">
         <button onClick={onSave}>&#9733; Save</button>
-        <button onClick={onDelete}>Delete</button>
+        <button className="danger" onClick={onDelete}>
+          Delete
+        </button>
       </div>
     </li>
   );
@@ -322,6 +325,15 @@ export function VocabularyScreen({
   // Which entry's popup is open, if any (plan 0006 step 5's synonym-chip
   // navigation) — shared across all rows, since only one can be open at once.
   const [openEntryId, setOpenEntryId] = useState<string | null>(null);
+  /* Pending destructive action, held until the learner confirms it. Both
+   * deletes below are irreversible and local-only — a list is hand-built, and
+   * a word takes its SRS history with it — so neither may fire on one tap
+   * (ui-review 2026-09-13, finding vo-del). */
+  const [pendingDelete, setPendingDelete] = useState<
+    | { kind: "list"; id: string; name: string }
+    | { kind: "word"; id: string; name: string }
+    | null
+  >(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -538,7 +550,16 @@ export function VocabularyScreen({
                         </button>
                       ) : null}
                       {list.id !== SAVED_LIST_ID ? (
-                        <button onClick={() => void deleteList(list.id)}>
+                        <button
+                          className="danger"
+                          onClick={() =>
+                            setPendingDelete({
+                              kind: "list",
+                              id: list.id,
+                              name: list.name,
+                            })
+                          }
+                        >
                           Delete
                         </button>
                       ) : null}
@@ -629,7 +650,13 @@ export function VocabularyScreen({
                 readAloudLang={readAloudLang}
                 lookup={lookup}
                 onSave={() => void saveWord(entry.id)}
-                onDelete={() => void deleteWord(entry.id)}
+                onDelete={() =>
+                  setPendingDelete({
+                    kind: "word",
+                    id: entry.id,
+                    name: recognizePrompt(entry),
+                  })
+                }
               />
             ))}
           </ul>
@@ -750,6 +777,29 @@ export function VocabularyScreen({
           onClose={() => setOpenEntryId(null)}
         />
       ) : null}
+      {pendingDelete !== null && (
+        <ConfirmSheet
+          destructive
+          title={`Delete “${pendingDelete.name}”?`}
+          body={
+            pendingDelete.kind === "list"
+              ? "The list goes for good. The words in it stay — they live in your vocabulary, not in the list."
+              : "The word goes for good, and its review history goes with it. If you add it again it starts from the beginning."
+          }
+          cancelLabel="Keep it"
+          confirmLabel="Delete"
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={() => {
+            const target = pendingDelete;
+            setPendingDelete(null);
+            if (target.kind === "list") {
+              void deleteList(target.id);
+            } else {
+              void deleteWord(target.id);
+            }
+          }}
+        />
+      )}
     </main>
   );
 }
