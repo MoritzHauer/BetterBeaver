@@ -2101,6 +2101,136 @@ button.danger-outline {
   font-size: 1rem;
   margin: 1.25rem 0 0.5rem;
 }
+/* Stats > Your words (ui-review 2026-09-13, st-vanity). A proportional bar
+ * plus a keyed list, because a bar alone encodes the split in colour only. */
+.mastery-bar {
+  display: flex;
+  height: 0.75rem;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--card-bg);
+  border: 1px solid var(--control-border);
+  margin-top: 0.5rem;
+}
+
+.mastery-band.is-learning {
+  background: var(--accent);
+}
+.mastery-band.is-known {
+  background: var(--review);
+}
+.mastery-band.is-mature {
+  background: var(--recall);
+}
+
+.mastery-key {
+  list-style: none;
+  padding: 0;
+  margin: 0.75rem 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.mastery-dot {
+  display: inline-block;
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 999px;
+  margin-right: 0.5rem;
+}
+.mastery-dot.is-learning {
+  background: var(--accent);
+}
+.mastery-dot.is-known {
+  background: var(--review);
+}
+.mastery-dot.is-mature {
+  background: var(--recall);
+}
+
+/* Seven-day due forecast: a column per day, the count as text above the
+ * label so the chart is readable without reading the bars. */
+.due-forecast {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.25rem;
+}
+
+.due-forecast li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.2rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.due-bar {
+  width: 60%;
+  min-height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--accent);
+}
+
+.due-count {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+/* Badges as targets rather than lamps (ui-review 2026-09-13, st-empty). */
+.badge-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.badge-row .badge-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.badge-row .badge-head .status {
+  margin-left: auto;
+}
+
+.badge-mark {
+  display: inline-block;
+  min-width: 1rem;
+  color: var(--done-text);
+  font-weight: 700;
+}
+
+.badge-track {
+  display: block;
+  height: 0.4rem;
+  margin-top: 0.35rem;
+  border-radius: 999px;
+  background: var(--card-bg);
+  border: 1px solid var(--control-border);
+  overflow: hidden;
+}
+
+.badge-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.badge-row.is-earned .badge-fill {
+  background: var(--done-text);
+}
+
 .stat-figure {
   font-size: 2rem;
   font-weight: 800;
