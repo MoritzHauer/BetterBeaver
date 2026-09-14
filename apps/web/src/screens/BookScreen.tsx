@@ -278,6 +278,13 @@ export function BookScreen({
         <>
           {/* The Book's own fields, old above new when *these two* changed
               — adding a lesson changes `topic` too, and shows them once. */}
+          {/* Which rung of the ladder this is. Book and Lesson are near-
+              identical layouts — an amber Practice card over a list of
+              progress cards — so the back link's text was the only thing
+              telling them apart, and in the bundled demo the Book and its
+              lesson share a title, which makes even that ambiguous
+              (ui-review 2026-09-13, finding sc-lesson). */}
+          <p className="eyebrow">Book</p>
           {(() => {
             const shown = {
               title: content.topic.title,

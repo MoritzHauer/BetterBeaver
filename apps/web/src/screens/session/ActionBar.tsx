@@ -37,7 +37,18 @@ export function VerdictBar({
 }) {
   return (
     <ActionBar verdict={verdict}>
-      <p className="verdict">{verdict === "correct" ? "Correct!" : detail}</p>
+      {/* role="status" so the verdict is announced: focus jumps straight to
+          Continue, so without a live region a screen-reader user heard only
+          "Continue, button" and never the result or the correction. The
+          glyph carries the same distinction visually, since the bar's only
+          other non-colour cue was the absence of the word "Correct!"
+          (ui-review 2026-09-13, finding se-a11y). */}
+      <p className="verdict" role="status">
+        <span className="verdict-mark" aria-hidden="true">
+          {verdict === "correct" ? "\u2713" : "\u2717"}
+        </span>{" "}
+        {verdict === "correct" ? "Correct!" : detail}
+      </p>
       <button autoFocus onClick={advance}>
         Continue
       </button>

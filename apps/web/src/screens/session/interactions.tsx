@@ -133,6 +133,16 @@ function ChoiceList({
                 disabled={picked !== null}
                 onClick={() => pick(choiceIndex)}
               >
+                {/* The copy in the verdict bar says "the correct answer is
+                    marked" — before this it was marked by a green tint and
+                    nothing else, so a red-green colour-blind learner was
+                    pointed at a cue that did not exist for them (ui-review
+                    2026-09-13, findings sy-color and se-a11y). */}
+                {state !== "" && (
+                  <span className="option-mark" aria-hidden="true">
+                    {state === " correct" ? "\u2713" : "\u2717"}
+                  </span>
+                )}
                 {choice}
               </button>
             </li>

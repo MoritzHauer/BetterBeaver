@@ -332,10 +332,13 @@ describe("Diff", () => {
       diff.content,
     );
 
-    expect(screen.getAllByText("Book")).toHaveLength(1);
-    expect(screen.getByText("Book").closest("div")?.className).not.toContain(
-      "diff-",
-    );
+    // By heading, not by text: the screen also carries a level eyebrow
+    // reading "Book" (ui-review 2026-09-13, sc-lesson), and the assertion is
+    // about the *title* not being paired old-above-new.
+    expect(screen.getAllByRole("heading", { name: "Book" })).toHaveLength(1);
+    expect(
+      screen.getByRole("heading", { name: "Book" }).closest("div")?.className,
+    ).not.toContain("diff-");
     // The lesson that *was* added still gets its tint.
     expect(screen.getByText("Third").closest("li")?.className).toContain(
       "diff-new",

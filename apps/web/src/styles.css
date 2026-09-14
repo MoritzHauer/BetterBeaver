@@ -1249,6 +1249,14 @@ main.unit-screen {
 
 .unit-practice-bar-inner {
   padding: 0.75rem 1rem;
+  /* Two actions on a non-last page: the forward step plus the Practice
+   * shortcut the removed trail dot used to carry. */
+  flex-direction: row;
+  align-items: stretch;
+}
+
+.unit-practice-bar-inner > .unit-practice-button {
+  flex: 1;
 }
 
 .unit-practice-bar button {
@@ -1261,6 +1269,16 @@ main.unit-screen {
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+/* The bar's secondary action: Practice from a page that is not the last.
+ * Outlined against the bar's amber so the primary forward step still reads
+ * first (ui-review 2026-09-13, findings un-dots + un-btn). */
+.unit-practice-secondary {
+  flex: none;
+  background: none;
+  border-color: var(--on-primary);
+  color: var(--on-primary);
 }
 
 .unit-practice-count {
@@ -2440,6 +2458,49 @@ textarea {
  * the exam runner. A `choice` board is an ordinary `.card-list` whose rows
  * toggle, so it needs only the tick column; an `assign` board is a row of
  * text plus its two label buttons, which is the one genuinely new shape. */
+/* Grading and diff states carry a glyph as well as a tint: the tints are
+ * deliberately low-alpha, so hue was the only difference between them
+ * (ui-review 2026-09-13, finding sy-color). */
+.verdict-mark {
+  font-weight: 700;
+}
+
+.card.correct > button > .option-mark {
+  color: var(--correct-border);
+}
+
+.card.incorrect > button > .option-mark {
+  color: var(--incorrect-border);
+}
+
+/* Old vs new in a diff, for a reader who cannot tell the two tints apart. */
+.diff-old::before,
+.diff-new::before,
+tr.diff-old > td:first-child::before,
+tr.diff-new > td:first-child::before {
+  font-weight: 700;
+  margin-right: 0.35rem;
+  opacity: 0.8;
+}
+
+.diff-old::before,
+tr.diff-old > td:first-child::before {
+  content: "\2212"; /* minus */
+  color: var(--incorrect-border);
+}
+
+.diff-new::before,
+tr.diff-new > td:first-child::before {
+  content: "+";
+  color: var(--correct-border);
+}
+
+/* An active vote reads as a filled pill, not as 40% more opacity. */
+.feedback-vote.active {
+  background: var(--card-bg);
+  border-radius: 999px;
+}
+
 .option-mark {
   display: inline-block;
   min-width: 1.25rem;

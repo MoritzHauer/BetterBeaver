@@ -334,7 +334,10 @@ export function MyBooksScreen({
 
       {/* Owner request: the two entry points are small icon links pinned to
           the bottom corners, not cards competing with the Books above them.
-          Creating a Book now lives behind Edit content. */}
+          Creating a Book lives behind this link, which is why it says
+          "Create or edit" and not "Edit content" — the old label named only
+          half of what it does, and nobody looking to make their own Book
+          would have guessed it (ui-review 2026-09-13, finding mb-jargon). */}
       <nav className="home-footer">
         {onLibrary !== undefined ? (
           <button className="plain" onClick={onLibrary}>
@@ -354,7 +357,7 @@ export function MyBooksScreen({
             src={`${import.meta.env.BASE_URL}art/icons/edit.png`}
             alt=""
           />{" "}
-          Edit content
+          Create or edit
         </button>
       </nav>
       <FooterLinks

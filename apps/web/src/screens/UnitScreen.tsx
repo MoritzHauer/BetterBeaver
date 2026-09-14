@@ -1181,14 +1181,11 @@ export function UnitScreen({
               onClick={() => setPage(index)}
             />
           ))}
-          {!checkOnly && (
-            <button
-              type="button"
-              className="dot practice"
-              aria-label="Practice"
-              onClick={onPractice}
-            />
-          )}
+          {/* No Practice dot: it was the one tap in a row of page-navigation
+              dots that did not navigate — it started a graded session, with
+              no confirmation and no way back but the session's ✕. The sticky
+              bottom bar is the launcher, and swiping past the last page still
+              works (ui-review 2026-09-13, finding un-dots). */}
         </div>
         {onEdit !== undefined && (
           <button
@@ -2015,9 +2012,11 @@ export function UnitScreen({
             <div className="action-bar-inner unit-practice-bar-inner">
               <button className="unit-practice-button" onClick={goNext}>
                 <span>{atLastPage ? "Practice" : "Next"}</span>
-                {atLastPage && (
-                  <span className="unit-practice-count">
-                    {countUnitQuestions(
+                {atLastPage &&
+                  (() => {
+                    // A bare integer beside "Practice" said nothing about
+                    // what it counted (ui-review 2026-09-13, un-btn).
+                    const count = countUnitQuestions(
                       {
                         ...unit,
                         taskIds: unit.taskIds.filter(
@@ -2025,10 +2024,29 @@ export function UnitScreen({
                         ),
                       },
                       content,
-                    )}
-                  </span>
-                )}
+                    );
+                    return (
+                      <span className="unit-practice-count">
+                        {count} {count === 1 ? "question" : "questions"}
+                      </span>
+                    );
+                  })()}
               </button>
+              {/* Practice used to be the trail's last dot, which meant a row
+                  of page-navigation dots contained one that launched a graded
+                  session instead of navigating. The dot is gone (finding
+                  un-dots); this keeps the shortcut it provided, so Practice
+                  is still one tap from any page — and the forward button no
+                  longer silently changes meaning under the thumb on the last
+                  page (finding un-btn). */}
+              {!atLastPage && !checkOnly && (
+                <button
+                  className="unit-practice-secondary"
+                  onClick={onPractice}
+                >
+                  Practice
+                </button>
+              )}
             </div>
           </div>
         )}

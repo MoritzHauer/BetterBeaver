@@ -183,7 +183,13 @@ function renderUnit(unitId: string, onPractice = vi.fn()) {
 
 const bar = () =>
   document.querySelector<HTMLButtonElement>(".unit-practice-button");
-const practiceDot = () => document.querySelector(".dot.practice");
+/* The Practice *dot* is gone — a row of page-navigation dots should not
+   contain one that launches a graded session (ui-review 2026-09-13, finding
+   un-dots). The shortcut it carried now lives in the sticky bar as a
+   secondary button on every non-last page (finding un-btn), so that is what
+   these tests assert instead. */
+const practiceShortcut = () =>
+  document.querySelector(".unit-practice-secondary");
 const activeDot = () => {
   const dots = [...document.querySelectorAll(".trail .dot:not(.practice)")];
   return dots.findIndex((dot) => dot.classList.contains("active"));
@@ -215,17 +221,17 @@ describe("the unit Check page (plan 0027 §12)", () => {
     expect(activeDot()).toBe(1);
     expect(screen.getByText("Check")).toBeTruthy();
     expect(bar()).toBeNull();
-    expect(practiceDot()).toBeNull();
+    expect(practiceShortcut()).toBeNull();
 
     arrowRight();
     expect(activeDot()).toBe(1);
     expect(onPractice).not.toHaveBeenCalled();
   });
 
-  it("a notes-only unit keeps its Practice bar and dot, and ArrowRight starts Practice", () => {
+  it("a notes-only unit keeps its Practice bar and shortcut, and ArrowRight starts Practice", () => {
     const onPractice = renderUnit(notesOnlyUnit.id);
 
-    expect(practiceDot()).not.toBeNull();
+    expect(practiceShortcut()).not.toBeNull();
     // overview -> theory (last page)
     arrowRight();
     expect(bar()?.textContent).toContain("Practice");
@@ -240,7 +246,7 @@ describe("the unit Check page (plan 0027 §12)", () => {
     arrowRight();
     arrowRight();
     expect(document.querySelector(".unit-practice-count")?.textContent).toBe(
-      "1",
+      "1 question",
     );
   });
 
