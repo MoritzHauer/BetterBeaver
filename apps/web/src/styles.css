@@ -84,7 +84,20 @@
    * counterparts per theme. */
   --error-text: #c62828;
   --done-text: #1e5c22;
-  --input-border: #8f8779;
+  /* Control boundaries need 3:1 against --bg (WCAG 1.4.11), which
+   * --card-border (1.43:1) does not reach — it stays the decorative rule for
+   * cards, tables and separators. --control-border is the one real controls
+   * use: 3.50:1 on --bg, 3.24:1 on --card-bg. --input-border is kept as an
+   * alias so the text-input rules that already named it keep working. */
+  --control-border: #8f8779;
+  --input-border: var(--control-border);
+  /* Focus ring (ui-review 2026-09-13): a single colour cannot clear 3:1 on
+   * all nine filled surfaces this app focuses onto — the Continue button
+   * inside .action-bar.correct is the worst case at 1.04:1 for --accent. A
+   * dark ring bracketed by a light halo clears 3:1 through one half of the
+   * pair everywhere (worst case 5.06:1). Inverted in dark mode below. */
+  --focus-ring: #16130e;
+  --focus-ring-halo: #ffffff;
 }
 
 /* Dark palette. `data-theme` is stamped on <html> before first paint by the
@@ -132,7 +145,10 @@
   --callout-example-bg: rgba(179, 157, 219, 0.15);
   --error-text: #ef5350;
   --done-text: #4caf50;
-  --input-border: #767061;
+  --control-border: #767061; /* 3.76:1 on --bg, 3.37:1 on --card-bg */
+  --input-border: var(--control-border);
+  --focus-ring: #ffffff;
+  --focus-ring-halo: #16130e;
 }
 
 * {
@@ -192,7 +208,7 @@ button {
   color: inherit;
   min-height: 44px;
   padding: 0.6rem 1rem;
-  border: 1px solid var(--card-border);
+  border: 1px solid var(--control-border);
   border-radius: 0.75rem;
   background: var(--card-bg);
   cursor: pointer;
@@ -226,9 +242,14 @@ button.plain {
 }
 
 :focus-visible {
-  /* --accent, not --primary: the amber that is AA against --bg (W1). */
-  outline: 2px solid var(--accent);
+  /* Two-tone, because the ring lands on filled surfaces as often as on --bg:
+   * the halo's 6px spread brackets the 2px ring on both sides (0–2px and
+   * 4–6px), so whichever half contrasts with the surface underneath carries
+   * it. A lone --accent ring was 1.04:1 on the green verdict bar, where the
+   * Continue button is autofocused (ui-review 2026-09-13). */
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
+  box-shadow: 0 0 0 6px var(--focus-ring-halo);
 }
 
 .card-list {
@@ -507,8 +528,8 @@ tr.diff-new > td {
 }
 
 .edit-view-tabs button {
-  min-height: 0;
-  padding: 0.15rem 0.5rem;
+  min-height: 44px;
+  padding: 0.15rem 0.75rem;
   font-size: 0.8rem;
   background: none;
   border: 1px solid transparent;
@@ -517,8 +538,10 @@ tr.diff-new > td {
 }
 
 .edit-view-tabs button.active {
-  border-color: var(--primary);
-  color: var(--primary);
+  /* --accent, not --primary: an indicator, and --primary is 2.49:1 on
+   * --card-bg (ui-review 2026-09-13). --primary stays for fills. */
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .edit-view-diff-slot {
@@ -589,8 +612,10 @@ tr.diff-new > td {
 :root {
   --book-chip-row: 2.25rem;
   /* Edit mode's bottom bar (plan 0021 §8). Pinned rather than measured:
-   * `.action-bar` offsets itself by it, so the two must agree exactly. */
-  --edit-bar-height: 2.75rem;
+   * `.action-bar` offsets itself by it, so the two must agree exactly.
+   * 3.375rem = 54px: the 44px view tabs plus the bar's 0.25rem block padding
+   * and its 1px top border (ui-review 2026-09-13). */
+  --edit-bar-height: 3.375rem;
 }
 
 .book-actions {
@@ -671,7 +696,7 @@ tr.diff-new > td {
   gap: 0.5rem;
   min-height: 3.5rem;
   padding: 0.5rem;
-  border: 1px dashed var(--card-border);
+  border: 1px dashed var(--control-border);
   border-radius: 0.75rem;
   margin-bottom: 0.75rem;
 }
@@ -1036,7 +1061,7 @@ input[type="text"] {
 }
 
 .chip {
-  border: 1px solid var(--card-border);
+  border: 1px solid var(--control-border);
   border-radius: 1rem;
   padding: 0.1rem 0.6rem;
   font-size: 0.8rem;
@@ -1062,7 +1087,7 @@ input[type="text"] {
  * beside it wore the pill — the affordance exactly backwards, and visible
  * here in a way it never was for link chips, which are all buttons. */
 .entry-breakdown button.chip {
-  border: 1px solid var(--card-border);
+  border: 1px solid var(--control-border);
   background: var(--card-bg);
 }
 
@@ -1127,7 +1152,7 @@ main.unit-screen {
   min-height: 0;
   padding: 0;
   border-radius: 999px;
-  border: 1px solid var(--card-border);
+  border: 1px solid var(--control-border);
   background: var(--card-bg);
   transition:
     width 150ms ease,
@@ -1143,16 +1168,16 @@ main.unit-screen {
 
 .trail .dot.active {
   width: 1.5rem;
-  background: var(--primary);
-  border-color: var(--primary);
+  background: var(--accent);
+  border-color: var(--accent);
 }
 
 /* The trail's last dot is Practice, not a page — it never goes .active
    (tapping it, or swiping past the final page, starts the session), so it
    reads as the end of the trail rather than another stop on it. */
 .trail .dot.practice {
-  background: var(--primary);
-  border-color: var(--primary);
+  background: var(--accent);
+  border-color: var(--accent);
   opacity: 0.55;
 }
 
@@ -1281,7 +1306,8 @@ main.unit-screen {
 .unit-row-card textarea:focus,
 .book-edit-card input[type="text"]:focus,
 .book-edit-card textarea:focus {
-  border-color: var(--primary);
+  /* The only cue that a field has keyboard focus, so it must clear 3:1. */
+  border-color: var(--accent);
 }
 
 /* The trailing action column stays as narrow as its icon rail, never as
@@ -1502,7 +1528,7 @@ main.unit-screen {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.5rem 0.9rem;
+  padding: 0.25rem 0.9rem;
   background: var(--bg);
   border-top: 1px solid var(--card-border);
 }
@@ -1669,7 +1695,7 @@ input[type="email"],
 }
 
 .split-choices button.chip {
-  border: 1px solid var(--card-border);
+  border: 1px solid var(--control-border);
   background: var(--card-bg);
 }
 
@@ -1956,6 +1982,13 @@ button.danger {
 
 .footer-links button {
   color: var(--locked-fg);
+  /* §5 DDG wants these "leicht erkennbar, unmittelbar erreichbar", and they
+   * were an ~18px line box. Padded to 44px without changing how they look;
+   * `.link-button` stays `display: inline` for links inside prose, where a
+   * 44px box would break the line (WCAG 2.5.8 exempts those). */
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
 }
 
 /* About → Diagnostics: a fixed-width dump meant to be read and copied, not
@@ -2059,8 +2092,11 @@ textarea {
 }
 
 .feedback-vote {
-  min-height: 32px;
-  min-width: 32px;
+  /* 44px, like every other control: three of these sit in a row and a 32px
+   * target with a 4px gap put adjacent centres ~36px apart, inside a
+   * fingertip (ui-review 2026-09-13). */
+  min-height: 44px;
+  min-width: 44px;
   padding: 0.2rem 0.4rem;
   font-size: 1rem;
   opacity: 0.6;
@@ -2099,6 +2135,11 @@ textarea {
  * "⋯" so the card's main button stays the single study tap target. */
 .card-menu > summary {
   cursor: pointer;
+  /* A <summary>, so the global `button { min-height: 44px }` never reached
+   * it and it came out ~38px — the only route to Archive, Remove and Export. */
+  display: flex;
+  align-items: center;
+  min-height: 44px;
   padding: 0.5rem 1rem;
   list-style: none;
 }
@@ -2176,7 +2217,7 @@ textarea {
   text-align: center;
 }
 .coverage-cell {
-  border: 1px solid var(--card-border);
+  border: 1px solid var(--control-border);
   border-radius: 3px;
   display: block;
   height: 1.1rem;
@@ -2233,7 +2274,7 @@ textarea {
 .option-mark {
   display: inline-block;
   min-width: 1.25rem;
-  color: var(--primary);
+  color: var(--accent);
   font-weight: 600;
 }
 
@@ -2257,14 +2298,14 @@ textarea {
 .assign-label {
   flex: 1;
   min-height: 44px;
-  border: 1px solid var(--card-border);
+  border: 1px solid var(--control-border);
   border-radius: 0.5rem;
   background: none;
   padding: 0.5rem;
 }
 
 .assign-label.chosen {
-  border-color: var(--primary);
+  border-color: var(--accent);
   background: var(--card-bg-translucent);
   font-weight: 600;
 }
@@ -2332,12 +2373,21 @@ main.exam {
 }
 
 .exam-nav-cell {
+  position: relative;
   min-width: 2.25rem;
   min-height: 2.25rem;
-  border: 1px solid var(--card-border);
+  border: 1px solid var(--control-border);
   border-radius: 0.4rem;
   background: none;
   font-variant-numeric: tabular-nums;
+}
+
+/* Invisible tap halo: the cell stays 36px so ten still fit a row, the hit
+ * area becomes 44px (the idiom `.trail .dot` already uses). */
+.exam-nav-cell::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
 }
 
 .exam-nav-cell.answered {
@@ -2346,7 +2396,7 @@ main.exam {
 }
 
 .exam-nav-cell.current {
-  border-color: var(--primary);
+  border-color: var(--accent);
   border-width: 2px;
 }
 
