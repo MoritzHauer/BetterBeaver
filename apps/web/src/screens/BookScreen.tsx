@@ -569,7 +569,7 @@ export function BookScreen({
                   {examIsGenerated(exam, content) ? (
                     <span className="badge-generated"> KI-generiert</span>
                   ) : null}
-                  <p>{exam.description}</p>
+                  <p className="card-description">{exam.description}</p>
                   <p className="status">
                     {exam.questions.length} Fragen · {maxPoints} Punkte ·{" "}
                     {exam.ruleset.timeLimitMinutes} Minuten
