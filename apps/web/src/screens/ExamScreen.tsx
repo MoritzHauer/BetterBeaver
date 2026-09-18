@@ -14,7 +14,8 @@
  * The boards themselves are the practice session's boards (`questionInputs`),
  * so a question reads identically wherever it is asked.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { ConfirmSheet } from "../components/Sheet";
 import type { Content, Exam } from "@betterbeaver/schema";
 import type { AssignQuestion, ChoiceQuestion } from "@betterbeaver/engine";
 import {
@@ -112,6 +113,7 @@ export function ExamScreen({
   const [questions] = useState(() => buildExamQuestions(exam, content));
   const [record, setRecord] = useState(() => readExamRecord(exam.id));
   const [now, setNow] = useState(() => Date.now());
+  const [restartAsked, setRestartAsked] = useState(false);
 
   const attempt = record.attempt;
   const maxPoints = exam.questions.reduce(
@@ -200,7 +202,30 @@ export function ExamScreen({
     const answer = attempt.answers[entry.taskId];
     return (
       <main className="exam">
-        <ExamClock deadlineAt={attempt.deadlineAt} now={now} />
+        <div className="exam-header">
+          {/* Leaving mid-run is safe and always was: the deadline is
+              wall-clock, so the attempt keeps running and the intro offers
+              it back (plan 0027 §6). What was missing was a way out that
+              looks like every other screen's. */}
+          <button
+            className="plain exam-back"
+            onClick={onOpenIntro}
+            aria-label="Zurück zur Prüfungsübersicht"
+          >
+            <img
+              className="icon-glyph"
+              src={`${import.meta.env.BASE_URL}art/icons/arrow_W.png`}
+              alt=""
+            />
+          </button>
+          <ExamNavigator
+            exam={exam}
+            attempt={attempt}
+            current={questionIndex}
+            onOpenQuestion={onOpenQuestion}
+          />
+          <ExamClock deadlineAt={attempt.deadlineAt} now={now} />
+        </div>
         <p className="status">
           Frage {questionIndex + 1} von {exam.questions.length} · {entry.points}{" "}
           {entry.points === 1 ? "Punkt" : "Punkte"}
@@ -226,12 +251,6 @@ export function ExamScreen({
             }
           />
         )}
-        <ExamNavigator
-          exam={exam}
-          attempt={attempt}
-          current={questionIndex}
-          onOpenQuestion={onOpenQuestion}
-        />
         <div className="exam-actions">
           <button
             disabled={questionIndex === 0}
@@ -257,6 +276,16 @@ export function ExamScreen({
   const resumable = attempt !== undefined && now < attempt.deadlineAt;
   return (
     <main className="exam">
+      <header className="screen-header">
+        <button className="plain" onClick={onBack}>
+          <img
+            className="icon-glyph"
+            src={`${import.meta.env.BASE_URL}art/icons/arrow_W.png`}
+            alt=""
+          />{" "}
+          {content.topic.title}
+        </button>
+      </header>
       <h1>{exam.title}</h1>
       {examIsGenerated(exam, content) ? (
         <p className="badge-generated">KI-generiert</p>
@@ -269,25 +298,48 @@ export function ExamScreen({
         <li>{exam.ruleset.timeLimitMinutes} Minuten, am Stück</li>
       </ul>
       {resumable ? (
-        <>
-          <p className="status">
-            Ein Versuch läuft noch — {formatClock(attempt.deadlineAt - now)}{" "}
-            übrig.
-          </p>
-          <button className="primary" onClick={() => onOpenQuestion(0)}>
-            Weitermachen
-          </button>
-        </>
-      ) : (
-        <button className="primary" onClick={start}>
-          Prüfung starten
-        </button>
-      )}
-      <button onClick={onReview}>Testmodus (ohne Zeitlimit)</button>
-      {record.lastResult !== undefined ? (
-        <button onClick={onOpenReport}>Letztes Ergebnis ansehen</button>
+        <p className="status">
+          Ein Versuch läuft noch — {formatClock(attempt.deadlineAt - now)}{" "}
+          übrig.
+        </p>
       ) : null}
-      <button onClick={onBack}>Zurück</button>
+      <div className="exam-actions">
+        {resumable ? (
+          <>
+            <button className="primary" onClick={() => onOpenQuestion(0)}>
+              Weitermachen
+            </button>
+            {/* Before this there was no way to abandon a running attempt:
+                the intro offered Resume and nothing else, so a half-finished
+                run had to be sat out or submitted. */}
+            <button onClick={() => setRestartAsked(true)}>Neu starten</button>
+          </>
+        ) : (
+          <button className="primary" onClick={start}>
+            Prüfung starten
+          </button>
+        )}
+        <button onClick={onReview}>Testmodus (ohne Zeitlimit)</button>
+        {record.lastResult !== undefined ? (
+          <button onClick={onOpenReport}>Letztes Ergebnis ansehen</button>
+        ) : null}
+      </div>
+      {restartAsked && (
+        <ConfirmSheet
+          icon="repeat"
+          title="Prüfung neu starten?"
+          body="Der laufende Versuch wird verworfen — alle Antworten darin gehen verloren und die Zeit beginnt von vorn."
+          cancelLabel="Weitermachen"
+          confirmLabel="Neu starten"
+          onCancel={() => setRestartAsked(false)}
+          onConfirm={() => {
+            setRestartAsked(false);
+            // `startAttempt` overwrites the record's attempt outright, so
+            // this is the discard as well as the restart.
+            start();
+          }}
+        />
+      )}
     </main>
   );
 }
@@ -318,6 +370,15 @@ function ExamNavigator({
   current: number;
   onOpenQuestion: (index: number) => void;
 }) {
+  const currentRef = useRef<HTMLButtonElement | null>(null);
+  // The bar holds about six cells at phone width, so at question 20 the
+  // learner would otherwise be looking at 1-6 with no idea where they are.
+  useEffect(() => {
+    currentRef.current?.scrollIntoView?.({
+      block: "nearest",
+      inline: "center",
+    });
+  }, [current]);
   return (
     <nav className="exam-nav" aria-label="Fragen">
       {exam.questions.map((entry, index) => {
@@ -332,6 +393,7 @@ function ExamNavigator({
         return (
           <button
             key={entry.taskId}
+            ref={index === current ? currentRef : undefined}
             className={classes}
             aria-current={index === current ? "true" : undefined}
             aria-label={`Frage ${index + 1}${answered ? ", beantwortet" : ", offen"}`}

@@ -2321,17 +2321,38 @@ main.exam {
   color: var(--incorrect-border);
 }
 
-/* The question navigator: answered/unanswered at a glance, and a jump to
- * any of them — free movement in both directions is the point of grading
- * nothing until Submit. */
+/* The runner's top row: back, the question navigator, the clock. */
+.exam-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.exam-back {
+  flex: 0 0 auto;
+}
+
+/* The question navigator: answered/unanswered at a glance, and a jump to any
+ * of them — free movement in both directions is the point of grading nothing
+ * until Submit. One scrolling row beside the clock, not a wrapping grid: a
+ * real exam has 38 questions, and as a grid that is six rows of cells above
+ * the fold, pushing the question itself off screen. */
 .exam-nav {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
   gap: 0.35rem;
-  margin: 1rem 0;
+  flex: 1;
+  /* Without this a flex item refuses to shrink below its content, so the
+   * row would push the clock off the screen instead of scrolling. */
+  min-width: 0;
+  padding-bottom: 0.25rem;
+  scrollbar-width: thin;
 }
 
 .exam-nav-cell {
+  flex: 0 0 auto;
   min-width: 2.25rem;
   min-height: 2.25rem;
   border: 1px solid var(--card-border);
