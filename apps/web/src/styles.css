@@ -416,6 +416,21 @@ section.card {
   margin: 1.5rem 0;
 }
 
+/* A `choice`/`assign` stem is prose, not a headword, and an exam's runs to
+ * 180 characters — at 1.5rem that is the whole screen before the first
+ * option. Scale it down by its own length (set inline as `--stem-len` by
+ * `QuestionStem`): 60 characters or fewer keep the full size, and the floor
+ * stays above body text so the longest question is still the most readable
+ * thing on the page. No measuring, so no reflow loop and no size that
+ * changes with the device. */
+.prompt-stem {
+  font-size: clamp(
+    1.1rem,
+    calc(1.5rem - (var(--stem-len, 60) - 60) * 0.0033rem),
+    1.5rem
+  );
+}
+
 /* Key row for the characters a domain declares its script needs and a
  * learner's keyboard cannot produce (plan 0025 §10). 44px minimum touch
  * target, per the accessibility floor in design.md. */
