@@ -64,5 +64,7 @@ In this order, because each step is cheaper than the next:
 
 1. `BB_CONTENT_DIR=<tree> corepack pnpm exec vitest run packages/schema/src/content.test.ts` — the validator.
 2. `python3 scripts/overlap-check.py --book <source.md> --lehrplan <curriculum.txt> <tree>` — the own-words rule over **every** learner-visible string, questions and explanations included. Exit 0 or it does not ship.
+   - **A transcribed exam is the one exception, and it narrows the candidates rather than the rule.** Its question text is reproduced verbatim under a licence, so it is not ours to reword and a run it shares with the textbook is not a finding. Point the blocking check at the authoring file instead (`content.local/authoring/<exam>.json`), which holds exactly our words — explanation, `why`, title, description — and must exit 0. Then run it over the tree too and confirm by hand that every remaining hit sits inside a verbatim field; a hit anywhere else is a real one.
+   - Proper names a licence **requires**, such as the copyright holder's legal name, will trip an 8-word run. Reword around it — changing the word order is enough — rather than lowering `--n`, and never at the cost of the attribution itself.
 3. `node scripts/pack-bbbook.ts` + import in a **fresh** browser profile: play one session per new unit and one Check. A green validator proves the content is well-formed, never that it reads well.
 4. Only then republish, and record what shipped in the plan's implementation log.
