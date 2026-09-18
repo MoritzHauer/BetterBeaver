@@ -844,7 +844,7 @@ export function UnitScreen({
 }) {
   // Which shipped lexicon entry's popup is open, if any (kind-partitioned
   // restructure's Vocabulary table): opened by id directly, same
-  // "open a known entry" pattern as VocabularyScreen's synonym chips —
+  // "open a known entry" pattern the synonym chips used —
   // never re-resolved by token, since the table row already is the entry.
   const [openEntryId, setOpenEntryId] = useState<string | null>(null);
   // Edit mode (plan 0021 §3): `null` in learner mode, and every editable
@@ -1014,11 +1014,16 @@ export function UnitScreen({
   // (below). Gated on this, never on "the drill is empty": a notes-only unit
   // also has an empty drill and must keep Practice, whose summary is its
   // only way forward.
-  const checkOnly =
-    hasCheck &&
-    unit !== undefined &&
-    drillItemIds(unit, content, lookup.domainContent.domain.exercises)
-      .length === 0;
+  const drillable =
+    unit === undefined
+      ? []
+      : drillItemIds(unit, content, lookup.domainContent.domain.exercises);
+  const checkOnly = hasCheck && unit !== undefined && drillable.length === 0;
+  // An info unit (validator class (i)): notes, no questions, nothing to
+  // drill. Practice still has to stay — its summary is the only way on to
+  // the next unit — but offering it as "Practice 0" describes the one thing
+  // it does not do.
+  const infoOnly = !hasCheck && unit !== undefined && drillable.length === 0;
 
   // Edit mode shows all five content pages whether or not they have content
   // yet: each page owns its own add control, so an empty page hidden is a
@@ -2014,8 +2019,10 @@ export function UnitScreen({
           <div className="action-bar unit-practice-bar">
             <div className="action-bar-inner unit-practice-bar-inner">
               <button className="unit-practice-button" onClick={goNext}>
-                <span>{atLastPage ? "Practice" : "Next"}</span>
-                {atLastPage && (
+                <span>
+                  {atLastPage ? (infoOnly ? "Done" : "Practice") : "Next"}
+                </span>
+                {atLastPage && !infoOnly && (
                   <span className="unit-practice-count">
                     {countUnitQuestions(
                       {

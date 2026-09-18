@@ -222,13 +222,17 @@ describe("the unit Check page (plan 0027 §12)", () => {
     expect(onPractice).not.toHaveBeenCalled();
   });
 
-  it("a notes-only unit keeps its Practice bar and dot, and ArrowRight starts Practice", () => {
+  it("an info unit keeps its bar and dot, reads Done, and ArrowRight still starts Practice", () => {
     const onPractice = renderUnit(notesOnlyUnit.id);
 
     expect(practiceDot()).not.toBeNull();
     // overview -> theory (last page)
     arrowRight();
-    expect(bar()?.textContent).toContain("Practice");
+    // The way forward is unchanged — only its caption is, since there is
+    // nothing here to practise (validator class (i)'s info unit).
+    expect(bar()?.textContent).toContain("Done");
+    expect(bar()?.textContent).not.toContain("Practice");
+    expect(document.querySelector(".unit-practice-count")).toBeNull();
 
     arrowRight();
     expect(onPractice).toHaveBeenCalledTimes(1);
