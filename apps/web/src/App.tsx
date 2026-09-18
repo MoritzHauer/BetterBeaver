@@ -2506,8 +2506,6 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           archivedBooks={archivedBooks}
           privateBookIds={contentInit.privateBookIds}
           onSelectBook={(bookId) => goToBook(bookId)}
-          onVocabulary={(domainId) => setScreen({ screen: "vocab", domainId })}
-          onReview={(domainId) => setScreen({ screen: "review", domainId })}
           // Cannot reject: `playBook` only awaits `dueUnits`, whose reads are
           // `readJson`-backed and degrade to absent (spec 0019 §1).
           onPlay={(bookId) => void playBook(bookId)}
@@ -2779,21 +2777,6 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
               lessonId,
               editing: screen.editing,
             })
-          }
-          onPracticeTask={(target) =>
-            setScreen({
-              screen: "task",
-              bookId: screen.bookId,
-              ...target,
-              // Carried so Preview's Practice plays the draft (§1).
-              editing: screen.editing,
-            })
-          }
-          onReview={() =>
-            setScreen({ screen: "review", domainId: shown.topic.domainId })
-          }
-          onVocabulary={() =>
-            setScreen({ screen: "vocab", domainId: shown.topic.domainId })
           }
           onSelectExam={(examId) =>
             setScreen({ screen: "exam", bookId: screen.bookId, examId })

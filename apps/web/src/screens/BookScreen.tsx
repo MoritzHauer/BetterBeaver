@@ -77,10 +77,7 @@ export function BookScreen({
   store,
   epoch,
   onSelectLesson,
-  onPracticeTask,
   onPlay,
-  onReview,
-  onVocabulary,
   onSelectExam,
   onEdit,
   onBack,
@@ -99,12 +96,10 @@ export function BookScreen({
    * count is recomputed after sessions elsewhere may have changed it. */
   epoch: number;
   onSelectLesson: (lessonId: string) => void;
-  onPracticeTask: (target: PracticeTarget) => void;
   /** Play (plan 0020 §2): due > 0 → Daily Review, else the next incomplete
-   * unit, else nothing (the trophy state below handles that in-place). */
+   * unit, else nothing (the trophy state below handles that in-place). It is
+   * the screen's only action since 2026-09-18 — see the card below. */
   onPlay: () => void;
-  onReview: () => void;
-  onVocabulary: () => void;
   /** Opens an exam (plan 0027 §6). Exams are siblings of lessons, listed
    * after them, outside the unlock chain in both directions. */
   onSelectExam: (examId: string) => void;
@@ -136,7 +131,6 @@ export function BookScreen({
   // Diff renders the union read-only with per-element tints (spec 0021-9
   // §3); Preview renders the learner screen for real.
   const diff = diffView(session);
-  const previewing = session?.view === "preview";
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [pendingResourceId, setPendingResourceId] = useState<string | null>(
     null,
@@ -195,14 +189,6 @@ export function BookScreen({
   const nextUp = nextUnit(content, unitProgress);
   const bookComplete = dueCount === 0 && nextUp === null;
   const playDisabled = dueCount === null || bookComplete;
-
-  // Book-level Practice shuffles across the opened lessons' opened units
-  // (plan 0008, pinned scope).
-  const practicePool = content.lessons
-    .filter((lesson) =>
-      isLessonUnlocked(lesson, content.lessons, content.units, unitProgress),
-    )
-    .flatMap((lesson) => lessonPracticeTargets(lesson, content, unitProgress));
 
   // The lesson awaiting a skip-ahead confirmation, and the one gating it. A
   // pending lesson always has a gate — `isLessonUnlocked` returns true when
@@ -325,7 +311,7 @@ export function BookScreen({
               aria-label="Title"
               value={content.topic.title}
               // Not `patchBook`: the title also names this Book's lexicon
-              // (decision 11), and that is where `VocabularyScreen`'s heading
+              // (decision 11), and that is where the domain's own title
               // comes from.
               onChange={(e) => edit.setTitle(e.target.value)}
             />
@@ -358,6 +344,11 @@ export function BookScreen({
             disabled, which looks like a broken Preview. */}
         {session === null && (
           <>
+            {/* One way in (owner, 2026-09-18). Daily Review, Practice and
+                Vocabulary had their own cards here; Play already routes to
+                Daily Review whenever anything is due, so the count rides on
+                this button instead of owning a card, and re-practising is
+                reached from the lesson or the unit that holds it. */}
             <li className={"card" + (playDisabled ? "" : " primary")}>
               <button onClick={onPlay} disabled={playDisabled}>
                 <strong>
@@ -368,57 +359,16 @@ export function BookScreen({
                   />{" "}
                   {bookComplete ? "Book complete" : "Continue learning"}
                 </strong>
-              </button>
-            </li>
-            <li className={`card review${dueCount !== 0 ? " primary" : ""}`}>
-              <button onClick={onReview} disabled={dueCount === 0}>
-                <strong>Daily Review</strong>
                 {dueCount !== null && dueCount > 0 ? (
-                  <span className="badge">{dueCount}</span>
+                  <span className="due-chip">
+                    <img
+                      className="icon-glyph"
+                      src={`${import.meta.env.BASE_URL}art/icons/repeat.png`}
+                      alt=""
+                    />
+                    <span className="due-chip-count">{dueCount}</span>
+                  </span>
                 ) : null}
-                <p className="status">
-                  {dueCount === null
-                    ? "Loading…"
-                    : dueCount === 0
-                      ? "Nothing due"
-                      : `${dueCount} due`}
-                </p>
-              </button>
-            </li>
-          </>
-        )}
-        {/* Practice stays in Preview (§1b): it shuffles over unlocked
-            lessons, which with everything unlocked is exactly what Preview
-            is for. */}
-        {(session === null || previewing) && (
-          <>
-            <li className={`card${practicePool.length > 0 ? " primary" : ""}`}>
-              <button
-                disabled={practicePool.length === 0}
-                onClick={() => {
-                  const target =
-                    practicePool[
-                      Math.floor(Math.random() * practicePool.length)
-                    ];
-                  if (target !== undefined) {
-                    onPracticeTask(target);
-                  }
-                }}
-              >
-                <strong>Practice</strong>
-                <p className="status">A random task from your opened lessons</p>
-              </button>
-            </li>
-            <li className="card vocab">
-              <button onClick={onVocabulary}>
-                <strong>
-                  <img
-                    className="icon-glyph"
-                    src={`${import.meta.env.BASE_URL}art/icons/book_front.png`}
-                    alt=""
-                  />{" "}
-                  Vocabulary
-                </strong>
               </button>
             </li>
           </>
@@ -529,7 +479,7 @@ export function BookScreen({
                 <li className={`card ${diff.className(lesson.id) ?? ""}`}>
                   <button onClick={() => onSelectLesson(lesson.id)}>
                     <strong>{lesson.title}</strong>
-                    <p>{lesson.goal}</p>
+                    <p className="card-description">{lesson.goal}</p>
                   </button>
                 </li>
               </Fragment>
@@ -551,7 +501,7 @@ export function BookScreen({
                   {lesson.title}
                 </strong>
                 {complete ? <span className="done-mark"> &#10003;</span> : null}
-                <p>{lesson.goal}</p>
+                <p className="card-description">{lesson.goal}</p>
                 <LockableProgress
                   unlocked={unlocked}
                   percent={percent}

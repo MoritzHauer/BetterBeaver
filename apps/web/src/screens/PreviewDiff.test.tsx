@@ -167,10 +167,7 @@ function renderBook(
       store={store}
       epoch={0}
       onSelectLesson={onSelectLesson}
-      onPracticeTask={() => {}}
       onPlay={() => {}}
-      onReview={() => {}}
-      onVocabulary={() => {}}
       onSelectExam={() => undefined}
       onBack={() => {}}
     />
@@ -187,15 +184,16 @@ function renderBook(
 describe("Preview", () => {
   afterEach(cleanup);
 
-  it("hides Play and Daily Review and keeps Practice", () => {
+  it("hides Play in Preview", () => {
     // Required, not tidy (§1b): with every unit complete `nextUnit` returns
     // null and `dueUnits` nothing, so Play would show the "Book complete"
-    // trophy and Daily Review would be permanently disabled.
+    // trophy. Daily Review and Practice had cards here until 2026-09-18 and
+    // were hidden for the same reason; now there is only Play to hide.
     renderBook(makeSession({ view: "preview" }), completed("bk-u1", "bk-u2"));
     expect(screen.queryByText("Continue learning")).toBeNull();
     expect(screen.queryByText("Book complete")).toBeNull();
     expect(screen.queryByText("Daily Review")).toBeNull();
-    expect(screen.getByText("Practice")).toBeTruthy();
+    expect(screen.queryByText("Practice")).toBeNull();
   });
 
   it("reaches a gated lesson in one tap", () => {

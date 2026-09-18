@@ -2110,6 +2110,102 @@ textarea {
   margin-top: 0.75rem;
 }
 
+/* The cap on how much of a description a card shows (owner, 2026-09-18:
+ * "the boxes should be with very little content"). Two lines rather than a
+ * character count, because the count that fits depends on the width and the
+ * language — and the full text is never lost: BookScreen renders it whole.
+ * Deliberately not a limit on the content itself: this Book's two
+ * affiliation disclaimers are required by plan 0028 §2, so a content limit
+ * would either drop them or warn about them for ever. */
+.card-description {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
+/* The review count on Continue learning (owner, 2026-09-18): the review icon
+ * with a small number at its bottom-right corner, where Daily Review's own
+ * card used to carry it. */
+.due-chip {
+  position: absolute;
+  right: 0.75rem;
+  bottom: 0.5rem;
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 0.15rem;
+}
+
+.due-chip-count {
+  font-size: 0.75rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+/* The card's footer row under the progress bar: count left, the private tag
+ * centred, the ⋯ menu right (owner, 2026-09-18). Three columns rather than
+ * space-between, so the tag sits in the middle of the card and not wherever
+ * the count's width happens to put it — and it stays centred on a card that
+ * has no tag at all. `.card > div` sets a 1rem inset and outranks a bare
+ * `.card-footer`, which is what left this row floating 32px below the
+ * progress bar; selected the same way, the padding here wins. */
+.card > .card-footer {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 0.75rem 0.5rem;
+}
+
+.card-footer .status {
+  margin: 0;
+}
+
+/* The tag reads as a tag, not as stray text between two controls. */
+.card-footer .card-tag {
+  justify-self: center;
+  padding: 0.05rem 0.5rem;
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.card-footer .card-menu {
+  /* Pinned, not auto-placed: on a card with no tag the menu would otherwise
+     fall into the middle column and sit centred. */
+  grid-column: 3;
+  justify-self: end;
+  position: relative;
+}
+
+.card-footer .card-menu > summary {
+  padding: 0.25rem 0.75rem;
+  line-height: 1;
+}
+
+/* The open menu floats above the row instead of widening it: the footer is a
+ * three-column grid, and a <details> opening inside the last column would be
+ * squeezed to that column's width — Archive and Remove side by side in a few
+ * rem. Anchored to the right edge and opening upward, since the footer is the
+ * bottom of the card. */
+.card-footer .card-menu .grade-buttons {
+  position: absolute;
+  right: 0;
+  bottom: 100%;
+  z-index: 2;
+  margin: 0;
+  padding: 0.5rem;
+  white-space: nowrap;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 0.5rem;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 18%);
+}
+
 /* My Books card overflow menu (plan 0015): Archive/Remove, tucked behind a
  * "⋯" so the card's main button stays the single study tap target. */
 .card-menu > summary {

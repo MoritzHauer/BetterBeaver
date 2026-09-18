@@ -125,10 +125,7 @@ function renderBook(session: EditSessionValue | null, book = BOOK) {
       store={store}
       epoch={0}
       onSelectLesson={() => {}}
-      onPracticeTask={() => {}}
       onPlay={() => {}}
-      onReview={() => {}}
-      onVocabulary={() => {}}
       onSelectExam={() => undefined}
       onBack={() => {}}
     />
