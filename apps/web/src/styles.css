@@ -1196,16 +1196,65 @@ main.unit-screen {
   color: var(--accent);
 }
 
-.sub-pager {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.75rem;
-  margin-bottom: 0.75rem;
+/* The Concepts page (owner decision 2026-09-20), which replaced a
+ * `Term | Definition` table: hairline-separated prose, one heading over one
+ * paragraph, so a 100-180-character definition gets the full 390px instead
+ * of the ~210px the Term column left it. Not `.card`s — the learner is
+ * reading here, and ten bordered boxes read as ten controls. Edit and diff
+ * mode DO use `.card-list`, because there the rows are objects you
+ * manipulate and compare. */
+.concept-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }
 
-.sub-pager button {
-  min-width: 44px;
+.concept-list > li {
+  padding: 0.875rem 0;
+  border-bottom: 1px solid var(--card-border);
+}
+
+.concept-list > li:first-child {
+  padding-top: 0;
+}
+
+/* Nothing below the last one to separate it from. */
+.concept-list > li:last-child {
+  border-bottom: none;
+}
+
+.concept-term {
+  margin: 0 0 0.25rem;
+  font-size: 1.0625rem;
+  line-height: 1.25;
+}
+
+.concept-definition {
+  margin: 0;
+}
+
+/* `payload.example`, which no learner could see while it lived behind the
+ * `⚙` sheet. A native `<details>` — no JS, and the disclosure triangle is
+ * the whole affordance. Muted and smaller: it supports the definition
+ * rather than competing with it. */
+.concept-example {
+  margin-top: 0.375rem;
+}
+
+.concept-example > summary {
+  font-size: 0.875rem;
+  color: var(--locked-fg);
+  cursor: pointer;
+  /* The 44px tap-target floor (spec 0021-12 §1) applies to the row a finger
+   * aims at, not the glyph: padding rather than min-height, which on a
+   * `<summary>` would push the marker off the text's baseline. */
+  padding: 0.375rem 0;
+}
+
+.concept-example-text {
+  margin: 0.25rem 0 0;
+  font-size: 0.875rem;
+  color: var(--locked-fg);
 }
 
 /* Practice bar (plan 0010): persistent across every Unit page, amber-filled

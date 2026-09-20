@@ -344,16 +344,20 @@ describe("UnitScreen in edit mode", () => {
     ).toHaveLength(6);
   });
 
-  // Spec 0021-13: rows read as table rows, `⚙` replaces the inline
-  // expansion, and the undo toast names unlink vs. delete.
-  it("renders a concept as one <tr> inside the page's own table", () => {
+  // Spec 0021-13: `⚙` replaces the inline expansion, and the undo toast
+  // names unlink vs. delete. The rows stopped being table rows on
+  // 2026-09-20 — a concept is a card in edit mode and hairline-separated
+  // prose to a learner, because a German compound term sized the Term
+  // column off its longest word and left the definition ~210px on a phone.
+  it("renders a concept as one card, with no table left on the page", () => {
     const { session } = makeSession();
     renderUnit(session);
 
     goToPage(CONCEPTS);
-    const table = document.querySelector(".vocab-table");
-    expect(table).not.toBeNull();
-    expect(table!.querySelectorAll("tbody tr")).toHaveLength(1);
+    expect(document.querySelector(".vocab-table")).toBeNull();
+    const list = document.querySelector(".card-list");
+    expect(list).not.toBeNull();
+    expect(list!.querySelectorAll("li.unit-row-card")).toHaveLength(1);
   });
 
   it("grows the Definition field instead of clipping it", () => {
@@ -369,17 +373,35 @@ describe("UnitScreen in edit mode", () => {
     expect((field as HTMLTextAreaElement).style.height).not.toBe("");
   });
 
-  it("keeps Term/Definition as static headings, unlike a note table's own header row", () => {
+  // Decision 21 (plan 0021 §14) covered Concepts and Vocabulary alike while
+  // both were tables. Concepts stopped being one on 2026-09-20, so the
+  // decision now rests on Vocabulary alone — the surviving case of the same
+  // visual device with the opposite rule to a note table's first row.
+  it("keeps Script/Gloss as static headings, unlike a note table's own header row", () => {
+    const { session } = makeSession();
+    renderUnit(session);
+
+    goToPage(VOCABULARY);
+    const scriptHeader = screen.getByRole("columnheader", { name: "Script" });
+    const glossHeader = screen.getByRole("columnheader", { name: "Gloss" });
+    expect(scriptHeader.querySelector("input, textarea")).toBeNull();
+    expect(glossHeader.querySelector("input, textarea")).toBeNull();
+  });
+
+  // The field that had never reached a learner: authored on every `sa`
+  // concept, editable only inside the `⚙` sheet, rendered nowhere.
+  it("edits the example in its disclosure, not in the ⚙ sheet", () => {
     const { session } = makeSession();
     renderUnit(session);
 
     goToPage(CONCEPTS);
-    const termHeader = screen.getByRole("columnheader", { name: "Term" });
-    const definitionHeader = screen.getByRole("columnheader", {
-      name: "Definition",
-    });
-    expect(termHeader.querySelector("input, textarea")).toBeNull();
-    expect(definitionHeader.querySelector("input, textarea")).toBeNull();
+    const example = screen.getByLabelText("Example");
+    expect(example.tagName).toBe("TEXTAREA");
+
+    fireEvent.click(screen.getByRole("button", { name: "Concept settings" }));
+    // One "Example" on the page, and it is not the sheet's: the sheet would
+    // be a second editor for the same single field.
+    expect(screen.getAllByLabelText("Example")).toHaveLength(1);
   });
 
   it("moves Source and the asset pickers behind ⚙, off the row itself", () => {
