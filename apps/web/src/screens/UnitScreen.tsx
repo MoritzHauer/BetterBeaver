@@ -52,13 +52,6 @@ type LexemeItem = Extract<Item, { kind: "lexeme" }>;
 type ConceptItem = Extract<Item, { kind: "concept" }>;
 type ExampleItem = Extract<Item, { kind: "sentence" | "pair" }>;
 
-// Chunk sizes for the Concepts/Examples sub-pagers (plan 0010 design section
-// 4; Vocabulary lost its sub-pager in plan 0011 — scrollable instead).
-// ponytail: picked for a typical phone viewport, not measured — tune once
-// real content shows one is visibly wrong.
-const CONCEPT_CHUNK_SIZE = 6;
-const EXAMPLE_CHUNK_SIZE = 4;
-
 /** Swipe gesture threshold, in px (plan 0010: plain touchstart/touchend
  * delta check, no swipe library). Exported so `SessionScreen`'s back-swipe
  * out of the unit's practice session feels the same as the trail's. */
@@ -88,60 +81,6 @@ type PageKind =
  * "domain": this Book points at a lexicon somebody else maintains. */
 const SHARED_LEXICON_NOTE =
   "these words come from somewhere else — you can use them, but not change them";
-
-/** Splits `items` into fixed-size chunks, last chunk possibly shorter.
- * A plain array utility, not a pagination framework (plan 0010 non-goals) —
- * each of the two call sites (Concepts, Examples — Vocabulary lost its
- * chunking in plan 0011) still owns its own page-index `useState`. */
-function chunk<T>(items: T[], size: number): T[][] {
-  const chunks: T[][] = [];
-  for (let i = 0; i < items.length; i += size) {
-    chunks.push(items.slice(i, i + size));
-  }
-  return chunks;
-}
-
-/** "‹ Note 2 of 5 ›"-style sub-pager, shared shape across Theory/Concepts/
- * Examples sub-pagination (plan 0010 design section 4; Vocabulary lost its
- * sub-pager in plan 0011) — no shared component beyond this presentational
- * control, each caller keeps its own index state. */
-function SubPager({
-  index,
-  count,
-  label,
-  onPrev,
-  onNext,
-}: {
-  index: number;
-  count: number;
-  label: string;
-  onPrev: () => void;
-  onNext: () => void;
-}) {
-  return (
-    <div className="sub-pager">
-      <button
-        type="button"
-        className="plain"
-        disabled={index === 0}
-        onClick={onPrev}
-      >
-        &lsaquo;
-      </button>
-      <span className="status">
-        {label} {index + 1} of {count}
-      </span>
-      <button
-        type="button"
-        className="plain"
-        disabled={index === count - 1}
-        onClick={onNext}
-      >
-        &rsaquo;
-      </button>
-    </div>
-  );
-}
 
 /** The `⚙` sheet's title is the row's own text, never the id (spec 0021-13
  * §2) — obvious which row you opened. A freshly added row has no text yet,
@@ -306,15 +245,17 @@ export function RowExtras({ item, edit }: { item: Item; edit: UnitEditOps }) {
         </label>
       )}
       <ProblemMarker problems={edit.fieldProblems(item.id, "sourceRef")} />
-      {/* A lexeme's example is a text/translation pair, a concept's is one
-          string — both surface in `EntryPopup` under the word's gloss. */}
+      {/* A lexeme's example is a text/translation pair, and surfaces in
+          `EntryPopup` under the word's gloss. A **concept's** example is not
+          here: the Concepts page now renders it behind a `<details>` and
+          edits it there, where the learner reads it, so a second editor for
+          the same one field would be two sources of truth for it. */}
       {item.kind === "lexeme" && (
         <>
           {prose("Example", ["example", "text"])}
           {prose("Example translation", ["example", "translation"])}
         </>
       )}
-      {item.kind === "concept" && prose("Example", ["example"])}
       {/* Plan 0023 §6's `bound`/`variants`/`components`, in their own module
           so this file does not grow further; it returns null for the kinds
           whose payloads have no breakdown. */}
@@ -334,6 +275,168 @@ export function RowExtras({ item, edit }: { item: Item; edit: UnitEditOps }) {
         </>
       )}
     </>
+  );
+}
+
+/**
+ * One concept on the Concepts page. Replaces the `Term | Definition` table
+ * (owner decision 2026-09-20, grilled against the live `sa` Book): German
+ * compound terms like `Softwareintensives System` sized the Term column off
+ * their longest word, leaving the definition ~210px of a 390px phone for
+ * text that runs 100-180 characters. A heading over its own paragraph gives
+ * the definition the full width instead.
+ *
+ * Three branches in `ExampleCard`'s order — diff, edit, learner — because
+ * the two pages now answer the same three questions the same way. The
+ * learner branch is hairline-separated prose (`.concept-list`); diff and
+ * edit are `.card`s, since a tinted base/changed pair and an editable row
+ * are objects you compare and manipulate rather than prose you read.
+ *
+ * `payload.example` surfaces here for the first time: it was authored on
+ * every `sa` concept and reachable only through the `⚙` sheet, so no learner
+ * had ever seen one. Behind a native `<details>` — the page is 10-13
+ * concepts long and the example is support, not the definition. None of the
+ * 79 Kyrgyz concepts has one, hence the learner-side guard; edit mode always
+ * offers the disclosure, or a concept with no example yet would have no way
+ * to gain one.
+ */
+function ConceptCard({
+  item,
+  edit,
+  onRemove,
+  onSettings,
+  diff,
+}: {
+  item: ConceptItem;
+  edit?: UnitEditOps;
+  /** Routes through the page's undo toast (spec 0021-13 §4), as every other
+   * `−` on this trail does. */
+  onRemove?: () => void;
+  onSettings?: () => void;
+  diff?: DiffView;
+}) {
+  if (diff !== undefined) {
+    // The three RENDERED fields only (§3: the field is the granularity) — a
+    // concept whose `sourceRef`, asset refs or `components` changed is not a
+    // pair. `example` joins them now that the learner can see it; under the
+    // table it was excluded for exactly the same reason, inverted.
+    const shown = {
+      payload: {
+        term: item.payload.term,
+        definition: item.payload.definition,
+        example: item.payload.example,
+      },
+    };
+    const was = diff.changedFrom<{
+      payload?: { term?: string; definition?: string; example?: string };
+    }>(item.id, shown);
+    const body = (payload: {
+      term?: string;
+      definition?: string;
+      example?: string;
+    }) => (
+      <>
+        <h2 className="concept-term">{text(payload.term)}</h2>
+        <p className="concept-definition">{text(payload.definition)}</p>
+        {text(payload.example) !== "" && (
+          <p className="concept-example-text">{text(payload.example)}</p>
+        )}
+      </>
+    );
+    return (
+      <>
+        {was !== undefined && (
+          <li className="card diff-old">{body(was.payload ?? {})}</li>
+        )}
+        <li className={`card ${diff.className(item.id, shown) ?? ""}`}>
+          {body(item.payload)}
+        </li>
+      </>
+    );
+  }
+
+  if (edit !== undefined) {
+    // A concept can be a shared-lexicon entry this Book may not change
+    // (plan 0021 decision 12) — the table rendered those as plain text, and
+    // so does this.
+    const editable = edit.canEditRow(item.id);
+    const set = (field: string, value: string) =>
+      edit.patchEntity(
+        withPayload(edit.raw(item.id) ?? { id: item.id }, [field], value),
+      );
+    const field = (label: string, name: string, multiline: boolean) => (
+      <>
+        <label className="field">
+          {label}
+          {multiline ? (
+            editable ? (
+              <GrowingTextarea
+                ariaLabel={label}
+                value={edit.payloadValue(item.id, name)}
+                onChange={(e) => set(name, e.target.value)}
+              />
+            ) : (
+              edit.payloadValue(item.id, name)
+            )
+          ) : (
+            <input
+              type="text"
+              readOnly={!editable}
+              value={edit.payloadValue(item.id, name)}
+              onChange={(e) => set(name, e.target.value)}
+            />
+          )}
+        </label>
+        <ProblemMarker
+          problems={edit.fieldProblems(item.id, `payload.${name}`)}
+        />
+      </>
+    );
+    return (
+      <li className="card unit-row-card">
+        {field("Term", "term", false)}
+        {field("Definition", "definition", true)}
+        {/* Open when there is something to see, so an author is never
+            told a field is empty by a closed disclosure they must guess at. */}
+        <details
+          className="concept-example"
+          open={edit.payloadValue(item.id, "example") !== ""}
+        >
+          <summary>Example</summary>
+          {field("Example", "example", true)}
+        </details>
+        <ProblemMarker problems={edit.entityProblems(item.id)} />
+        {/* `↑ ↓` inline, unlike the table this replaces: they moved into the
+            `⚙` sheet (owner decision 2026-08-06) because a four-icon rail ate
+            55% of the Definition column's width. A full-width card has no
+            column to squeeze, which is why Examples and Exercises always kept
+            theirs here. */}
+        <RowActions
+          onUp={() => edit.moveRow(item.id, -1)}
+          onDown={() => edit.moveRow(item.id, 1)}
+          upLabel="Move concept up"
+          downLabel="Move concept down"
+          onRemove={onRemove}
+          removeLabel={edit.removeLabel(item.id)}
+          {...(editable && onSettings !== undefined
+            ? { onSettings, settingsLabel: "Concept settings" }
+            : {})}
+        />
+      </li>
+    );
+  }
+
+  return (
+    <li>
+      <h2 className="concept-term">{item.payload.term}</h2>
+      <p className="concept-definition">{item.payload.definition}</p>
+      {item.payload.example !== undefined && item.payload.example !== "" && (
+        <details className="concept-example">
+          <summary>Example</summary>
+          <p className="concept-example-text">{item.payload.example}</p>
+        </details>
+      )}
+    </li>
   );
 }
 
@@ -844,7 +947,7 @@ export function UnitScreen({
 }) {
   // Which shipped lexicon entry's popup is open, if any (kind-partitioned
   // restructure's Vocabulary table): opened by id directly, same
-  // "open a known entry" pattern as VocabularyScreen's synonym chips —
+  // "open a known entry" pattern the synonym chips used —
   // never re-resolved by token, since the table row already is the entry.
   const [openEntryId, setOpenEntryId] = useState<string | null>(null);
   // Edit mode (plan 0021 §3): `null` in learner mode, and every editable
@@ -915,8 +1018,9 @@ export function UnitScreen({
     label: string;
   } | null>(null);
 
-  // Trail page index, plus each section's own sub-pager index (plan 0010
-  // design section 4: no shared pagination abstraction — one useState each).
+  // The trail page index — the unit's only pager since 2026-09-20, when
+  // Concepts and Examples gave up the per-section sub-pagers plan 0010
+  // design section 4 gave them and scrolled their lists instead.
   // `startAtEnd` seeds an out-of-range sentinel rather than a real index:
   // which pages exist isn't known until `pages` is built further down, and
   // everything below reads the clamped `pageIndex` anyway.
@@ -925,8 +1029,6 @@ export function UnitScreen({
   // built yet here, so the index is resolved in an effect below rather than
   // guessed.
   const startedAtPageRef = useRef(startAtPage);
-  const [conceptPage, setConceptPage] = useState(0);
-  const [examplePage, setExamplePage] = useState(0);
 
   const touchStartX = useRef<number | null>(null);
 
@@ -1014,11 +1116,16 @@ export function UnitScreen({
   // (below). Gated on this, never on "the drill is empty": a notes-only unit
   // also has an empty drill and must keep Practice, whose summary is its
   // only way forward.
-  const checkOnly =
-    hasCheck &&
-    unit !== undefined &&
-    drillItemIds(unit, content, lookup.domainContent.domain.exercises)
-      .length === 0;
+  const drillable =
+    unit === undefined
+      ? []
+      : drillItemIds(unit, content, lookup.domainContent.domain.exercises);
+  const checkOnly = hasCheck && unit !== undefined && drillable.length === 0;
+  // An info unit (validator class (i)): notes, no questions, nothing to
+  // drill. Practice still has to stay — its summary is the only way on to
+  // the next unit — but offering it as "Practice 0" describes the one thing
+  // it does not do.
+  const infoOnly = !hasCheck && unit !== undefined && drillable.length === 0;
 
   // Edit mode shows all five content pages whether or not they have content
   // yet: each page owns its own add control, so an empty page hidden is a
@@ -1123,19 +1230,12 @@ export function UnitScreen({
     );
   }
 
-  const conceptChunks = chunk(concepts, CONCEPT_CHUNK_SIZE);
-  const conceptRows =
-    conceptChunks[Math.min(conceptPage, conceptChunks.length - 1)] ?? [];
-  // Same lookup as `openLexeme`, scoped to the current page's chunk: a row
-  // on a chunk the author has paginated away from was never shown expanded
-  // before this slice either.
-  const openConcept = conceptRows.find((item) => item.id === expandedRow);
-
-  const exampleChunks = chunk(examples, EXAMPLE_CHUNK_SIZE);
-  const exampleCards =
-    exampleChunks[Math.min(examplePage, exampleChunks.length - 1)] ?? [];
-  // Same lookup as `openConcept`, scoped to the current page's chunk.
-  const openExample = exampleCards.find((item) => item.id === expandedRow);
+  // Both pages scroll their whole list (owner decision 2026-09-20), the way
+  // Vocabulary has since plan 0011 — so the lookups run over every concept
+  // and every example, not a chunk. The trail is now the only pager on the
+  // screen; a real `sa` unit used to show "Page 1 of 2" under it.
+  const openConcept = concepts.find((item) => item.id === expandedRow);
+  const openExample = examples.find((item) => item.id === expandedRow);
 
   // The Book's other units, by title and grouped by lesson, for the two
   // unit-reference controls on Overview. A unit never references itself
@@ -1630,136 +1730,33 @@ export function UnitScreen({
           </p>
           {edit !== null &&
             !edit.canEditLexicon &&
-            conceptRows.some((item) => edit.isLexiconEntry(item.id)) && (
+            concepts.some((item) => edit.isLexiconEntry(item.id)) && (
               <p className="status">{SHARED_LEXICON_NOTE}</p>
             )}
-          {conceptChunks.length > 1 ? (
-            <SubPager
-              index={conceptPage}
-              count={conceptChunks.length}
-              label="Page"
-              onPrev={() => setConceptPage((p) => Math.max(0, p - 1))}
-              onNext={() =>
-                setConceptPage((p) => Math.min(conceptChunks.length - 1, p + 1))
-              }
-            />
-          ) : null}
-          <table className="vocab-table unit-row-table">
-            <thead>
-              <tr>
-                <th>Term</th>
-                <th>Definition</th>
-                {edit !== null ? <th className="unit-row-actions" /> : null}
-              </tr>
-            </thead>
-            <tbody>
-              {/* No per-row FeedbackWidget here (owner request): a third
-                  column of thumbs crowded the table off a phone screen. The
-                  unit-level widget on Overview still covers reports. */}
-              {conceptRows.map((item) => {
-                const editable = edit !== null && edit.canEditRow(item.id);
-                // These two columns only: a concept whose `sourceRef` or an
-                // unrendered payload field changed is not a pair (§3).
-                const shownConcept = {
-                  payload: {
-                    term: (item.payload as { term?: string }).term,
-                    definition: (item.payload as { definition?: string })
-                      .definition,
-                  },
-                };
-                const was = diff?.changedFrom<{
-                  payload?: { term?: string; definition?: string };
-                }>(item.id, shownConcept);
-                return (
-                  <Fragment key={item.id}>
-                    {was !== undefined && (
-                      <tr className="diff-old">
-                        <td>{was.payload?.term}</td>
-                        <td>{was.payload?.definition}</td>
-                      </tr>
-                    )}
-                    <tr className={diff?.className(item.id, shownConcept)}>
-                      <td>
-                        {editable ? (
-                          <>
-                            <input
-                              type="text"
-                              aria-label="Term"
-                              value={edit.payloadValue(item.id, "term")}
-                              onChange={(e) =>
-                                edit.patchEntity(
-                                  withPayload(
-                                    edit.raw(item.id) ?? { id: item.id },
-                                    ["term"],
-                                    e.target.value,
-                                  ),
-                                )
-                              }
-                            />
-                            <ProblemMarker
-                              problems={edit.fieldProblems(
-                                item.id,
-                                "payload.term",
-                              )}
-                            />
-                          </>
-                        ) : (
-                          item.payload.term
-                        )}
-                      </td>
-                      <td>
-                        {editable ? (
-                          <>
-                            <GrowingTextarea
-                              ariaLabel="Definition"
-                              value={edit.payloadValue(item.id, "definition")}
-                              onChange={(e) =>
-                                edit.patchEntity(
-                                  withPayload(
-                                    edit.raw(item.id) ?? { id: item.id },
-                                    ["definition"],
-                                    e.target.value,
-                                  ),
-                                )
-                              }
-                            />
-                            <ProblemMarker
-                              problems={edit.fieldProblems(
-                                item.id,
-                                "payload.definition",
-                              )}
-                            />
-                          </>
-                        ) : (
-                          item.payload.definition
-                        )}
-                      </td>
-                      {edit !== null ? (
-                        <td className="unit-row-actions">
-                          {/* No `↑ ↓` here — see `MoveRowButtons`. */}
-                          <RowActions
-                            onRemove={() =>
-                              removeWithUndo(edit, item.id, "Concept")
-                            }
-                            removeLabel={edit.removeLabel(item.id)}
-                            {...(editable
-                              ? {
-                                  onSettings: () => setExpandedRow(item.id),
-                                  settingsLabel: "Concept settings",
-                                }
-                              : {})}
-                          />
-                          <ProblemMarker
-                            problems={edit.entityProblems(item.id)}
-                          />
-                        </td>
-                      ) : null}
-                    </tr>
-                  </Fragment>
-                );
-              })}
-            </tbody>
-          </table>
+          {/* No per-concept `FeedbackWidget` (owner decision, reaffirmed
+              2026-09-20 once cards removed the width excuse): 10-13 thumb
+              pairs down a page meant to be read is repeated chrome, and the
+              unit-level widget on Overview still covers reports. */}
+          <ul
+            className={
+              edit !== null || diff !== null ? "card-list" : "concept-list"
+            }
+          >
+            {concepts.map((item) => (
+              <ConceptCard
+                key={item.id}
+                item={item}
+                {...(edit !== null
+                  ? {
+                      edit,
+                      onRemove: () => removeWithUndo(edit, item.id, "Concept"),
+                      onSettings: () => setExpandedRow(item.id),
+                    }
+                  : {})}
+                {...(diff !== null ? { diff } : {})}
+              />
+            ))}
+          </ul>
           {edit !== null && (
             <button
               type="button"
@@ -1790,12 +1787,12 @@ export function UnitScreen({
               title={rowSheetTitle(openConcept.payload.term, "New concept")}
               onDismiss={() => setExpandedRow(null)}
             >
+              {/* No `MoveRowButtons` here: the card's own rail carries
+                  `↑ ↓` again, and two ways to reorder one concept is one
+                  more than the sheet is for. Vocabulary's sheet keeps its
+                  pair — that page is still a table with a column to
+                  squeeze. */}
               <RowExtras item={openConcept} edit={edit} />
-              <MoveRowButtons
-                onUp={() => edit.moveRow(openConcept.id, -1)}
-                onDown={() => edit.moveRow(openConcept.id, 1)}
-                noun="concept"
-              />
             </SettingsSheet>
           )}
         </>
@@ -1811,19 +1808,8 @@ export function UnitScreen({
             />{" "}
             Examples
           </p>
-          {exampleChunks.length > 1 ? (
-            <SubPager
-              index={examplePage}
-              count={exampleChunks.length}
-              label="Page"
-              onPrev={() => setExamplePage((p) => Math.max(0, p - 1))}
-              onNext={() =>
-                setExamplePage((p) => Math.min(exampleChunks.length - 1, p + 1))
-              }
-            />
-          ) : null}
           <ul className="card-list">
-            {exampleCards.map((item) => (
+            {examples.map((item) => (
               <ExampleCard
                 key={item.id}
                 item={item}
@@ -2014,8 +2000,10 @@ export function UnitScreen({
           <div className="action-bar unit-practice-bar">
             <div className="action-bar-inner unit-practice-bar-inner">
               <button className="unit-practice-button" onClick={goNext}>
-                <span>{atLastPage ? "Practice" : "Next"}</span>
-                {atLastPage && (
+                <span>
+                  {atLastPage ? (infoOnly ? "Done" : "Practice") : "Next"}
+                </span>
+                {atLastPage && !infoOnly && (
                   <span className="unit-practice-count">
                     {countUnitQuestions(
                       {

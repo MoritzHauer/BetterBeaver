@@ -107,7 +107,7 @@ export function LibraryScreen({
                     </span>
                   )}
                   <strong>{book.title}</strong>
-                  <p>{book.description}</p>
+                  <p className="card-description">{book.description}</p>
                   {showRating && (
                     <p className="status">
                       <img

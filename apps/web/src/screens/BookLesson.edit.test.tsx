@@ -114,10 +114,7 @@ function renderBook(
       store={store}
       epoch={0}
       onSelectLesson={onSelectLesson}
-      onPracticeTask={() => {}}
       onPlay={() => {}}
-      onReview={() => {}}
-      onVocabulary={() => {}}
       onSelectExam={() => undefined}
       onBack={() => {}}
     />
@@ -158,13 +155,13 @@ describe("BookScreen", () => {
   it("renders unchanged in learner mode", () => {
     renderBook(null);
     expect(screen.queryAllByRole("textbox")).toEqual([]);
-    for (const name of [
-      /Continue learning|Book complete/,
-      /Daily Review/,
-      /^Practice/,
-      /Vocabulary/,
-    ]) {
-      expect(screen.getByRole("button", { name })).toBeTruthy();
+    // Play is the Book screen's only action since 2026-09-18: Daily Review,
+    // Practice and Vocabulary no longer have cards here.
+    expect(
+      screen.getByRole("button", { name: /Continue learning|Book complete/ }),
+    ).toBeTruthy();
+    for (const gone of [/Daily Review/, /^Practice/, /Vocabulary/]) {
+      expect(screen.queryByRole("button", { name: gone })).toBeNull();
     }
     expect(screen.getByRole("heading", { name: "Book title" })).toBeTruthy();
   });

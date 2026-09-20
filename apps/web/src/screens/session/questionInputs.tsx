@@ -12,6 +12,7 @@
  * `reveal` is the only concession to the difference: absent, nothing is
  * marked; present, the authored truth is shown against what was chosen.
  */
+import type { CSSProperties } from "react";
 import type { AssignQuestion, ChoiceQuestion } from "@betterbeaver/engine";
 
 /**
@@ -24,6 +25,30 @@ import type { AssignQuestion, ChoiceQuestion } from "@betterbeaver/engine";
  * Tapping a selected option always deselects it, so a full board is never a
  * dead end.
  */
+
+/**
+ * A question stem, sized down as it gets longer (owner, 2026-09-18: a 180-
+ * character exam stem at the prompt's 1.5rem fills a phone screen before the
+ * options start).
+ *
+ * Length, not measured height: the character count is handed to CSS and a
+ * `clamp()` does the rest, so there is no ResizeObserver, no measure-then-
+ * reflow loop, and the same question is the same size on every device. It is
+ * an approximation of height — a stem with a long unbreakable word wraps
+ * worse than its count suggests — and the clamp's floor is what keeps that
+ * from mattering.
+ */
+function QuestionStem({ stem }: { stem: string }) {
+  return (
+    <p
+      className="prompt prompt-stem"
+      style={{ "--stem-len": stem.length } as CSSProperties}
+    >
+      {stem}
+    </p>
+  );
+}
+
 export function ChoiceBoard({
   question,
   selected,
@@ -57,7 +82,7 @@ export function ChoiceBoard({
 
   return (
     <>
-      <p className="prompt">{question.stem}</p>
+      <QuestionStem stem={question.stem} />
       <p className="status">
         {question.selectCount === 1
           ? "Choose one."
@@ -134,7 +159,7 @@ export function AssignBoard({
 
   return (
     <>
-      <p className="prompt">{question.stem}</p>
+      <QuestionStem stem={question.stem} />
       <ul className="card-list assign-rows">
         {question.rows.map((row, rowIndex) => {
           const answer = chosen[rowIndex] ?? null;

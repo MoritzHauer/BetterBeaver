@@ -5,7 +5,6 @@ import type {
   Content,
   DomainDocument,
   Exam,
-  Item,
   Task,
   Unit,
 } from "@betterbeaver/schema";
@@ -17,9 +16,7 @@ import type {
   ProgressStore,
   BookSummary,
 } from "@betterbeaver/engine";
-import type { AdhocMode } from "@betterbeaver/engine";
 import {
-  buildAdhocSession,
   buildFixedSession,
   buildRecallSession,
   buildReviewSession,
@@ -56,7 +53,6 @@ import type { TapLookup } from "./components/TappableText";
 import { NewBookSheet } from "./components/Sheet";
 import type { ContentInit, ContentUpdate } from "./content/source";
 import { SKIP_COVER_KEY } from "./content/source";
-import { resolvedLinksByEntryId } from "./content/links";
 import { readCachedDocuments } from "./content/cache";
 import { readPrivateBooks } from "./content/private-store";
 import { readArchived } from "./content/myBooks";
@@ -81,10 +77,6 @@ import { UnitScreen } from "./screens/UnitScreen";
 import { SessionScreen } from "./screens/SessionScreen";
 import { ExamScreen } from "./screens/ExamScreen";
 import type { SessionOutcome } from "./screens/session/useSessionQueue";
-import {
-  ADHOC_MODE_LABELS,
-  VocabularyScreen,
-} from "./screens/VocabularyScreen";
 import { ErrorScreen } from "./screens/ErrorScreen";
 import { StartScreen } from "./screens/StartScreen";
 import { AuthorScreen } from "./screens/AuthorScreen";
@@ -1238,75 +1230,6 @@ function ReviewSession({
   );
 }
 
-/** Wires the engine's ad-hoc vocabulary sessions (plan 0004; domain-scoped
- * by plan 0006) to `SessionScreen`. Grading goes through the same
- * `recordGrade` as tasks — per the plan's amendment, a stateless item gets
- * scheduled — and no task attempt is recorded (ad-hoc sessions never mark
- * unit completion). */
-function AdhocSession({
-  domainContent,
-  bookId,
-  mode,
-  itemIds,
-  lookup,
-  onDone,
-}: {
-  domainContent: DomainContent;
-  /** Representative book of the domain, for `SessionScreen`'s asset resolution. */
-  bookId: string;
-  mode: AdhocMode;
-  itemIds: string[];
-  /** Tap-to-lookup dependencies (plan 0006 step 4), for post-answer reveal surfaces. */
-  lookup: TapLookup;
-  onDone: () => void;
-}) {
-  const domainId = domainContent.domain.id;
-  const questions = useMemo(
-    () => {
-      // The domain's full lexicon (plan 0006), not one book's items — a
-      // studied list may hold any entry of the domain.
-      const itemById = new Map(
-        domainContent.entries.map((item) => [item.id, item]),
-      );
-      const items = itemIds.flatMap((id): Item[] => {
-        const item = itemById.get(id);
-        return item !== undefined ? [item] : [];
-      });
-      // Re-based from the deleted `payload.synonyms` onto resolved
-      // `synonym`-type links (plan 0006); the engine filters by type itself.
-      const resolvedLinks = resolvedLinksByEntryId(domainContent);
-      return buildAdhocSession(mode, items, Math.random, resolvedLinks);
-    },
-    // Keyed by the study selection only, so the session doesn't reshuffle
-    // across re-renders (same rule as TaskSession).
-    [mode, itemIds, domainContent],
-  );
-  async function handleGrade(unitId: string, quality: Quality) {
-    await recordGrade(
-      progressStore,
-      unitId,
-      quality,
-      new Date(),
-      domainId,
-      schedulingConfig(),
-    );
-  }
-
-  return (
-    <SessionScreen
-      title={ADHOC_MODE_LABELS[mode]}
-      questions={questions}
-      bookId={bookId}
-      readAloudLang={domainContent.domain.readAloudLang}
-      lookup={lookup}
-      onGrade={handleGrade}
-      onFinished={onDone}
-      onExit={onDone}
-      loadStreak={() => progressStore.getStreak(domainId)}
-    />
-  );
-}
-
 export function App({ contentInit }: { contentInit: ContentInit }) {
   const contentSourceResult: ContentSourceResult = contentInit.result;
 
@@ -2108,9 +2031,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     // 0006's tap-to-lookup, step 4: those screens need the domain's merged
     // entry pool too, for notes and post-answer session reveals).
     const domainId =
-      screen.screen === "review" ||
-      screen.screen === "vocab" ||
-      screen.screen === "adhoc"
+      screen.screen === "review"
         ? screen.domainId
         : isBookFamilyScreen
           ? books.find((book) => book.id === screen.bookId)?.domainId
@@ -2506,8 +2427,6 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
           archivedBooks={archivedBooks}
           privateBookIds={contentInit.privateBookIds}
           onSelectBook={(bookId) => goToBook(bookId)}
-          onVocabulary={(domainId) => setScreen({ screen: "vocab", domainId })}
-          onReview={(domainId) => setScreen({ screen: "review", domainId })}
           // Cannot reject: `playBook` only awaits `dueUnits`, whose reads are
           // `readJson`-backed and degrade to absent (spec 0019 §1).
           onPlay={(bookId) => void playBook(bookId)}
@@ -2779,21 +2698,6 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
               lessonId,
               editing: screen.editing,
             })
-          }
-          onPracticeTask={(target) =>
-            setScreen({
-              screen: "task",
-              bookId: screen.bookId,
-              ...target,
-              // Carried so Preview's Practice plays the draft (§1).
-              editing: screen.editing,
-            })
-          }
-          onReview={() =>
-            setScreen({ screen: "review", domainId: shown.topic.domainId })
-          }
-          onVocabulary={() =>
-            setScreen({ screen: "vocab", domainId: shown.topic.domainId })
           }
           onSelectExam={(examId) =>
             setScreen({ screen: "exam", bookId: screen.bookId, examId })
@@ -3211,7 +3115,7 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     );
   }
 
-  // screen.screen is "review" | "vocab" | "adhoc" — all domain-scoped.
+  // screen.screen is "review" — the only domain-scoped screen left.
   if (domainContent === null || domainBooksContent.length === 0) {
     return <p>Loading&hellip;</p>;
   }
@@ -3221,44 +3125,6 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
     userEntryStore,
     onWordsChanged: () => setDomainEpoch((epoch) => epoch + 1),
   };
-
-  if (screen.screen === "vocab") {
-    const onBack = () => setScreen({ screen: "books" });
-    return (
-      <VocabularyScreen
-        booksContent={domainBooksContent}
-        domainContent={domainContent}
-        listStore={vocabListStore}
-        userEntryStore={userEntryStore}
-        onWordsChanged={() => setDomainEpoch((epoch) => epoch + 1)}
-        onStudy={(mode, itemIds) =>
-          setScreen({
-            screen: "adhoc",
-            domainId: screen.domainId,
-            mode,
-            itemIds,
-          })
-        }
-        onBack={onBack}
-      />
-    );
-  }
-
-  if (screen.screen === "adhoc") {
-    const bookId = domainBooksContent[0]?.topic.id ?? screen.domainId;
-    const onDone = () =>
-      setScreen({ screen: "vocab", domainId: screen.domainId });
-    return (
-      <AdhocSession
-        domainContent={domainContent}
-        bookId={bookId}
-        mode={screen.mode}
-        itemIds={screen.itemIds}
-        lookup={lookup}
-        onDone={onDone}
-      />
-    );
-  }
 
   const onReviewDone = () => setScreen({ screen: "books" });
   return withSessionEdit(

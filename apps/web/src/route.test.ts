@@ -77,16 +77,6 @@ const CASES: [string, View][] = [
     started({ screen: "lesson-summary", bookId: "demo", lessonId: "l1" }),
   ],
   ["/domains/demo/review", started({ screen: "review", domainId: "demo" })],
-  ["/domains/demo/vocab", started({ screen: "vocab", domainId: "demo" })],
-  [
-    "/domains/demo/study?mode=recall&items=a%2Cb",
-    started({
-      screen: "adhoc",
-      domainId: "demo",
-      mode: "recall",
-      itemIds: ["a", "b"],
-    }),
-  ],
   ["/library", started({ screen: "library" })],
   ["/author", started({ screen: "author" })],
   ["/settings", started({ screen: "settings" })],

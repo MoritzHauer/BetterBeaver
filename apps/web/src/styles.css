@@ -416,6 +416,21 @@ section.card {
   margin: 1.5rem 0;
 }
 
+/* A `choice`/`assign` stem is prose, not a headword, and an exam's runs to
+ * 180 characters — at 1.5rem that is the whole screen before the first
+ * option. Scale it down by its own length (set inline as `--stem-len` by
+ * `QuestionStem`): 60 characters or fewer keep the full size, and the floor
+ * stays above body text so the longest question is still the most readable
+ * thing on the page. No measuring, so no reflow loop and no size that
+ * changes with the device. */
+.prompt-stem {
+  font-size: clamp(
+    1.1rem,
+    calc(1.5rem - (var(--stem-len, 60) - 60) * 0.0033rem),
+    1.5rem
+  );
+}
+
 /* Key row for the characters a domain declares its script needs and a
  * learner's keyboard cannot produce (plan 0025 §10). 44px minimum touch
  * target, per the accessibility floor in design.md. */
@@ -1181,16 +1196,65 @@ main.unit-screen {
   color: var(--accent);
 }
 
-.sub-pager {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.75rem;
-  margin-bottom: 0.75rem;
+/* The Concepts page (owner decision 2026-09-20), which replaced a
+ * `Term | Definition` table: hairline-separated prose, one heading over one
+ * paragraph, so a 100-180-character definition gets the full 390px instead
+ * of the ~210px the Term column left it. Not `.card`s — the learner is
+ * reading here, and ten bordered boxes read as ten controls. Edit and diff
+ * mode DO use `.card-list`, because there the rows are objects you
+ * manipulate and compare. */
+.concept-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }
 
-.sub-pager button {
-  min-width: 44px;
+.concept-list > li {
+  padding: 0.875rem 0;
+  border-bottom: 1px solid var(--card-border);
+}
+
+.concept-list > li:first-child {
+  padding-top: 0;
+}
+
+/* Nothing below the last one to separate it from. */
+.concept-list > li:last-child {
+  border-bottom: none;
+}
+
+.concept-term {
+  margin: 0 0 0.25rem;
+  font-size: 1.0625rem;
+  line-height: 1.25;
+}
+
+.concept-definition {
+  margin: 0;
+}
+
+/* `payload.example`, which no learner could see while it lived behind the
+ * `⚙` sheet. A native `<details>` — no JS, and the disclosure triangle is
+ * the whole affordance. Muted and smaller: it supports the definition
+ * rather than competing with it. */
+.concept-example {
+  margin-top: 0.375rem;
+}
+
+.concept-example > summary {
+  font-size: 0.875rem;
+  color: var(--locked-fg);
+  cursor: pointer;
+  /* The 44px tap-target floor (spec 0021-12 §1) applies to the row a finger
+   * aims at, not the glyph: padding rather than min-height, which on a
+   * `<summary>` would push the marker off the text's baseline. */
+  padding: 0.375rem 0;
+}
+
+.concept-example-text {
+  margin: 0.25rem 0 0;
+  font-size: 0.875rem;
+  color: var(--locked-fg);
 }
 
 /* Practice bar (plan 0010): persistent across every Unit page, amber-filled
@@ -2095,6 +2159,102 @@ textarea {
   margin-top: 0.75rem;
 }
 
+/* The cap on how much of a description a card shows (owner, 2026-09-18:
+ * "the boxes should be with very little content"). Two lines rather than a
+ * character count, because the count that fits depends on the width and the
+ * language — and the full text is never lost: BookScreen renders it whole.
+ * Deliberately not a limit on the content itself: this Book's two
+ * affiliation disclaimers are required by plan 0028 §2, so a content limit
+ * would either drop them or warn about them for ever. */
+.card-description {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
+/* The review count on Continue learning (owner, 2026-09-18): the review icon
+ * with a small number at its bottom-right corner, where Daily Review's own
+ * card used to carry it. */
+.due-chip {
+  position: absolute;
+  right: 0.75rem;
+  bottom: 0.5rem;
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 0.15rem;
+}
+
+.due-chip-count {
+  font-size: 0.75rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+/* The card's footer row under the progress bar: count left, the private tag
+ * centred, the ⋯ menu right (owner, 2026-09-18). Three columns rather than
+ * space-between, so the tag sits in the middle of the card and not wherever
+ * the count's width happens to put it — and it stays centred on a card that
+ * has no tag at all. `.card > div` sets a 1rem inset and outranks a bare
+ * `.card-footer`, which is what left this row floating 32px below the
+ * progress bar; selected the same way, the padding here wins. */
+.card > .card-footer {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 0.75rem 0.5rem;
+}
+
+.card-footer .status {
+  margin: 0;
+}
+
+/* The tag reads as a tag, not as stray text between two controls. */
+.card-footer .card-tag {
+  justify-self: center;
+  padding: 0.05rem 0.5rem;
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.card-footer .card-menu {
+  /* Pinned, not auto-placed: on a card with no tag the menu would otherwise
+     fall into the middle column and sit centred. */
+  grid-column: 3;
+  justify-self: end;
+  position: relative;
+}
+
+.card-footer .card-menu > summary {
+  padding: 0.25rem 0.75rem;
+  line-height: 1;
+}
+
+/* The open menu floats above the row instead of widening it: the footer is a
+ * three-column grid, and a <details> opening inside the last column would be
+ * squeezed to that column's width — Archive and Remove side by side in a few
+ * rem. Anchored to the right edge and opening upward, since the footer is the
+ * bottom of the card. */
+.card-footer .card-menu .grade-buttons {
+  position: absolute;
+  right: 0;
+  bottom: 100%;
+  z-index: 2;
+  margin: 0;
+  padding: 0.5rem;
+  white-space: nowrap;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 0.5rem;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 18%);
+}
+
 /* My Books card overflow menu (plan 0015): Archive/Remove, tucked behind a
  * "⋯" so the card's main button stays the single study tap target. */
 .card-menu > summary {
@@ -2321,17 +2481,38 @@ main.exam {
   color: var(--incorrect-border);
 }
 
-/* The question navigator: answered/unanswered at a glance, and a jump to
- * any of them — free movement in both directions is the point of grading
- * nothing until Submit. */
+/* The runner's top row: back, the question navigator, the clock. */
+.exam-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.exam-back {
+  flex: 0 0 auto;
+}
+
+/* The question navigator: answered/unanswered at a glance, and a jump to any
+ * of them — free movement in both directions is the point of grading nothing
+ * until Submit. One scrolling row beside the clock, not a wrapping grid: a
+ * real exam has 38 questions, and as a grid that is six rows of cells above
+ * the fold, pushing the question itself off screen. */
 .exam-nav {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
   gap: 0.35rem;
-  margin: 1rem 0;
+  flex: 1;
+  /* Without this a flex item refuses to shrink below its content, so the
+   * row would push the clock off the screen instead of scrolling. */
+  min-width: 0;
+  padding-bottom: 0.25rem;
+  scrollbar-width: thin;
 }
 
 .exam-nav-cell {
+  flex: 0 0 auto;
   min-width: 2.25rem;
   min-height: 2.25rem;
   border: 1px solid var(--card-border);

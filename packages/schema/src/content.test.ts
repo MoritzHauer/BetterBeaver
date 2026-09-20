@@ -70,6 +70,10 @@ describe("content on disk", () => {
       const units = readJsonFilesIn(join(dir, "units"));
       const items = readJsonFilesIn(join(dir, "items"));
       const tasks = readJsonFilesIn(join(dir, "tasks"));
+      // `[]` for the Books with no `exams/` dir, which is most of them; an
+      // exam-bearing Book without this reads as a dangling `topic.examIds`
+      // plus one orphaned task per question (plan 0027 classes (ag)/(ah)).
+      const exams = readJsonFilesIn(join(dir, "exams"));
       const resources = readJson(join(dir, "resources.json")) as unknown[];
       const noteStems = readNoteStems(join(dir, "notes"));
       const audioStems = readAssetStems(join(dir, "assets", "audio"));
@@ -96,6 +100,7 @@ describe("content on disk", () => {
         units,
         items,
         tasks,
+        exams,
         resources,
         noteStems,
         // Not derived from the on-disk notes (no bundled note currently uses

@@ -977,9 +977,20 @@ export function checkReferences(parsed: ParsedSet): string[] {
   }
 
   // --- class (i): a unit with zero tasks ---
+  // An **info unit** is the one legal case (owner, 2026-09-18): notes and
+  // nothing else, for material that is read rather than drilled — the
+  // software-architecture Book's unit on how the exam is scored. Items
+  // without tasks stay an error, because that is the authoring mistake this
+  // class exists to catch: content nothing can ever ask about. A unit with
+  // neither is empty, which is a third thing and also wrong.
   for (const unit of units) {
-    if (unit.taskIds.length === 0) {
+    if (unit.taskIds.length > 0) {
+      continue;
+    }
+    if (unit.itemIds.length > 0) {
       errors.push(`${unit.id}: unit has zero tasks`);
+    } else if (unit.noteIds.length === 0) {
+      errors.push(`${unit.id}: unit has no tasks, no items and no notes`);
     }
   }
 

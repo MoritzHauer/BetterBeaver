@@ -23,8 +23,6 @@ export function MyBooksScreen({
   privateBookIds,
   unpublishedChanges,
   onSelectBook,
-  onVocabulary,
-  onReview,
   onPlay,
   onArchive,
   onRestore,
@@ -63,8 +61,6 @@ export function MyBooksScreen({
   onSelectBook: (bookId: string) => void;
   /** Domain-scoped (plan 0006); reached per-card now that the front list is
    * flat (no more domain-header row to hang these off of). */
-  onVocabulary: (domainId: string) => void;
-  onReview: (domainId: string) => void;
   /** Resolves what to study next and navigates there (plan 0020 §2): due
    * review, else the next incomplete unit, else the Book's trophy state. */
   onPlay: (bookId: string) => void;
@@ -169,42 +165,17 @@ export function MyBooksScreen({
                     </span>
                   )}
                   <strong>{book.title}</strong>
-                  {privateBookIds.has(book.id) && (
-                    <span className="status">private</span>
-                  )}
                   {unpublishedChanges.has(book.id) && (
                     <span className="status">unpublished changes</span>
                   )}
                 </span>
-                <p>{book.description}</p>
+                <p className="card-description">{book.description}</p>
                 <ProgressBar value={progress.completed} max={progress.total} />
-                <p className="status">
-                  {progress.completed}/{progress.total}
-                </p>
               </button>
+              {/* Play alone since 2026-09-18 (owner): Vocabulary is gone from
+                  the app and Daily Review is where Play already goes when
+                  anything is due. */}
               <div className="book-actions">
-                <button
-                  type="button"
-                  className="plain icon-button vocab-btn"
-                  onClick={() => onVocabulary(book.domainId)}
-                  aria-label="Vocabulary"
-                >
-                  <img
-                    src={`${import.meta.env.BASE_URL}art/icons/book_front.png`}
-                    alt=""
-                  />
-                </button>
-                <button
-                  type="button"
-                  className="plain icon-button review-btn"
-                  onClick={() => onReview(book.domainId)}
-                  aria-label="Daily Review"
-                >
-                  <img
-                    src={`${import.meta.env.BASE_URL}art/icons/repeat.png`}
-                    alt=""
-                  />
-                </button>
                 <button
                   type="button"
                   className="plain icon-button play-btn"
@@ -217,28 +188,39 @@ export function MyBooksScreen({
                   />
                 </button>
               </div>
-              <details className="card-menu">
-                <summary aria-label="More actions">⋯</summary>
-                <div className="grade-buttons">
-                  {privateBookIds.has(book.id) && (
+              <div className="card-footer">
+                <span className="status">
+                  {progress.completed}/{progress.total}
+                </span>
+                {privateBookIds.has(book.id) && (
+                  <span className="status card-tag">private</span>
+                )}
+                <details className="card-menu">
+                  <summary aria-label="More actions">⋯</summary>
+                  <div className="grade-buttons">
+                    {privateBookIds.has(book.id) && (
+                      <button
+                        className="plain"
+                        onClick={() => void handleExport(book.id)}
+                      >
+                        Export
+                      </button>
+                    )}
                     <button
                       className="plain"
-                      onClick={() => void handleExport(book.id)}
+                      onClick={() => onArchive(book.id)}
                     >
-                      Export
+                      Archive
                     </button>
-                  )}
-                  <button className="plain" onClick={() => onArchive(book.id)}>
-                    Archive
-                  </button>
-                  <button
-                    className="plain danger"
-                    onClick={() => handleRemove(book.id, book.title)}
-                  >
-                    Remove
-                  </button>
-                </div>
-              </details>
+                    <button
+                      className="plain danger"
+                      onClick={() => handleRemove(book.id, book.title)}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </details>
+              </div>
             </li>
           );
         })}
@@ -310,7 +292,7 @@ export function MyBooksScreen({
                     </span>
                   )}
                   <strong>{book.title}</strong>
-                  <p>{book.description}</p>
+                  <p className="card-description">{book.description}</p>
                   <div className="grade-buttons">
                     <button
                       className="plain"

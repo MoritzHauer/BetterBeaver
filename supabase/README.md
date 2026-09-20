@@ -166,6 +166,31 @@ Revoking is a Supabase-side act: delete the account (below), or sign the account
 
 If the account is later added to `public.maintainers` for one document, the same token also publishes that document (via the `publish_document` RPC's maintainer check) — a separate decision, not something this setup implies.
 
+## Working on a live Book (`content.local/`)
+
+The repo's `content/` tree is the frozen onboarding-only seed (plan 0015 decision 10) — every other Book lives on the backend. To edit one as plain JSON next to the code:
+
+```sh
+scripts/content-checkout.sh softwarearchitektur
+```
+
+That pulls the Book **and its domain** into `content.local/<book>/`, which `*.local` already git-ignores. Re-run it any time to pick up what has been published since: the script keeps `content.local/` as its own git repo, commits each pull, prints what moved upstream, and stashes your in-progress edits across the re-pull so they replay onto the new base. A conflict there is a real one — the same lines changed in the app and here — and the stash entry is kept until you resolve it.
+
+One Book per checkout directory is the contract, not a habit: `pull-book.ts` requires an empty target and `republish-content.ts` pushes every Book under its tree.
+
+Validate, then publish:
+
+```sh
+BB_CONTENT_DIR=content.local/<book> \
+  corepack pnpm exec vitest run packages/schema/src/content.test.ts
+BB_CONTENT_DIR=content.local/<book> SUPABASE_URL=... \
+  SUPABASE_SERVICE_ROLE_KEY=... node scripts/republish-content.ts
+```
+
+`content.test.ts` validates each document but cannot run `validateContentSet` (item ids unique across **all** Books) from a partial tree, so a duplicate item id against a Book outside the checkout still slips through.
+
+**Do not edit the same Book in-app while it is checked out here.** Republish leaves the in-app draft alone, so a later in-app publish silently reverts this tree (plan 0023 §8).
+
 ## Publishing local content/ edits (ingest, schema bumps)
 
 Content authored locally in the `content/` tree (an `/ingest` run, or the admin republish step of a `CONTENT_SCHEMA_VERSION` bump) ships with:

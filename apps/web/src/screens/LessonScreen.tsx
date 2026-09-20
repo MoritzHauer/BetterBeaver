@@ -165,7 +165,7 @@ export function LessonScreen({
                 )}
                 <div className={diff?.className(lesson.id, shown)}>
                   <h1>{lesson.title}</h1>
-                  <p>{lesson.goal}</p>
+                  <p className="card-description">{lesson.goal}</p>
                 </div>
               </>
             );
@@ -325,7 +325,7 @@ export function LessonScreen({
                 <li className={`card ${diff.className(unit.id) ?? ""}`}>
                   <button onClick={() => onSelectUnit(unit.id)}>
                     <strong>{unit.title}</strong>
-                    <p>{unit.goal}</p>
+                    <p className="card-description">{unit.goal}</p>
                   </button>
                 </li>
               </Fragment>
@@ -345,7 +345,7 @@ export function LessonScreen({
                   {unit.title}
                 </strong>
                 {complete ? <span className="done-mark"> &#10003;</span> : null}
-                <p>{unit.goal}</p>
+                <p className="card-description">{unit.goal}</p>
                 <LockableProgress
                   unlocked={unlocked}
                   percent={percent}

@@ -14,4 +14,6 @@ Commands (from repo root):
 
 See `docs/plans/archive/0001-content-schema-and-kyrgyz-slice.md` for the domain model and architecture.
 
-`docs/STATUS.md` tracks plan status and the prioritized handoff backlog — update it whenever a plan lands or a listed gap changes. `docs/design.md` is the requirements + design-decision index — update it whenever a plan adds, amends, or retires a requirement or decision. `docs/specs/` holds self-contained implementer specs for backlog items — implement them via `/delegate` without reopening their design, sliced to the context budget pinned in `docs/design.md` (~40k tokens of required reading, no single file over ~1500 lines).
+`docs/STATUS.md` tracks plan status and the prioritized handoff backlog — update it whenever a plan lands or a listed gap changes. `docs/design.md` is the requirements + design-decision index — update it whenever a plan adds, amends, or retires a requirement or decision. Content beyond the frozen `content/` seed lives on the Supabase backend: check a Book out with `scripts/content-checkout.sh <book-id>` into the git-ignored `content.local/`, and see `supabase/README.md` for the validate-and-publish steps.
+
+`docs/specs/` holds self-contained implementer specs for backlog items — implement them via `/delegate` without reopening their design, sliced to the context budget pinned in `docs/design.md` (~40k tokens of required reading, no single file over ~1500 lines).

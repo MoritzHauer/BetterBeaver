@@ -87,10 +87,7 @@ function renderBookScreen(onSelectLesson: (lessonId: string) => void) {
       store={store}
       epoch={0}
       onSelectLesson={onSelectLesson}
-      onPracticeTask={() => {}}
       onPlay={() => {}}
-      onReview={() => {}}
-      onVocabulary={() => {}}
       onSelectExam={() => undefined}
       onBack={() => {}}
     />,

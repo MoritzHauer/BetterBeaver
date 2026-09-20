@@ -1,5 +1,3 @@
-import { ADHOC_MODES, type AdhocMode } from "@betterbeaver/engine";
-
 /**
  * The app's routes, and the URL they read and write.
  *
@@ -30,7 +28,7 @@ import { ADHOC_MODES, type AdhocMode } from "@betterbeaver/engine";
  *   #/books/demo/lessons/l1/units/u1/tasks/t1
  *   #/books/demo/lessons/l1/summary
  *   #/books/demo/exams/dx-exam-mock       an exam  (?q=…, ?end=1)
- *   #/domains/demo/review | /vocab | /study?mode=recall&items=a,b
+ *   #/domains/demo/review
  *   #/library #/author #/settings #/stats #/about #/impressum #/privacy
  *
  * `?edit=1` rides on the three learner routes (edit mode is a flag on the
@@ -134,11 +132,9 @@ export type Screen =
   // Lesson summary (plan 0020 §5): shown after the unit session that
   // completed the lesson. Derived tiles only — nothing is persisted for it.
   | { screen: "lesson-summary"; bookId: string; lessonId: string }
-  // Review, Vocabulary, and ad-hoc study are domain-scoped (plan 0006): the
+  // Daily Review is domain-scoped (plan 0006): the
   // review queue, lists, and streak all key on the domain now, not the book.
   | { screen: "review"; domainId: string }
-  | { screen: "vocab"; domainId: string }
-  | { screen: "adhoc"; domainId: string; mode: AdhocMode; itemIds: string[] }
   // Library (plan 0015): browse the full catalog and Add a Book. Entered
   // from My Books; back returns there.
   | { screen: "library" }
@@ -224,14 +220,6 @@ export function toPath(view: View): string {
       })}`;
     case "review":
       return `/domains/${screen.domainId}/review${flags({ sheet })}`;
-    case "vocab":
-      return `/domains/${screen.domainId}/vocab`;
-    case "adhoc":
-      return `/domains/${screen.domainId}/study${flags({
-        mode: screen.mode,
-        items: screen.itemIds.join(","),
-        sheet,
-      })}`;
     default:
       return `/${screen.screen}`;
   }
@@ -246,10 +234,6 @@ const SIMPLE = new Set([
   "settings",
   "stats",
 ]);
-
-function isAdhocMode(value: string): value is AdhocMode {
-  return (ADHOC_MODES as readonly string[]).includes(value);
-}
 
 /**
  * The view a hash path describes, or `null` when it describes nothing this
@@ -374,22 +358,6 @@ export function fromPath(path: string): View | null {
     const domainId = rest[0];
     if (rest[1] === "review") {
       return view({ screen: "review", domainId });
-    }
-    if (rest[1] === "vocab") {
-      return view({ screen: "vocab", domainId });
-    }
-    if (rest[1] === "study") {
-      const mode = query.get("mode") ?? "";
-      if (!isAdhocMode(mode)) {
-        return null;
-      }
-      const items = query.get("items");
-      return view({
-        screen: "adhoc",
-        domainId,
-        mode,
-        itemIds: items === null || items === "" ? [] : items.split(","),
-      });
     }
     return null;
   }
