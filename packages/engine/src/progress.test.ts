@@ -84,7 +84,7 @@ function completed(...unitIds: string[]): Map<string, UnitProgress> {
   return new Map(
     unitIds.map((id) => [
       id,
-      { percent: 100, started: 1, total: 1, complete: true },
+      { percent: 100, seenPercent: 100, started: 1, total: 1, complete: true },
     ]),
   );
 }
@@ -145,6 +145,7 @@ describe("unitProgressByBook (plan 0025 §8)", () => {
     ]);
     expect(unitProgressByBook(content, states).get(unit.id)).toEqual({
       percent: 50,
+      seenPercent: 100,
       started: 2,
       total: 2,
       complete: true,
@@ -175,37 +176,32 @@ describe("unitProgressByBook (plan 0025 §8)", () => {
     ).toBe(100);
   });
 
-  it("is complete when every word has been right once, not when it is mastered", () => {
-    // "You have been through this unit" and "you are done with this unit"
-    // are different facts. A unit read as complete at 10% is telling the
-    // truth twice.
-    const progress = unitProgressByBook(
-      content,
-      new Map([
-        [water.id, at(1)],
-        [bread.id, at(1)],
-      ]),
-    ).get(unit.id);
-    expect(progress).toEqual({
-      percent: 10,
-      started: 2,
-      total: 2,
+  it("is complete once 80% of the words have been seen, right or wrong", () => {
+    // Blue bar (seen) gates the next unit; green (levels) gates nothing.
+    const ids = ["a", "b", "c", "d", "e"].map((x) => `t-item-${x}`);
+    const fiveUnit = makeUnit({
+      id: "t-unit-five",
+      itemIds: ids,
+      taskIds: ["t-task-five"],
+    });
+    const fiveContent: Content = {
+      ...content,
+      units: [fiveUnit],
+      items: ids.map((id) => ({ ...water, id })),
+      tasks: [{ id: "t-task-five", type: "recall", itemIds: ids }],
+      notes: [],
+    };
+    const seen = (n: number) =>
+      unitProgressByBook(
+        fiveContent,
+        new Map(ids.slice(0, n).map((id) => [id, at(0)])),
+      ).get(fiveUnit.id);
+    expect(seen(3)).toMatchObject({ seenPercent: 60, complete: false });
+    expect(seen(4)).toMatchObject({
+      seenPercent: 80,
+      percent: 0,
       complete: true,
     });
-  });
-
-  it("is not complete while one word has never been right", () => {
-    // Stricter than the rule it replaces: a wrong answer counted as an
-    // attempt, and one answer marked a whole five-item task attempted.
-    const progress = unitProgressByBook(
-      content,
-      new Map([
-        [water.id, at(6)],
-        [bread.id, at(0)],
-      ]),
-    ).get(unit.id);
-    expect(progress?.started).toBe(1);
-    expect(progress?.complete).toBe(false);
   });
 
   it("does not count the unit's notes", () => {
@@ -218,6 +214,7 @@ describe("unitProgressByBook (plan 0025 §8)", () => {
     ]);
     expect(unitProgressByBook(content, states).get(unit.id)).toEqual({
       percent: 100,
+      seenPercent: 100,
       started: 2,
       total: 2,
       complete: true,
@@ -264,6 +261,7 @@ describe("unitProgressByBook (plan 0025 §8)", () => {
     });
     expect(unitProgressByBook(emptyContent, new Map()).get(empty.id)).toEqual({
       percent: 0,
+      seenPercent: 0,
       started: 0,
       total: 0,
       complete: true,

@@ -24,19 +24,27 @@ export interface UnitProgress {
    * the first session and keeps moving for weeks, and because §4 makes every
    * level reachable on any content, 100% is always attainable. */
   percent: number;
+  /** The blue bar: the share of words the learner has been asked at all
+   * (any SRS state, right or wrong), 0-100, rounded. Always >= `percent`,
+   * since an unseen word sits at level 0. */
+  seenPercent: number;
   /** Words answered correctly at least once — level 1 or above. */
   started: number;
   /** Words in the unit. A word here is a scheduling unit that carries a
    * level: an item, or one cloze blank. Never a note (§13). */
   total: number;
-  /** "You have been through this unit": every word at level >= 1. Stricter
-   * than the rule it replaces, which counted a *wrong* answer as an attempt
-   * and marked a whole five-item task attempted after a single question. */
+  /** "You have been through this unit": `seenPercent` >= `SEEN_TO_COMPLETE`.
+   * Gates the next unit's lock and decides what `nextUnit` returns. */
   complete: boolean;
 }
 
+/** The share of a unit's words that must have been seen before it reads
+ * complete and unlocks the next one. */
+export const SEEN_TO_COMPLETE = 80;
+
 const EMPTY_PROGRESS: UnitProgress = {
   percent: 0,
+  seenPercent: 0,
   started: 0,
   total: 0,
   complete: false,
@@ -90,11 +98,16 @@ export function unitProgressByBook(
   for (const unit of content.units) {
     let total = 0;
     let started = 0;
+    let seen = 0;
     let levelSum = 0;
     for (const itemId of unit.itemIds) {
       for (const word of wordsByItemId.get(itemId) ?? []) {
-        const level = wordLevel(states.get(word.id) ?? null, pace);
+        const state = states.get(word.id) ?? null;
+        const level = wordLevel(state, pace);
         total += 1;
+        if (state !== null) {
+          seen += 1;
+        }
         levelSum += level;
         if (level >= 1) {
           started += 1;
@@ -106,11 +119,13 @@ export function unitProgressByBook(
       legacyAttemptedTaskIds.size > 0 &&
       unit.taskIds.length > 0 &&
       unit.taskIds.every((taskId) => legacyAttemptedTaskIds.has(taskId));
+    const seenPercent = total === 0 ? 0 : Math.round((seen / total) * 100);
     progress.set(unit.id, {
       percent: total === 0 ? 0 : Math.round((levelSum / total) * 10),
+      seenPercent,
       started,
       total,
-      complete: started === total || legacy,
+      complete: total === 0 || seen * 100 >= SEEN_TO_COMPLETE * total || legacy,
     });
   }
   return progress;
@@ -175,8 +190,8 @@ export function itemLevelUnitIds(unit: Unit, content: Content): string[] {
     .map((schedulingUnit) => schedulingUnit.id);
 }
 
-/** True when every word of `unit` has been answered correctly at least once
- * (plan 0025 §8). Reads the sweep above rather than recomputing. */
+/** True when at least `SEEN_TO_COMPLETE`% of `unit`'s words have been seen.
+ * Reads the sweep above rather than recomputing. */
 export function isUnitComplete(
   unit: Unit,
   progress: ReadonlyMap<string, UnitProgress>,

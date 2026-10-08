@@ -265,9 +265,9 @@ describe("BookScreen", () => {
 
   it("still renders lesson cards with their progress in edit mode", () => {
     renderBook(makeSession().session);
-    // Both lessons have zero units, so both read "0%" — the progress text
+    // Both lessons have zero units, so both read "0% seen · 0% learned" — the progress text
     // that used to disappear behind the form editor's grey boxes.
-    expect(screen.getAllByText("0%")).toHaveLength(2);
+    expect(screen.getAllByText("0% seen · 0% learned")).toHaveLength(2);
   });
 
   it("edits the title in place, at its learner (heading) size", () => {
@@ -435,9 +435,9 @@ describe("LessonScreen", () => {
       content: build(withUnit),
     });
     renderLesson(session, withUnit);
-    // The untouched unit reads "0%" — the progress text that used to
+    // The untouched unit reads "0% seen · 0% learned" — the progress text that used to
     // disappear behind the form editor's grey boxes.
-    expect(screen.getByText("0%")).toBeTruthy();
+    expect(screen.getByText("0% seen · 0% learned")).toBeTruthy();
   });
 
   it("deletes a unit behind an undo toast that restores it", () => {

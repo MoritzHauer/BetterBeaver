@@ -737,6 +737,7 @@ main.session {
 }
 
 .progress-track {
+  position: relative;
   flex: 1;
   height: 0.6rem;
   border-radius: 999px;
@@ -751,6 +752,19 @@ main.session {
   /* --accent, not --primary: 3:1 against the track in light mode (F3). */
   background: var(--accent);
   transition: width 250ms ease;
+}
+
+/* Two-level bar: blue "seen" underneath, green "learned" on top. */
+.progress-seen,
+.progress-mastery {
+  position: absolute;
+  inset: 0 auto 0 0;
+}
+.progress-seen {
+  background: var(--vocab);
+}
+.progress-mastery {
+  background: var(--correct-border);
 }
 
 .question {

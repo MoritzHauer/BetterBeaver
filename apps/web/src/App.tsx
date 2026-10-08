@@ -2538,7 +2538,13 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
         ? new Map(
             shown.units.map((unit) => [
               unit.id,
-              { percent: 100, started: 0, total: 0, complete: true } as const,
+              {
+                percent: 100,
+                seenPercent: 100,
+                started: 0,
+                total: 0,
+                complete: true,
+              } as const,
             ]),
           )
         : unitProgress;
@@ -2586,7 +2592,13 @@ export function App({ contentInit }: { contentInit: ContentInit }) {
             ...unitProgress,
             [
               target.unitId,
-              { percent: 100, started: 0, total: 0, complete: true },
+              {
+                percent: 100,
+                seenPercent: 100,
+                started: 0,
+                total: 0,
+                complete: true,
+              },
             ] as const,
           ]),
         );

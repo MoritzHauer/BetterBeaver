@@ -149,7 +149,7 @@ function completed(...unitIds: string[]): ReadonlyMap<string, UnitProgress> {
   return new Map(
     unitIds.map((id) => [
       id,
-      { percent: 100, started: 0, total: 0, complete: true },
+      { percent: 100, seenPercent: 100, started: 0, total: 0, complete: true },
     ]),
   );
 }

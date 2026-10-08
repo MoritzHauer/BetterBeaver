@@ -392,17 +392,19 @@ export function BookScreen({
           // The lesson's bar is the mean of its units' bars (plan 0025 §8),
           // so it moves for the same reason theirs do — where the old
           // "2 of 5 units complete" only ever moved five times.
-          const unitPercents = lesson.unitIds.flatMap((id) => {
+          const unitProgresses = lesson.unitIds.flatMap((id) => {
             const progress = unitProgress.get(id);
-            return progress === undefined ? [] : [progress.percent];
+            return progress === undefined ? [] : [progress];
           });
-          const percent =
-            unitPercents.length === 0
+          const mean = (pick: (p: UnitProgress) => number) =>
+            unitProgresses.length === 0
               ? 0
               : Math.round(
-                  unitPercents.reduce((sum, value) => sum + value, 0) /
-                    unitPercents.length,
+                  unitProgresses.reduce((sum, p) => sum + pick(p), 0) /
+                    unitProgresses.length,
                 );
+          const percent = mean((p) => p.percent);
+          const seenPercent = mean((p) => p.seenPercent);
           if (edit !== null) {
             const raw = edit.rawLesson(lesson.id) ?? { id: lesson.id };
             // The card can't stay one big <button> once it holds inputs, so
@@ -445,7 +447,11 @@ export function BookScreen({
                   problems={edit.fieldProblems(lesson.id, "goal")}
                 />
                 <ProblemMarker problems={edit.entityProblems(lesson.id)} />
-                <LockableProgress unlocked={unlocked} percent={percent} />
+                <LockableProgress
+                  unlocked={unlocked}
+                  percent={percent}
+                  seenPercent={seenPercent}
+                />
                 <RowActions
                   onUp={() => edit.moveLesson(lesson.id, -1)}
                   onDown={() => edit.moveLesson(lesson.id, 1)}
@@ -505,6 +511,7 @@ export function BookScreen({
                 <LockableProgress
                   unlocked={unlocked}
                   percent={percent}
+                  seenPercent={seenPercent}
                   due={dueByLesson.get(lesson.id)}
                 />
               </button>

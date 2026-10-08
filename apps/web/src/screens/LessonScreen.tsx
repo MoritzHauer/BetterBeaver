@@ -259,6 +259,7 @@ export function LessonScreen({
           const unlocked = isUnitUnlocked(unit, units, unitProgress);
           const complete = isUnitComplete(unit, unitProgress);
           const percent = unitProgress.get(unit.id)?.percent ?? 0;
+          const seenPercent = unitProgress.get(unit.id)?.seenPercent ?? 0;
           if (edit !== null) {
             const raw = edit.rawUnit(unit.id) ?? { id: unit.id };
             // The card can't stay one big <button> once it holds inputs, so
@@ -296,7 +297,11 @@ export function LessonScreen({
                 {/* A brand-new unit reads "unit has zero tasks" straight
                     away; slice 8's Exercises page is where that resolves. */}
                 <ProblemMarker problems={edit.entityProblems(unit.id)} />
-                <LockableProgress unlocked={unlocked} percent={percent} />
+                <LockableProgress
+                  unlocked={unlocked}
+                  percent={percent}
+                  seenPercent={seenPercent}
+                />
                 <RowActions
                   onUp={() => edit.moveUnit(unit.id, -1)}
                   onDown={() => edit.moveUnit(unit.id, 1)}
@@ -349,6 +354,7 @@ export function LessonScreen({
                 <LockableProgress
                   unlocked={unlocked}
                   percent={percent}
+                  seenPercent={seenPercent}
                   due={dueByUnit.get(unit.id)}
                 />
               </button>
