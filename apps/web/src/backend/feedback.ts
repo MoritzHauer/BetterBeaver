@@ -12,6 +12,13 @@ export type ContentKind =
   "topic" | "lesson" | "unit" | "item" | "task" | "note";
 export type ReportCategory = "error" | "explicit" | "spam" | "feedback";
 
+/** One votable piece of content, addressed in the document that owns it. */
+export interface FeedbackTarget {
+  docId: string;
+  contentKind: ContentKind;
+  contentId: string;
+}
+
 export interface ChatMessage {
   id: string;
   doc_id: string;

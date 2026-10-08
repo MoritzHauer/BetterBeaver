@@ -6,6 +6,7 @@ import type { TapLookup } from "../components/TappableText";
 import { playCorrect, playWrong } from "../sounds";
 import { noteStorageUnwritable } from "../storage-health";
 import { FeedbackWidget } from "../components/FeedbackWidget";
+import type { FeedbackTarget } from "../backend/feedback";
 import { BookWatermark } from "../components/BookWatermark";
 import { Sheet } from "../components/Sheet";
 import { SKIP_DAYS, getLearning, type SkipLength } from "../learning";
@@ -110,6 +111,7 @@ export function SessionScreen({
   onTogglePin,
   onSkip,
   onEdit,
+  feedbackFor,
   onGrade,
   onFinished,
   nextAction,
@@ -149,6 +151,10 @@ export function SessionScreen({
    * `taskIds` — unlike Pin, it renders in `TaskSession`/`ReviewSession` too,
    * not just pooled unit sessions. */
   onEdit?: (index: number) => void;
+  /** What the 👍/👎 in the header is about for question *index*: the card's
+   * own item, so a vote names the card rather than the task it came from.
+   * `undefined` hides the widget (no prop, or nothing votable — a note). */
+  feedbackFor?: (index: number) => FeedbackTarget | undefined;
   onGrade: (unitId: string, quality: Quality) => Promise<void>;
   onFinished: (summary: SessionSummary) => void;
   /** Plan 0020 §4: an optional forward step shown as the summary's primary
@@ -285,6 +291,7 @@ export function SessionScreen({
   }
 
   const currentTaskId = source === undefined ? undefined : taskIds?.[source];
+  const feedback = source === undefined ? undefined : feedbackFor?.(source);
   // No longer gated on `currentTaskId`: Pin still is (it is a unit-practice
   // control), but Skip lives in review sessions, which pass no `taskIds`.
   const currentUnitIds =
@@ -395,11 +402,11 @@ export function SessionScreen({
             Edit
           </button>
         ) : null}
-        {currentTaskId !== undefined ? (
+        {feedback !== undefined ? (
+          // Keyed so the widget re-reads the device's vote for each card.
           <FeedbackWidget
-            docId={`topic:${bookId}`}
-            contentKind="task"
-            contentId={currentTaskId}
+            key={`${feedback.docId}/${feedback.contentKind}/${feedback.contentId}`}
+            {...feedback}
           />
         ) : null}
       </header>
