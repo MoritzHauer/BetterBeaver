@@ -9,6 +9,7 @@ import type {
   Unit,
 } from "@betterbeaver/schema";
 import { contentIdOf, documentId } from "@betterbeaver/schema";
+import type { FeedbackTarget } from "./backend/feedback";
 import type {
   ContentSource,
   DomainContent,
@@ -176,6 +177,59 @@ function itemEditTarget(
   return { docId: documentId("topic", bookId), target: { itemId } };
 }
 
+/** The header 👍/👎's target for one question (plan 0014), so the authoring
+ * loop can tell which card was bad: the card's item, in the document that
+ * owns it (`itemEditTarget`). A matching board is one question over several
+ * items, so it votes on its task instead, when that is known. */
+function questionFeedback(
+  question: Question | undefined,
+  taskId: string | undefined,
+  bookId: string,
+  domainId: string,
+  kindOf: (itemId: string) => string | undefined,
+  bookIdForItem: (itemId: string) => string | undefined,
+): FeedbackTarget | undefined {
+  if (question === undefined || question.kind === "note") {
+    return undefined;
+  }
+  if (question.kind === "matching") {
+    return taskId === undefined
+      ? undefined
+      : {
+          docId: documentId("topic", bookId),
+          contentKind: "task",
+          contentId: taskId,
+        };
+  }
+  const itemId = itemIdFromUnitId(question.unitId);
+  const resolved = itemEditTarget(
+    itemId,
+    kindOf(itemId),
+    domainId,
+    bookIdForItem,
+  );
+  return resolved === undefined
+    ? undefined
+    : { docId: resolved.docId, contentKind: "item", contentId: itemId };
+}
+
+/** `questionFeedback` for a session over one Book's `content`. */
+function bookFeedback(
+  questions: Question[],
+  content: Content,
+  taskIdAt: (index: number) => string | undefined,
+): (index: number) => FeedbackTarget | undefined {
+  return (index) =>
+    questionFeedback(
+      questions[index],
+      taskIdAt(index),
+      content.topic.id,
+      content.topic.domainId,
+      (id) => content.items.find((item) => item.id === id)?.kind,
+      () => content.topic.id,
+    );
+}
+
 /**
  * A deterministic `rng` for the session builders, seeded from the session's
  * own id. This is what lets the three `useMemo`s below depend on `content`
@@ -312,6 +366,7 @@ function TaskSession({
       title={task.instructions ?? `${task.type} practice`}
       questions={questions}
       bookId={content.topic.id}
+      feedbackFor={bookFeedback(questions, content, () => task.id)}
       lookup={lookup}
       onEdit={onEdit}
       onGrade={handleGrade}
@@ -407,6 +462,7 @@ function ExamPracticeSession({
       title="Falsche Fragen üben"
       questions={questions}
       bookId={content.topic.id}
+      feedbackFor={bookFeedback(questions, content, () => undefined)}
       lookup={lookup}
       onGrade={handleGrade}
       onFinished={onDone}
@@ -463,6 +519,7 @@ export function ExamReviewSession({
       title={`Review: ${exam.title}`}
       questions={questions}
       bookId={content.topic.id}
+      feedbackFor={bookFeedback(questions, content, () => undefined)}
       lookup={lookup}
       onGrade={handleGrade}
       onFinished={onDone}
@@ -758,6 +815,7 @@ function UnitSession({
       title={unit.title}
       questions={questions}
       bookId={content.topic.id}
+      feedbackFor={bookFeedback(questions, content, (index) => taskIds[index])}
       lookup={lookup}
       taskIds={taskIds}
       pinnedUnitIds={pinnedUnitIds}
@@ -818,6 +876,7 @@ function RecallSession({
       title={`Remember: ${linkedUnit.title}`}
       questions={questions}
       bookId={content.topic.id}
+      feedbackFor={bookFeedback(questions, content, () => undefined)}
       lookup={lookup}
       onGrade={handleGrade}
       onFinished={onDone}
@@ -983,6 +1042,11 @@ export function CheckSession({
       title="Check"
       questions={questions.map((q) => q.question)}
       bookId={content.topic.id}
+      feedbackFor={bookFeedback(
+        questions.map((q) => q.question),
+        content,
+        () => undefined,
+      )}
       lookup={lookup}
       onGrade={handleGrade}
       onFinished={onDone}
@@ -1219,6 +1283,16 @@ function ReviewSession({
       title="Daily Review"
       questions={questions}
       bookId={bookId}
+      feedbackFor={(index) =>
+        questionFeedback(
+          questions[index],
+          undefined,
+          bookId,
+          domainId,
+          (id) => domainContent.entries.find((entry) => entry.id === id)?.kind,
+          (id) => itemBookId.get(id),
+        )
+      }
       lookup={lookup}
       onEdit={onEdit}
       onGrade={handleGrade}
