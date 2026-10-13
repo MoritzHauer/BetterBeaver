@@ -782,6 +782,60 @@ main.session {
   line-height: 1;
 }
 
+/* The session bar is the header's main element: thicker than the shared
+ * track, and with Pin/Edit/feedback behind ⋮ it gets the width too. */
+.session-header .progress-track {
+  height: 1rem;
+}
+
+.session-menu {
+  position: relative;
+}
+
+.session-menu-toggle {
+  min-width: 44px;
+  min-height: 44px;
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+.session-menu-panel {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.25rem;
+  min-width: 11rem;
+  padding: 0.5rem;
+  border: 1px solid var(--card-border);
+  border-radius: 0.75rem;
+  background: var(--card-bg);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+}
+
+.session-menu-panel[hidden] {
+  display: none;
+}
+
+.session-menu-panel > button {
+  text-align: left;
+  min-height: 44px;
+}
+
+.session-menu-panel .feedback-widget {
+  justify-content: space-between;
+  padding-top: 0.25rem;
+  border-top: 1px solid var(--card-border);
+}
+
+.session-menu-panel .feedback-vote {
+  min-width: 44px;
+  min-height: 44px;
+}
+
 /* Skip (plan 0022 §5) opens its length sheet on long-press, which iOS would
    otherwise interrupt with its own text-selection callout. */
 .skip {
