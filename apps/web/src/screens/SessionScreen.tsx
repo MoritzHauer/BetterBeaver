@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Question, QuestionOutcome, Streak } from "@betterbeaver/engine";
 import type { Quality, SelfGrade } from "@betterbeaver/srs";
 import { recallQuality, recognizeQuality } from "@betterbeaver/srs";
@@ -7,6 +7,7 @@ import { playCorrect, playWrong } from "../sounds";
 import { noteStorageUnwritable } from "../storage-health";
 import { FeedbackWidget } from "../components/FeedbackWidget";
 import type { FeedbackTarget } from "../backend/feedback";
+import { getSupabase } from "../backend/supabase";
 import { BookWatermark } from "../components/BookWatermark";
 import { Sheet } from "../components/Sheet";
 import { SKIP_DAYS, getLearning, type SkipLength } from "../learning";
@@ -83,6 +84,59 @@ const SKIP_SHEET_OPTIONS: { skip: SkipLength; label: string }[] = [
   { skip: "month", label: "1 month" },
   { skip: "year", label: "1 year" },
 ];
+
+/**
+ * The session header's ⋮ overflow menu: Pin, Edit and the 👍/👎/report
+ * widget. The panel is hidden rather than unmounted when closed, so the
+ * report sheet a flag tap opens (portalled to `body`) survives the menu
+ * closing under it. A tap anywhere outside closes it; Pin and Edit close it
+ * too, since they are one-shot actions — a vote leaves it open to show the
+ * pressed state.
+ */
+function SessionMenu({ children }: { children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    function onPointerDown(event: PointerEvent) {
+      if (!ref.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [open]);
+
+  return (
+    <div className="session-menu" ref={ref}>
+      <button
+        className="plain session-menu-toggle"
+        aria-label="More options"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        ⋮
+      </button>
+      <div
+        className="session-menu-panel"
+        hidden={!open}
+        onClick={(event) => {
+          if (
+            event.target instanceof Element &&
+            event.target.closest(".session-menu-panel > button") !== null
+          ) {
+            setOpen(false);
+          }
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
 
 /**
  * Runs one task, review, or pooled unit-practice session: presents
@@ -300,6 +354,15 @@ export function SessionScreen({
     currentUnitIds.length > 0 &&
     currentUnitIds.every((id) => pinnedUnitIds?.has(id));
 
+  // The card's secondary controls live behind the ⋮ menu, so the progress
+  // bar keeps the header's width. The menu renders only when one applies;
+  // the feedback widget renders nothing without a backend.
+  const showPin = currentTaskId !== undefined;
+  const showEdit =
+    onEdit !== undefined && question !== undefined && question.kind !== "note";
+  const showFeedback = feedback !== undefined && getSupabase() !== null;
+  const hasMenu = showPin || showEdit || showFeedback;
+
   // One place decides what the bar reads: a drill counts *correct answers
   // owed*, which stalls on a miss instead of growing (plan 0025 §6); a
   // fixed session counts cards.
@@ -348,19 +411,6 @@ export function SessionScreen({
             }}
           />
         </div>
-        {currentTaskId !== undefined ? (
-          <button
-            className="plain"
-            onClick={() => onTogglePin?.(currentUnitIds)}
-          >
-            <img
-              className="icon-glyph"
-              src={`${import.meta.env.BASE_URL}art/icons/pin.png`}
-              alt=""
-            />{" "}
-            {isPinned ? "Pinned" : "Pin"}
-          </button>
-        ) : null}
         {onSkip !== undefined && !done && currentUnitIds.length > 0 ? (
           <button
             className="plain skip"
@@ -390,24 +440,40 @@ export function SessionScreen({
             onSkip={(skip) => void skipCurrent(skip)}
           />
         ) : null}
-        {onEdit !== undefined &&
-        question !== undefined &&
-        question.kind !== "note" ? (
-          <button className="plain" onClick={() => onEdit(source ?? 0)}>
-            <img
-              className="icon-glyph"
-              src={`${import.meta.env.BASE_URL}art/icons/edit.png`}
-              alt=""
-            />{" "}
-            Edit
-          </button>
-        ) : null}
-        {feedback !== undefined ? (
-          // Keyed so the widget re-reads the device's vote for each card.
-          <FeedbackWidget
-            key={`${feedback.docId}/${feedback.contentKind}/${feedback.contentId}`}
-            {...feedback}
-          />
+        {hasMenu ? (
+          // Keyed so each card starts with the menu closed.
+          <SessionMenu key={position}>
+            {showPin ? (
+              <button
+                className="plain"
+                onClick={() => onTogglePin?.(currentUnitIds)}
+              >
+                <img
+                  className="icon-glyph"
+                  src={`${import.meta.env.BASE_URL}art/icons/pin.png`}
+                  alt=""
+                />{" "}
+                {isPinned ? "Pinned" : "Pin"}
+              </button>
+            ) : null}
+            {showEdit ? (
+              <button className="plain" onClick={() => onEdit?.(source ?? 0)}>
+                <img
+                  className="icon-glyph"
+                  src={`${import.meta.env.BASE_URL}art/icons/edit.png`}
+                  alt=""
+                />{" "}
+                Edit
+              </button>
+            ) : null}
+            {showFeedback ? (
+              // Keyed so the widget re-reads the device's vote for each card.
+              <FeedbackWidget
+                key={`${feedback.docId}/${feedback.contentKind}/${feedback.contentId}`}
+                {...feedback}
+              />
+            ) : null}
+          </SessionMenu>
         ) : null}
       </header>
       {/* The session's title (a unit, a task, "Daily Review") is context,

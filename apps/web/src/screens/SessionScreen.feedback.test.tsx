@@ -69,6 +69,7 @@ describe("session feedback", () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole("button", { name: "More options" }));
     fireEvent.click(screen.getByRole("button", { name: "Thumbs down" }));
     expect(rpc).toHaveBeenCalledWith(
       "cast_vote",
@@ -82,6 +83,7 @@ describe("session feedback", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Skip/ }));
     expect(await screen.findByText("b")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "More options" }));
     expect(
       screen
         .getByRole("button", { name: "Thumbs down" })
@@ -101,6 +103,7 @@ describe("session feedback", () => {
         onExit={() => {}}
       />,
     );
+    expect(screen.queryByRole("button", { name: "More options" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Thumbs down" })).toBeNull();
   });
 });

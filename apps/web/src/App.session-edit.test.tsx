@@ -152,7 +152,8 @@ describe("session Edit button", () => {
     const question = container.querySelector(".question")?.textContent ?? "";
     expect(question).not.toBe("");
 
-    screen.getByRole("button", { name: /Edit/ }).click();
+    screen.getByRole("button", { name: "More options" }).click();
+    (await screen.findByRole("button", { name: /Edit/ })).click();
     await screen.findByRole("dialog");
 
     // Still mounted — this is what carries the session's shuffle and
@@ -173,7 +174,8 @@ describe("session Edit button", () => {
     render(<App contentInit={contentInit} />);
     await startUnitSession();
 
-    screen.getByRole("button", { name: /Edit/ }).click();
+    screen.getByRole("button", { name: "More options" }).click();
+    (await screen.findByRole("button", { name: /Edit/ })).click();
     const sheet = await screen.findByRole("dialog");
 
     // Scoped (decision 13): the tapped entity's own fields, and none of the
@@ -200,7 +202,8 @@ describe("session Edit button", () => {
     const before = container.querySelector(".question")?.textContent ?? "";
     expect(before).not.toBe("");
 
-    screen.getByRole("button", { name: /Edit/ }).click();
+    screen.getByRole("button", { name: "More options" }).click();
+    (await screen.findByRole("button", { name: /Edit/ })).click();
     const sheet = await screen.findByRole("dialog");
     // The kind's first field, which is the one the board renders from
     // whichever kind the draw landed on: a `concept`'s Term, a `sentence`'s
@@ -252,7 +255,8 @@ describe("session Edit button", () => {
     // their rng from the unit id precisely so that rebuild is positionally
     // identical — without it the author would be thrown to a different
     // question, which is why the content was frozen in the first place.
-    screen.getByRole("button", { name: /Edit/ }).click();
+    screen.getByRole("button", { name: "More options" }).click();
+    (await screen.findByRole("button", { name: /Edit/ })).click();
     await screen.findByRole("dialog");
     screen.getByRole("button", { name: "Back to the question" }).click();
     await waitFor(() => {
