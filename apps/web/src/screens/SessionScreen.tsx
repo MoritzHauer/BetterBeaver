@@ -11,7 +11,7 @@ import { BookWatermark } from "../components/BookWatermark";
 import { Sheet } from "../components/Sheet";
 import { SKIP_DAYS, getLearning, type SkipLength } from "../learning";
 import { SWIPE_THRESHOLD } from "./UnitScreen";
-import { renderInteraction } from "./session/interactions";
+import { questionInstruction, renderInteraction } from "./session/interactions";
 import {
   useSessionQueue,
   type SessionOutcome,
@@ -410,7 +410,14 @@ export function SessionScreen({
           />
         ) : null}
       </header>
-      <h1>{title}</h1>
+      {/* The session's title (a unit, a task, "Daily Review") is context,
+       * not the question: it sits small above a per-card instruction that
+       * says what this card asks — a unit title says nothing about whether
+       * to match, pick, or type. */}
+      <h1 className="session-title">{title}</h1>
+      {!done && question !== undefined ? (
+        <h2 className="session-instruction">{questionInstruction(question)}</h2>
+      ) : null}
 
       {done ? (
         <SummaryPanel
