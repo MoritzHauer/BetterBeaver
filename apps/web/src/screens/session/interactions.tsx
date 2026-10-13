@@ -576,7 +576,23 @@ function ScrambleInteraction({
   );
 }
 
-/** Two columns (prompts, answers); every selection-pair is appended to a
+/** Answer length (characters) past which a matching board stops being two
+ * side-by-side columns. A gloss fits half a phone's width; a definition does
+ * not — at half width it wraps to eight lines a card and pushes the board
+ * off-screen. */
+const STACKED_MATCHING_CHARS = 40;
+
+/** Whether a board's answers read as definitions rather than glosses: then
+ * the short terms go on top as a wrapping row of chips that stays in view
+ * (sticky) while the definitions below take the full width. */
+function isStackedMatching(question: MatchingQuestion): boolean {
+  return question.answers.some(
+    (answer) => answer.text.length > STACKED_MATCHING_CHARS,
+  );
+}
+
+/** Two columns (prompts, answers) — stacked for definition-length answers,
+ * see `isStackedMatching`; every selection-pair is appended to a
  * history array and re-checked via `matchingOutcomes` — a non-null result
  * clears the board and applies every outcome at once. Per-pair feedback is
  * sound + card color; the action bar appears once the board clears.
@@ -646,10 +662,11 @@ function MatchingBoard({
     }
   }
 
+  const stacked = isStackedMatching(question);
   return (
     <div>
-      <div className="matching-board">
-        <ul className="card-list">
+      <div className={`matching-board${stacked ? " stacked" : ""}`}>
+        <ul className={stacked ? "matching-terms" : "card-list"}>
           {question.prompts.map((prompt, index) => {
             const cleared = clearedPrompts.has(index);
             return (
@@ -676,7 +693,7 @@ function MatchingBoard({
             );
           })}
         </ul>
-        <ul className="card-list">
+        <ul className={`card-list${stacked ? " matching-definitions" : ""}`}>
           {question.answers.map((answer, index) => (
             <li
               key={index}
@@ -795,6 +812,51 @@ function AuthoredQuestionView({
       )}
     </>
   );
+}
+
+/**
+ * The one-line instruction shown above a card: what the learner is asked to
+ * do, which the session title (a unit or task name) does not say. Authored
+ * questions carry their own stem, so they get only the count to pick.
+ */
+export function questionInstruction(question: Question): string {
+  switch (question.kind) {
+    case "recognize":
+      return "Pick the matching meaning";
+    case "recall":
+      return "Do you remember this?";
+    case "cloze":
+      return "Fill in the gap";
+    case "dictation":
+      return "Type what you hear";
+    case "scramble":
+      return "Put the words in order";
+    case "build":
+      return "Build the sentence";
+    case "matching":
+      return "Match the pairs";
+    case "listen":
+      return "What did you hear?";
+    case "shadowing":
+      return "Listen and repeat aloud";
+    case "minimal-pair":
+      return "Which one did you hear?";
+    case "picture":
+      return "What is in the picture?";
+    case "note":
+      return "Do you remember this note?";
+    case "write":
+      return "Type the matching term";
+    case "choice":
+      return question.selectCount === 1
+        ? "Choose one answer"
+        : `Choose ${question.selectCount} answers`;
+    case "assign":
+      return "Sort each statement";
+    default:
+      question satisfies never;
+      throw new Error(`unknown question kind: ${(question as Question).kind}`);
+  }
 }
 
 /** Renders the interaction for one question, per the plan's per-kind table.
