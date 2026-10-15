@@ -161,9 +161,10 @@ export interface BuildQuestion {
  * The human-readable "choose the three that fit best" belongs in the task's
  * `instructions`.
  *
- * Option order is the authored order, deliberately not shuffled: a question
- * then reads the same in practice as in the exam, and an author can rely on
- * "all of the above" style ordering. Auto-graded via `checkChoiceAnswer`.
+ * Option order here is the authored order and every index refers to it; the
+ * web boards shuffle only what they display (owner, 2026-10-15), so grading
+ * and stored exam answers never depend on a shuffle. Auto-graded via
+ * `checkChoiceAnswer`.
  */
 export interface ChoiceQuestion {
   kind: "choice";

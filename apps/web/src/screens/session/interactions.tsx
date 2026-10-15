@@ -748,6 +748,8 @@ function AuthoredQuestionView({
     question.kind === "assign" ? question.rows.map(() => null) : [],
   );
   const [checked, setChecked] = useState<boolean | null>(null);
+  // Fresh per card, so a question met again lists its options in a new order.
+  const [shuffleSalt] = useState(() => String(Math.random()));
 
   // Answering every row / picking the full count is required before Check:
   // in practice an incomplete answer grades as wrong, and letting a stray
@@ -780,6 +782,7 @@ function AuthoredQuestionView({
           reveal={checked !== null}
           disabled={checked !== null}
           whys={checked !== null ? question.whys : undefined}
+          shuffleSalt={shuffleSalt}
         />
       ) : (
         <AssignBoard
@@ -789,6 +792,7 @@ function AuthoredQuestionView({
           reveal={checked !== null}
           disabled={checked !== null}
           whys={checked !== null ? question.whys : undefined}
+          shuffleSalt={shuffleSalt}
         />
       )}
       {checked !== null ? (

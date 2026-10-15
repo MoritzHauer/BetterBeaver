@@ -47,9 +47,9 @@ const TICK_MS = 1000;
 /** Builds every exam question once, keyed by its entry's `taskId`.
  *
  * The rng is never consumed — neither builder samples or shuffles, and
- * option order is the authored order (plan 0027 §5) — so an exam renders
- * identically on every visit without storing anything about how it was
- * built. */
+ * option order is the authored order (plan 0027 §5); the boards' display
+ * shuffle is seeded from the stem — so an exam renders identically on every
+ * visit without storing anything about how it was built. */
 export function buildExamQuestions(
   exam: Exam,
   content: Content,

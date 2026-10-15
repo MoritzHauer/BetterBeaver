@@ -12,8 +12,49 @@
  * `reveal` is the only concession to the difference: absent, nothing is
  * marked; present, the authored truth is shown against what was chosen.
  */
-import type { CSSProperties } from "react";
-import type { AssignQuestion, ChoiceQuestion } from "@betterbeaver/engine";
+import { useMemo, type CSSProperties } from "react";
+import {
+  shuffle,
+  type AssignQuestion,
+  type ChoiceQuestion,
+} from "@betterbeaver/engine";
+
+/**
+ * The order a board lists its options in, as authored indices.
+ *
+ * Authored content tends to put the correct options first (owner,
+ * 2026-10-15: "the first k are correct, the others false"; an `assign`
+ * task alternates its labels the same way), so the authored order leaks
+ * the answer. The board therefore shuffles what it *shows* — and only that:
+ * selection, grading, `whys` and stored exam answers all stay in authored
+ * indices, so nothing persisted depends on the shuffle.
+ *
+ * Seeded from the stem plus `salt`, not drawn fresh: the same question with
+ * the same salt lists its options in the same order on every render and
+ * every visit, which keeps an exam stable across navigation, reload and its
+ * review. Practice passes a per-card random salt so repeats reorder.
+ */
+function useDisplayOrder(stem: string, length: number, salt: string): number[] {
+  return useMemo(() => {
+    // FNV-1a over the seed text, then mulberry32 as the shuffle's rng.
+    let hash = 0x811c9dc5;
+    for (const char of `${salt}\u0000${stem}`) {
+      hash = Math.imul(hash ^ char.codePointAt(0)!, 0x01000193);
+    }
+    let state = hash >>> 0;
+    const rng = () => {
+      state = (state + 0x6d2b79f5) >>> 0;
+      let t = state;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    return shuffle(
+      Array.from({ length }, (_, index) => index),
+      rng,
+    );
+  }, [stem, length, salt]);
+}
 
 /**
  * A select-n board. Selection is capped at `selectCount` (plan 0027 §4):
@@ -56,6 +97,7 @@ export function ChoiceBoard({
   reveal = false,
   disabled = false,
   whys,
+  shuffleSalt = "",
 }: {
   question: ChoiceQuestion;
   selected: readonly number[];
@@ -66,8 +108,15 @@ export function ChoiceBoard({
    * Rendered only once `reveal` is true — before that, the answer itself is
    * still hidden, so its reasoning has to be too. */
   whys?: readonly (string | undefined)[];
+  /** Varies the displayed option order; see `useDisplayOrder`. */
+  shuffleSalt?: string;
 }) {
   const correct = new Set(question.correctIndices);
+  const order = useDisplayOrder(
+    question.stem,
+    question.choices.length,
+    shuffleSalt,
+  );
 
   function toggle(index: number) {
     if (selected.includes(index)) {
@@ -89,7 +138,8 @@ export function ChoiceBoard({
           : `Choose ${question.selectCount}. (${selected.length}/${question.selectCount})`}
       </p>
       <ul className="card-list">
-        {question.choices.map((choice, index) => {
+        {order.map((index) => {
+          const choice = question.choices[index]!;
           const isSelected = selected.includes(index);
           const state = reveal
             ? correct.has(index)
@@ -138,6 +188,7 @@ export function AssignBoard({
   reveal = false,
   disabled = false,
   whys,
+  shuffleSalt = "",
 }: {
   question: AssignQuestion;
   chosen: readonly (number | null)[];
@@ -147,7 +198,15 @@ export function AssignBoard({
   /** Per-row reasons, aligned with `question.rows` (plan 0027 §5). Rendered
    * only once `reveal` is true, same as `ChoiceBoard`'s. */
   whys?: readonly (string | undefined)[];
+  /** Varies the displayed row order; see `useDisplayOrder`. */
+  shuffleSalt?: string;
 }) {
+  const order = useDisplayOrder(
+    question.stem,
+    question.rows.length,
+    shuffleSalt,
+  );
+
   function choose(row: number, labelIndex: number) {
     const next = question.rows.map((_, index) => chosen[index] ?? null);
     // Tapping the chosen label again clears the row, which is the only way
@@ -161,7 +220,8 @@ export function AssignBoard({
     <>
       <QuestionStem stem={question.stem} />
       <ul className="card-list assign-rows">
-        {question.rows.map((row, rowIndex) => {
+        {order.map((rowIndex) => {
+          const row = question.rows[rowIndex]!;
           const answer = chosen[rowIndex] ?? null;
           const correct = question.correctLabelIndex[rowIndex];
           const state = !reveal
