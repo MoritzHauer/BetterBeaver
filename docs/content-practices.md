@@ -60,12 +60,27 @@ Worth knowing while authoring, because it decides how much is enough:
 
 ## 7. Before it ships
 
-In this order, because each step is cheaper than the next:
+**First, the card review** (`/card-review <tree> <unit-id>…`, §8). It comes before the gates because its rewrites would invalidate every check after it. Then the gates, in this order, because each step is cheaper than the next:
 
 1. `BB_CONTENT_DIR=<tree> corepack pnpm exec vitest run packages/schema/src/content.test.ts` — the validator.
 2. `python3 scripts/overlap-check.py --book <source.md> --lehrplan <curriculum.txt> <tree>` — the own-words rule over **every** learner-visible string, questions and explanations included. Exit 0 or it does not ship.
    - **A transcribed exam is the one exception, and it narrows the candidates rather than the rule.** Its question text is reproduced verbatim under a licence, so it is not ours to reword and a run it shares with the textbook is not a finding. Point the blocking check at the authoring file instead (`content.local/authoring/<exam>.json`), which holds exactly our words — explanation, `why`, title, description — and must exit 0. Then run it over the tree too and confirm by hand that every remaining hit sits inside a verbatim field; a hit anywhere else is a real one.
    - Proper names a licence **requires**, such as the copyright holder's legal name, will trip an 8-word run. Reword around it — changing the word order is enough — rather than lowering `--n`, and never at the cost of the attribution itself.
-3. `python3 scripts/card-check.py <tree>` — a second model answers every card from its front alone (definition → term among the unit's siblings, question from the unit's notes, cloze from the gapped sentence), and plain checks catch a front that gives its answer away. A flagged card is rewritten, not argued with: AMBIGUOUS is usually right (Сен күтүп ___ really takes отурасың, жатасың or турасың). Watch the flag rate per batch; a rule that keeps causing flags belongs in this file. After shipping, the same loop runs on learners: `node scripts/pull-feedback.ts <tree>` lists every card that got a 👎 or an open report, next to its text.
+3. `python3 scripts/card-check.py <tree>` — a second model answers every card from its front alone (definition → term among the unit's siblings, question from the unit's notes, cloze from the gapped sentence), and plain checks catch a front that gives its answer away, or correct options that all stand out by length. A flagged card is rewritten, not argued with: AMBIGUOUS is usually right (Сен күтүп ___ really takes отурасың, жатасың or турасың). Watch the flag rate per batch; a rule that keeps causing flags belongs in this file. After shipping, the same loop runs on learners: `node scripts/pull-feedback.ts <tree>` lists every card that got a 👎 or an open report, next to its text.
 4. `node scripts/pack-bbbook.ts` + import in a **fresh** browser profile: play one session per new unit and one Check. A green validator proves the content is well-formed, never that it reads well.
 5. Only then republish, and record what shipped in the plan's implementation log.
+
+## 8. Fewer, better cards
+
+Every card that ships costs every learner reviews for as long as they keep the Book, so it has to earn them.
+
+`/card-review` holds the full checklist. It runs in a fresh agent that has not seen the drafting, because a second look by the author shares the first look's blind spots ([research](card-authoring-research-2026-10-16.md)). Draft against it:
+
+- **One thing per card.** A definition is also the back of a self-graded `recall` card, and with three facts on it the learner can't grade honestly. Keep the fact that tells the term apart. The rest goes into the note or the `example`.
+- **Sets become questions.** A list-shaped definition (four benefits, five kinds of stakeholder) is rewritten to the idea that unites the items. The list goes into a `choice` question, which judges each item on its own. A closed, named set that is itself the fact may stay.
+- **Terms, not headings.** "Architektur und Betrieb" tells a learner on `recall` nothing about what to retrieve. A split of responsibilities is an `assign` question, and an idea gets its real name.
+- **Taught and on-goal.** Every card retrieves something its unit's note teaches, as part of what the goal promises. Trivia such as founding years and counts goes into the note.
+- **Tell neighbours apart across the Book.** card-check sees one unit at a time, but interference builds up across units (`Kapselung` against `Information Hiding`). Give each card the clause that sets it apart, and contrast the pair in the note.
+- **A question asks what the cards can't.** Re-asking a definition the concept trio already drills wastes the question. Ask for an application, a distinction or a misconception, and avoid test-wise cues: the correct option the longest, "immer" only in distractors.
+- **A cut is a success.** On a first draft, a third or more of the cards not kept is normal. Don't pad to reach §1's range, and don't backfill after cuts. The §4 floors are the only counts that bind, and a bad card never stays to hold one.
+- **Facts stay with people.** The reviewer never rewrites a fact; a doubtful claim goes to the owner. Models both miss inverted facts and flag correct ones.
