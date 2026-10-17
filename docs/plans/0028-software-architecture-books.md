@@ -272,6 +272,10 @@ One line per unit as it ships: `L<n>.<m> · date · review k/n kept · overlap 0
 - L1.2 · 2026-10-17 · review 2/13 kept · overlap 0 · validate green · browser ✓
 - L1.3 · 2026-10-17 · review 2/13 kept · overlap 0 · validate green · browser ✓
 - L1.4 · 2026-10-17 · review 0/16 kept · overlap 0 · validate green · browser ✓
+- L2.1 · 2026-10-18 · review 6/10 kept · overlap 0 · validate green · browser ✓
+- L2.2 · 2026-10-18 · review 6/17 kept · overlap 0 · validate green · browser ✓
+- L2.3 · 2026-10-18 · review 5/13 kept · overlap 0 · validate green · browser ✓
+- **L2 and B2 shipped 2026-10-18** (owner-approved; `topic:softwarearchitektur` and `domain:sa` at version 4, schema 3, still listed). L2 is 27 concepts and 13 authored questions in 3 units, drafted fresh and put through two `/card-review` passes per unit. Pass 1 kept 21 of 42, pass 2 kept 30 of 39, and the one question pass 2 added was reviewed once more. The owner took every recommendation in one batch: two unit goals reworded, the `choice` tasks keep L0/L1's «Wähle alle Antworten, die zutreffen.» because the Check never shows a task's `instructions`, and the ISO/IEC 25010:2023 names stand as Informationssicherheit (Security) and Betriebssicherheit (Safety), with Interaktionsfähigkeit carrying «(früher Benutzbarkeit)». card-check flags only L0's `sa-r1`/`r2`/`r3`, declined as re-rolls on unchanged text. **B2's iSAQB Beispielprüfung went out in the same republish** (owner call): regenerated from the authoring file, it now gives 12 of its 38 questions a `lessonId` (L1 and L2), and the Book description gained the attribution that 2026-09-18's owner calls had authored for it. Verified: 49/49 on the L2 units in a fresh Playwright profile; the exam pass covered the card ("38 Fragen · 52 Punkte · 75 Minuten"), the intro's attribution, a submit, and readiness per lesson summing to 52 (Grundlagen 6, Anforderungen 8, Other 38). The read-back pull matched the published tree file for file. The browser pass also caught single-asterisk italics in a note, which render as tap-to-lookup buttons in a general Book; they are gone.
 
 ## Open questions (owner, at step A2)
 
