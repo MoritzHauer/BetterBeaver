@@ -117,6 +117,9 @@ Apply the verdicts in your head, then check what is left:
   If your cuts break a floor, say which floor and what would restore it, such as merging boards or a concept the note teaches but no card has. Never keep a bad card just to hold a floor.
 
 - **Coverage:** every LZ id in the goal is still tested by at least one card or question. Name any that isn't.
+- **Goal:** the goal still promises what the cards and questions test, and no more. A promise that nothing tests, or a card the goal doesn't cover, is a mismatch. Rewording the goal is the owner's call, so report it as an OWNER finding with a proposed sentence.
+- **Instructions:** each task's `instructions` still fit the questions it holds. For example, "Wähle alle Antworten, die zutreffen." over a single-answer question is a mismatch, and so is a pick count that no longer matches. Report it as OWNER, with a proposed wording.
+- **Question mix:** if every `choice` question left is single-answer, say so. Situation rewrites tend to have one best answer, and on a Book that prepares for an exam, the questions should come in that exam's formats. The CPSA-F exam asks multi-answer questions more than any other kind.
 - **Boards:** no `matching` board puts two near-paraphrase definitions side by side.
 
 ## Output
@@ -138,6 +141,9 @@ Return exactly this, with no preamble, one block per unit:
 
 - Floors: …
 - Coverage: …
+- Goal: …
+- Instructions: …
+- Question mix: …
 ```
 
 List every card in the table, KEEPs included. Proposals cover REWRITE, SPLIT and MOVE only. End with one line over all units:

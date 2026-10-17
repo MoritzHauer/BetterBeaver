@@ -60,13 +60,18 @@ Worth knowing while authoring, because it decides how much is enough:
 
 ## 7. Before it ships
 
-**First, the card review** (`/card-review <tree> <unit-id>…`, §8). It comes before the gates because its rewrites would invalidate every check after it. Then the gates, in this order, because each step is cheaper than the next:
+**First, the card review** (`/card-review <tree> <unit-id>…`, §8). It comes before the gates because its rewrites would invalidate every check after it. **Run it twice per unit**, the second time over the reworked unit. One run is one sample: in the L0/L1 rework, the second pass still sent back over half of the first pass's rewrites, which the gates had all passed ([retro](card-rework-retro-2026-10-17.md)). `/ingest` step 6 says how to settle the two passes. Then the gates, in this order, because each step is cheaper than the next:
 
 1. `BB_CONTENT_DIR=<tree> corepack pnpm exec vitest run packages/schema/src/content.test.ts` — the validator.
 2. `python3 scripts/overlap-check.py --book <source.md> --lehrplan <curriculum.txt> <tree>` — the own-words rule over **every** learner-visible string, questions and explanations included. Exit 0 or it does not ship.
    - **A transcribed exam is the one exception, and it narrows the candidates rather than the rule.** Its question text is reproduced verbatim under a licence, so it is not ours to reword and a run it shares with the textbook is not a finding. Point the blocking check at the authoring file instead (`content.local/authoring/<exam>.json`), which holds exactly our words — explanation, `why`, title, description — and must exit 0. Then run it over the tree too and confirm by hand that every remaining hit sits inside a verbatim field; a hit anywhere else is a real one.
    - Proper names a licence **requires**, such as the copyright holder's legal name, will trip an 8-word run. Reword around it — changing the word order is enough — rather than lowering `--n`, and never at the cost of the attribution itself.
-3. `python3 scripts/card-check.py <tree>` — a second model answers every card from its front alone (definition → term among the unit's siblings, question from the unit's notes, cloze from the gapped sentence), and plain checks catch a front that gives its answer away, or correct options that all stand out by length. A flagged card is rewritten, not argued with: AMBIGUOUS is usually right (Сен күтүп ___ really takes отурасың, жатасың or турасың). Watch the flag rate per batch; a rule that keeps causing flags belongs in this file. After shipping, the same loop runs on learners: `node scripts/pull-feedback.ts <tree>` lists every card that got a 👎 or an open report, next to its text.
+3. `python3 scripts/card-check.py <tree>` — a second model answers every card from its front alone (definition → term among the unit's siblings, question from the unit's notes, cloze from the gapped sentence), and plain checks catch a front that gives its answer away, or correct options that all stand out by length. A flagged card is rewritten, not argued with: AMBIGUOUS is usually right (Сен күтүп ___ really takes отурасың, жатасың or турасың). There are two exceptions, and each is declined with its reason in the summary:
+   - **A re-roll:** the card's text is unchanged since a run it passed. card-check asks one prompt per unit, so editing any card in the unit re-asks all of its cards.
+   - **A bare label** that a blind reader can only guess, such as "A-/P-/K-Frage". Any wording that made it guessable would leak the answer (`/card-review` A7).
+
+   Watch the flag rate per batch; a rule that keeps causing flags belongs in this file. After shipping, the same loop runs on learners: `node scripts/pull-feedback.ts <tree>` lists every card that got a 👎 or an open report, next to its text.
+
 4. `node scripts/pack-bbbook.ts` + import in a **fresh** browser profile: play one session per new unit and one Check. A green validator proves the content is well-formed, never that it reads well.
 5. Only then republish, and record what shipped in the plan's implementation log.
 
