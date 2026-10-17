@@ -12,8 +12,10 @@ Two passes, cheapest first:
 1. Script checks (no LLM): does the front give the answer away? A concept's
    term inside its definition, a lexeme's word inside its gloss, a cloze
    answer elsewhere in its sentence, a correct option's text inside its
-   question stem (all whole-word). Definitions over 25 words are flagged too
-   (content-practices §2).
+   question stem (all whole-word), and correct options that all stand out by
+   length, the commonest test-wise cue (rules catch such item-writing flaws
+   more reliably than a model: docs/card-authoring-research-2026-10-16.md).
+   Definitions over 25 words are flagged too (content-practices §2).
 2. Blind test: a second model sees only the front, never the back.
    - lexeme/concept: the gloss or definition, against the unit's sibling
      terms — exactly what `matching` and `recognize` show. It names the term
@@ -73,10 +75,14 @@ def script_checks(item: dict) -> list[str]:
         for answer in CLOZE.findall(p["text"]):
             if contains_word(CLOZE.sub("___", p["text"]), answer):
                 out.append(f"cloze answer «{answer}» also appears outside the gap")
-    elif kind == "question":
+    elif kind == "question" and not p.get("labels"):
         for o in p["options"]:
-            if o["correct"] and not p.get("labels") and contains_word(p["stem"], o["text"]):
+            if o["correct"] and contains_word(p["stem"], o["text"]):
                 out.append(f"the stem contains the correct option «{o['text']}»")
+        right = [len(o["text"]) for o in p["options"] if o["correct"]]
+        wrong = [len(o["text"]) for o in p["options"] if not o["correct"]]
+        if right and wrong and min(right) > 1.2 * max(wrong):
+            out.append("every correct option is clearly longer than every wrong one")
     return out
 
 

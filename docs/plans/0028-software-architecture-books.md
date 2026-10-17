@@ -249,7 +249,7 @@ The pure-R3 objectives are 01-03, 01-05, 03-09, 03-11, 03-12, 04-04, 04-09, 06-0
 
 ## Implementation log
 
-One line per unit as it ships: `L<n>.<m> · date · overlap 0 · validate green · browser ✓`.
+One line per unit as it ships: `L<n>.<m> · date · review k/n kept · overlap 0 · validate green · browser ✓`. The review tally is added from L2 on, since `/card-review` joined `/ingest` on 2026-10-16.
 
 - **A1 done 2026-09-10.** `scripts/overlap-check.py` (self-test with Glossar and book positive controls; on the real sources it flags verbatim Glossar and chapter text and passes a fresh sentence) and `scripts/pack-bbbook.ts`. `/ingest` has its "Scratch-tree Books" section. The Glossar rule changed during implementation: terms are kept in the stream, because in 30 of 117 entry rows term and definition are separated by a single space.
 - **Dry run passed 2026-09-10:** the packed L0 tree imported into a fresh profile with no errors, so the Library-listing fallback is not needed.

@@ -9,6 +9,8 @@ Curate the named lesson into shipped content. This is hand curation guided by a 
 
 **Read `docs/content-practices.md` first.** This file is the mechanics; that one is the reasoning behind the sizing, the task shapes, the question rules and the ship order, learned from the content already shipped.
 
+**Draft against the review's criteria.** Step 6 starts with `/card-review`; its checklist is `.claude/skills/card-review/SKILL.md`, and content-practices §8 gives the short version. A card written to them survives the review. Don't pad a unit to reach the sizing range, and don't hold back a candidate you're unsure about: draft it and let the review decide.
+
 The manual is `~/vault/sources/kyrgyz/Kyrgyz Language Manual/` (~12.5k lines of messy OCR: `ё`↔`е` confusions, garbled words, stray page numbers — trust the lesson body over its headers). Line ranges for the scoped backlog lessons (Transportation, Bazaar, Post Office, Appearance, Weather) are in `docs/plans/archive/0007-ingest-kyrgyz-manual.md` Context; the 8 unscoped lessons each need their own line-range pass first (same plan, step 4). The backlog itself is tracked in `docs/STATUS.md`.
 
 The contract is `packages/schema/src/entities.ts` (item kinds, task validator floors — `RECOGNIZE_DISTRACTOR_COUNT`, the matching 2–8/no-duplicate-prompt cap, `TASK_REQUIRED_ASSET`, cloze markup via `parseClozeMarkup`) enforced at startup by `validateContent`. Read it before authoring if unsure of a rule.
@@ -52,7 +54,13 @@ Since plan 0012 the backend is the content truth and `content/` is the frozen se
    **A unit's questions are answered on its Check page, never drilled**: each is asked once, in `taskIds` order, and then spaced by Daily Review. Working shape from the `sa` pass (2026-09-12): three questions per unit — two `choice` (one multi-answer, one single-answer) plus one `assign` of 3–4 rows — in exactly two tasks, `<code>-task-<n>-<m>-choice` and `-assign`, appended to the unit's `taskIds` in that order, with item ids `<code>-item-q-<n>-<m>-<k>`. Add the new item ids to `unit.itemIds` too, or class (d) orphans them. **Exam-only** questions go in no unit at all — their task is referenced only by an exam, which is what keeps them unseen until the learner sits it.
 
 5. **Wire.** Update the unit's JSON (`itemIds` = lexeme + sentence ids, `taskIds`, `noteIds`, `unlocksAfterUnitId` chaining the prior unit). If the unit is new, append its id to its **lesson's** `unitIds` (`content/kyrgyz/lessons/*.json`); if the lesson is new too, append the lesson id to `topic.json`'s `lessonIds` (topics own lessons, lessons own units — plan 0008).
-6. **Validate.** Run `corepack pnpm check`, then `python3 scripts/card-check.py content` and rewrite every flagged card. Then browser-verify one full session of the unit: read the text, tap a word to look it up, complete each new task type. Don't mark a lesson done without an actual browser session — a passing `pnpm check` only proves the content is structurally valid, not that it renders or reads correctly.
+6. **Review, then validate.**
+   - First run `/card-review content <unit-id>…`. A fresh read-only agent that has not seen this conversation keeps, rewrites, splits, moves or cuts every card of those units against explicit criteria.
+   - Apply its verdicts in your own words, all except OWNER, which goes to the plan owner. Decline a verdict only by naming the criterion it misreads, and say so in your summary.
+   - Re-run it only over cards you **added** in response (SPLIT, MOVE into a question). Rewrites are checked by the gates that follow.
+
+   Then run `corepack pnpm check`, then `python3 scripts/card-check.py content` and rewrite every flagged card. Then browser-verify one full session of the unit: read the text, tap a word to look it up, complete each new task type. Don't mark a lesson done without an actual browser session — a passing `pnpm check` only proves the content is structurally valid, not that it renders or reads correctly.
+
 7. **Ship.** With check green: `SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... node scripts/republish-content.ts` (the service key lives only with the user — ask them to run it if the env vars aren't set). It bumps only changed documents and appends version history; see `supabase/README.md`. Then commit `content/` (the shipped state doubles as the refreshed seed) and update the backlog list in `docs/STATUS.md`.
 
 ## Scratch-tree Books (general domain)
@@ -67,9 +75,9 @@ For a Library Book that must **never** live in the repo's `content/` (frozen onb
 - **Domain and Book settings** ([plan 0027](../../../docs/plans/0027-authored-questions-and-exam-mode.md) §§10–11), set once per Book rather than per unit. A knowledge domain declares `exercises` on `domain.json` to keep unsuitable exercises out of practice. `sa` uses `["matching", "recognize", "recall"]`, which drops typing the term (`write`) and the definition→term MCQ. A Book may declare `practiceDepth` (`"careful"`/`"normal"`/`"fast"`) on `topic.json`; `softwarearchitektur` uses `"fast"`. Every non-question item must still keep at least one allowed exercise **other than `matching`**. Author a `recall` task over every concept, or the unit can never complete.
 - **Goals** cite LZ ids, never LZ titles. Mark a unit whose LZs are all pure-R3 (plan §4a) with "(R3, nicht prüfungsrelevant)".
 - **Step 5 (wire):** units into `lessons/<id>.json` `unitIds`, lessons into `topic.json` `lessonIds`, all inside the working tree.
-- **Step 6 (validate), in order:**
+- **Step 6 (review, then validate):** first `/card-review "$BB_CONTENT_DIR" <unit-id>…`, applied as in step 6 above. Then, in order:
   1. `corepack pnpm exec vitest run packages/schema/src/content.test.ts` with `BB_CONTENT_DIR` set;
   2. `python3 scripts/overlap-check.py --book "<vault book .md>" --lehrplan scratch.local/sources/lehrplan-cpsa-f-de.txt "$BB_CONTENT_DIR"`, which must exit 0;
   3. `python3 scripts/card-check.py "$BB_CONTENT_DIR"` — the blind test (content-practices §7); rewrite every flagged card;
   4. `node scripts/pack-bbbook.ts scratch.local/review.bbbook`, then import it in Settings in a **fresh** browser profile (`apps/web:verify` recipe) and play one session per new unit. An unlisted Book cannot be opened any other way.
-- **Step 7 (ship):** `SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... node scripts/republish-content.ts` with `BB_CONTENT_DIR` set. **No commit.** Then add one line per shipped unit to the plan's implementation log.
+- **Step 7 (ship):** `SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... node scripts/republish-content.ts` with `BB_CONTENT_DIR` set. **No commit.** Then add one line per shipped unit to the plan's implementation log, with the review tally (`review 9/13 kept`).
