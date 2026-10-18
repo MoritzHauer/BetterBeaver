@@ -8,6 +8,7 @@ Normative elsewhere, not repeated here: the validator classes (`packages/schema/
 
 - One unit is **5–15 minutes**: roughly 7–13 words or concepts, at most 3 notes.
 - A source chapter that yields more becomes several units, split along its own sub-themes, not at an arbitrary count.
+- A unit may be **notes only** (an info unit): no tasks and no items, at least one note. Validator class (i) allows exactly that case; items without tasks are still an error.
 - The unit's `goal` says what the learner can do afterwards, in their language. For a curriculum Book it also cites the objective ids it serves, never their titles (0028 §3).
 
 ## 2. Definitions are answer options, so keep them short
@@ -73,7 +74,7 @@ Worth knowing while authoring, because it decides how much is enough:
    Watch the flag rate per batch; a rule that keeps causing flags belongs in this file. After shipping, the same loop runs on learners: `node scripts/pull-feedback.ts <tree>` lists every card that got a 👎 or an open report, next to its text.
 
 4. `node scripts/pack-bbbook.ts` + import in a **fresh** browser profile: play one session per new unit and one Check. A green validator proves the content is well-formed, never that it reads well.
-5. Only then republish, and record what shipped in the plan's implementation log.
+5. Only then republish. Nothing goes into the repo afterwards: the backend's `versions` table and the working tree's git history are the record.
 
 ## 8. Fewer, better cards
 
