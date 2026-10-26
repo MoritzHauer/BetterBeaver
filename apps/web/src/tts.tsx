@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { declareAmbientAudio } from "./audio-session";
 
 const synth = "speechSynthesis" in window ? window.speechSynthesis : undefined;
 
@@ -78,6 +79,7 @@ export function SpeakerButton({
       aria-label={`Play ${text}`}
       onClick={(event) => {
         event.stopPropagation();
+        declareAmbientAudio();
         if (assetUrl !== undefined) {
           void new Audio(assetUrl).play();
         } else if (lang !== undefined) {
