@@ -2,6 +2,8 @@
  * call is fire-and-forget and silently no-ops where audio is unavailable, or
  * when the learner has turned Sound effects off in Settings. */
 
+import { declareAmbientAudio } from "./audio-session";
+
 /** Sound effects are on unless explicitly set to "off" (Settings toggle). */
 export const SOUND_KEY = "bb.sound";
 function soundEffectsOn(): boolean {
@@ -36,6 +38,7 @@ function play(notes: () => void): void {
     return;
   }
   try {
+    declareAmbientAudio();
     notes();
   } catch {
     // No audio (e.g. AudioContext unavailable): feedback is visual anyway.
