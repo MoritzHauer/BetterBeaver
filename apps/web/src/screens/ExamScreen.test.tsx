@@ -88,7 +88,9 @@ function renderExam(props: Partial<Parameters<typeof ExamScreen>[0]> = {}) {
   const onOpenQuestion = vi.fn();
   const onOpenReport = vi.fn();
   const onPracticeMissed = vi.fn();
-  render(
+  const element = (
+    next: Partial<Parameters<typeof ExamScreen>[0]> = {},
+  ): React.ReactElement => (
     <ExamScreen
       content={content}
       exam={exam}
@@ -99,9 +101,18 @@ function renderExam(props: Partial<Parameters<typeof ExamScreen>[0]> = {}) {
       onReview={vi.fn()}
       onBack={vi.fn()}
       {...props}
-    />,
+      {...next}
+    />
   );
-  return { onOpenQuestion, onOpenReport, onPracticeMissed };
+  const { rerender } = render(element());
+  return {
+    onOpenQuestion,
+    onOpenReport,
+    onPracticeMissed,
+    /** Same screen, new props — a question change, not a remount. */
+    rerender: (next: Partial<Parameters<typeof ExamScreen>[0]>) =>
+      rerender(element(next)),
+  };
 }
 
 beforeEach(() => {
@@ -233,6 +244,30 @@ describe("the exam runner", () => {
     fireEvent.click(screen.getByText("Bausteinsicht"));
     expect(screen.getByLabelText("Frage 1, beantwortet")).toBeTruthy();
     expect(screen.getByLabelText("Frage 2, offen")).toBeTruthy();
+  });
+
+  it("opens each question at its top, after the navigator centres", () => {
+    // Weiter sits below a question taller than a phone screen. The
+    // navigator's `scrollIntoView` only happened to pull the window most of
+    // the way up; the screen's own reset has to land last.
+    const calls: string[] = [];
+    const scrollTo = vi
+      .spyOn(window, "scrollTo")
+      .mockImplementation(() => calls.push("window"));
+    const proto = Element.prototype as Partial<Element>;
+    const before = proto.scrollIntoView;
+    proto.scrollIntoView = () => calls.push("navigator");
+    try {
+      startedRecord();
+      const { rerender } = renderExam({ questionIndex: 0 });
+      calls.length = 0;
+      rerender({ questionIndex: 1 });
+      expect(calls).toEqual(["navigator", "window"]);
+      expect(scrollTo).toHaveBeenLastCalledWith(0, 0);
+    } finally {
+      proto.scrollIntoView = before;
+      scrollTo.mockRestore();
+    }
   });
 
   it("submits and moves the attempt to the last result", () => {

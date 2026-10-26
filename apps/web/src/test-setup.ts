@@ -17,6 +17,12 @@ window.matchMedia ??= (query: string) =>
     removeEventListener: () => {},
   }) as unknown as MediaQueryList;
 
+// jsdom defines `window.scrollTo` but only to report "Not implemented" on
+// every call — and the session and exam screens call it on each new card.
+// It has no layout to scroll, so a no-op is the honest stand-in; the scroll
+// itself is asserted in a real browser (`SessionScreen.scroll-top.e2e`).
+window.scrollTo = () => {};
+
 // jsdom doesn't implement `<dialog>`'s modal API either (checked against the
 // jsdom this repo resolves: `showModal` is undefined), and `Sheet` calls it on
 // mount — without this, rendering any dialog in a test throws. Enough of the
