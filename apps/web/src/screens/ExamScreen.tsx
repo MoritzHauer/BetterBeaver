@@ -145,6 +145,17 @@ export function ExamScreen({
     }
   }, [attempt, now, exam.id, onOpenReport]);
 
+  // Weiter is at the bottom of a question taller than a phone screen, and
+  // the window keeps its scroll offset across questions — so each one opens
+  // at its top. Runs after `ExamNavigator`'s own effect (children first),
+  // whose `scrollIntoView` only happened to pull the window most of the way
+  // up; the bar's horizontal centring is its own scroll and stays.
+  useEffect(() => {
+    if (questionIndex !== undefined) {
+      window.scrollTo(0, 0);
+    }
+  }, [questionIndex]);
+
   function answerCurrent(taskId: string, answer: ExamAnswer) {
     saveAnswer(exam.id, taskId, answer);
     setRecord(readExamRecord(exam.id));

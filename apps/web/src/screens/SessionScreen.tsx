@@ -256,6 +256,14 @@ export function SessionScreen({
   const [skipSheetOpen, setSkipSheetOpen] = useState(false);
   const touchStartX = useRef<number | null>(null);
 
+  // The window is the scroller, and advancing only remounts the question
+  // below — so a card taller than a phone screen, answered from its bottom,
+  // used to open the next card at the same offset, mid-question. Every card
+  // (including the first, and a retry's fresh run) opens at its top.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [position]);
+
   function tallyAuto(corrects: boolean[]) {
     setSummary((s) => ({
       ...s,
