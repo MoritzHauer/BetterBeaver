@@ -111,14 +111,14 @@ Line ranges refer to the vault's book file. Unit sizing follows `/ingest` step 1
 | L1 Grundlagen | 2 (187–651) | 01-01…01-06 | 1. Softwareintensive Systeme (2.2) · 2. Bausteine, Schnittstellen, Konfigurationen (2.3.1–2.3.2) · 3. Beschreibung, Ebenen, Umgebung, Nutzen (2.3.3–2.3.6) · 4. Entwurf aus der Vogelperspektive, die Rolle (2.4) |
 | L2 Anforderungen und Randbedingungen | 3 (652–972) | 02-01…02-05 | 1. Stakeholder, Einflussfaktoren (3.2) · 2. Qualitätsmodelle, ISO 25010, Taktiken (3.3) · 3. Szenarien (3.4) |
 | L3 Vorgehen und Prinzipien | 4.2–4.3 (1000–1241) | 03-02, 03-03, 03-04, 03-05 | 1. Vorgehen beim Entwurf (4.2) · 2. Top-down/bottom-up, Zerlegung, KISS, SoC (4.3.1–4.3.2) · 3. Integrität, Fehler erwarten, Information Hiding, Refactoring (4.3.3–4.3.6) |
-| L4 Entwicklungsansätze, Entwurfstechniken | 4.4–4.5 (1242–1631) | 03-01, 03-04, 03-06, 03-07 | 1. DDD (4.4.1) · 2. Globale Analyse, Evolutionäre Architektur, MDA, Referenzarchitekturen (4.4.2–4.4.5) · 3. Kopplung, Kohäsion, SOLID, Zyklen (4.5) |
+| L4 Entwicklungsansätze, Entwurfstechniken | 4.4–4.5 (1242–1631) | 03-01, 03-03, 03-04, 03-06, 03-07 | 1. DDD (4.4.1) · 2. Globale Analyse, Evolutionäre Architektur, MDA, Referenzarchitekturen (4.4.2–4.4.5) · 3. Kopplung, Kohäsion, SRP/OCP/DIP, Zyklen (4.5 without 4.5.7, 4.5.9) · 4. Schnittstellen: Entwurf, interne und externe Nutzer, ISP, LSP (4.5.7, 4.5.9; LZ 03-07 from the Lehrplan). **Amended 2026-10-26** (owner answer `1a 2a 3a`): 03-03 added, since units 1–2 teach Lehrplan 03-03 material beyond L3's share, and a fourth unit gives 03-07 its own sitting; the original row had 03-01, 03-04, 03-06, 03-07 in three units. |
 | L5 Muster | 4.6–4.7 (1632–2043) | 03-08, 03-09, 03-12 | 1. DI, MVC/MVP/PAC (4.6.1–4.6.2) · 2. Schichten, Pipes and Filters, Blackboard (4.6.3) · 3. Verteilte Systeme: Broker, SOA, Microservices (4.6.4; LZ 03-08 **and** 03-12) · 4. Entwurfsmuster I (4.7.1–4.7.6) **R3** · 5. Entwurfsmuster II (4.7.7–4.7.12) **R3** |
 | L6 Daten, Querschnitt, Betrieb | 4.8–4.9 (2044–2194), 5.4 (3070–3134) | 01-07, 03-10, 03-11 | 1. Daten und Datenmodelle (4.8) · 2. Querschnittskonzepte: Fehlerbehandlung, Sicherheit (5.4) · 3. Deployment, Betrieb, DevOps (4.9) **R3** |
 | L7 Beschreibung und Kommunikation | 5.2–5.3, 5.5–5.8 (2286–3069, 3135–3381) | 04-01…04-03, 04-05…04-09 | 1. Sichten, UML, Schablonen (5.3.1–5.3.3) · 2. Kontext- und Bausteinsicht (5.3.4–5.3.5) · 3. Laufzeit- und Verteilungssicht, Verfeinerung (5.3.6–5.3.9) · 4. Architektur und Implementierung, Dokumenttypen, ADRs (5.5–5.6) · 5. Praxisregeln, 4+1, SAGA (5.7–5.8) |
 | L8 Analyse und Bewertung | 6 (3418–3691) | 05-01…05-03 | 1. Qualitative/quantitative Bewertung, Metriken, Goodhart (6.2) · 2. Durchstich, Prototyp (6.3) · 3. ATAM (6.4) |
 | L9 Werkzeuge | 7 (3692–3976) | 04-09 | 1. Kosten, Lizenzen, Anforderungs- und Modellierungswerkzeuge (7.1–7.3) **R3** · 2. Analyse-, Versions-, Test- und Dokumentationswerkzeuge (7.4–7.9) **R3** |
 
-That makes **10 lessons and 32 units**, at roughly 8–10 concepts per unit: **~280–330 concepts** in the `sa` lexicon.
+That makes **10 lessons and 33 units**, at roughly 8–10 concepts per unit: **~280–330 concepts** in the `sa` lexicon.
 
 Placement calls:
 
