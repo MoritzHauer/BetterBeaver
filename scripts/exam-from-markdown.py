@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Builds an exam's items, tasks and `exam` entity from a vault question paper.
 
-Plan 0028 B2/B3. The two public exams are transcribed **verbatim** — the
-source's wording and its option order both (0028 B2) — so they are parsed
+Exams a licence lets us reproduce are transcribed **verbatim** — the source's
+wording and its option order both (docs/content-practices.md §0) — so they are parsed
 rather than retyped: a parser cannot paraphrase, reorder or drop an option,
 and the paper's own Loesungsschluessel table is then a second, independent
 statement of every answer that this script asserts against.

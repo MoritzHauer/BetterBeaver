@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Flag N-word runs shared between authored candidates and copyrighted sources.
 
-Plan 0028 §3 "own-words rule": we must never republish the book's or the
+The own-words rule (docs/content-practices.md §0): we must never republish the book's or the
 Lehrplan's wording. This walks candidate JSON/Markdown files, builds N-gram
 sets from the source corpora, and prints every run of N (default 8)
 consecutive words a candidate shares with a source.
@@ -208,7 +208,7 @@ def check_candidates(paths, sources, n):
 def self_test():
     failures = []
 
-    # Fixture 1: the three real Architekturentscheidung Glossar lines (plan 0028 §3).
+    # Fixture 1: the three real Architekturentscheidung Glossar lines (content-practices §0).
     book_fixture_1 = (
         "## C Glossar\n\n"
         "```\n"

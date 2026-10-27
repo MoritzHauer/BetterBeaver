@@ -1,6 +1,8 @@
 # Learning-format review: the software-architecture Book (2026-09-11)
 
-Scope: how the `softwarearchitektur` Book ([plan 0028](plans/0028-software-architecture-books.md)) actually plays under the progression engine ([0025](plans/0025-progression-engine.md)), what [0027](plans/0027-authored-questions-and-exam-mode.md) will add, what comparable platforms do, and which options would make BetterBeaver a better platform for knowledge domains in general. Review only, no code or content changed. No doc-reviewer round was run.
+> Note (2026-10-27): plan 0028 has since moved out of the repo into the owner's git-ignored `books.local/softwarearchitektur/plan.md`; its general rules are in [content-practices.md](content-practices.md) §0.
+
+Scope: how the `softwarearchitektur` Book (plan 0028) actually plays under the progression engine ([0025](plans/0025-progression-engine.md)), what [0027](plans/0027-authored-questions-and-exam-mode.md) will add, what comparable platforms do, and which options would make BetterBeaver a better platform for knowledge domains in general. Review only, no code or content changed. No doc-reviewer round was run.
 
 Trigger: owner, 2026-09-11 — "levels and ladder is not really helpful here. They should all be curated. Single choice, multiple choice and flash cards are probably the best task types."
 
