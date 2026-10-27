@@ -291,7 +291,7 @@ button.plain {
 }
 
 /* section.card now pads itself (below) — its direct-child divs
- * (.grade-buttons, .chat-compose) don't need a second inset on top. */
+ * (.grade-buttons) don't need a second inset on top. */
 section.card > div {
   padding: 0;
 }
@@ -317,7 +317,7 @@ form.card p {
   color: var(--locked-fg);
 }
 
-/* section.card (Settings/Stats groups, the topic chat box) isn't a list-row
+/* section.card (Settings/Stats groups) isn't a list-row
  * button or a p/form.card — pad it directly, and space consecutive ones
  * apart (ui-review 2026-07-21). */
 section.card {
@@ -2225,8 +2225,7 @@ button.danger {
   padding: 0.2rem 0;
 }
 
-/* Content feedback (plan 0014): votes/report on any content level, plus
- * the per-topic public chat. */
+/* Content feedback (plan 0014): votes/report on any content level. */
 textarea {
   font: inherit;
   color: inherit;
@@ -2258,25 +2257,6 @@ textarea {
 
 .feedback-vote.active {
   opacity: 1;
-}
-
-.chat-messages {
-  gap: 0.5rem;
-}
-
-.chat-message {
-  padding: 0.5rem 0.75rem;
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 0.5rem;
-}
-
-.chat-compose {
-  display: flex;
-  gap: 0.5rem;
-  align-items: flex-end;
-  margin-top: 0.75rem;
 }
 
 /* The cap on how much of a description a card shows (owner, 2026-09-18:

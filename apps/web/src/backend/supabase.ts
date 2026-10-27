@@ -22,7 +22,7 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as
 let client: SupabaseClient | undefined;
 
 /** Null when the backend isn't configured, or when the learner has turned on
- * offline mode — author UI, feedback and chat all hide entirely either way. */
+ * offline mode — author UI and feedback both hide entirely either way. */
 export function getSupabase(): SupabaseClient | null {
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY || isOffline()) {
     return null;

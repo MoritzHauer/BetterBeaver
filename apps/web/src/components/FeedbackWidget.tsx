@@ -17,22 +17,19 @@ const CATEGORIES: { value: ReportCategory; label: string }[] = [
 ];
 
 /** Thumbs up/down + report action (plan 0014), attached to any content
- * level (topic/lesson/unit/item/task/note) or a chat message
- * (`contentKind: "chat_message"`, not otherwise voteable). Hidden entirely
- * when the backend isn't configured — feedback has nowhere to go. */
+ * level (topic/lesson/unit/item/task/note). Hidden entirely when the
+ * backend isn't configured — feedback has nowhere to go. */
 export function FeedbackWidget({
   docId,
   contentKind,
   contentId,
 }: {
   docId: string;
-  contentKind: ContentKind | "chat_message";
+  contentKind: ContentKind;
   contentId: string;
 }) {
   const [vote, setVote] = useState(() =>
-    contentKind === "chat_message"
-      ? null
-      : getMyVote(docId, contentKind, contentId),
+    getMyVote(docId, contentKind, contentId),
   );
   const [reportOpen, setReportOpen] = useState(false);
 
@@ -43,47 +40,41 @@ export function FeedbackWidget({
   async function handleVote(value: 1 | -1) {
     const next = vote === value ? null : value;
     setVote(next);
-    if (contentKind !== "chat_message") {
-      await castVote(docId, contentKind, contentId, next).catch(() => {
-        // best-effort: local cache already reflects the tap either way
-      });
-    }
+    await castVote(docId, contentKind, contentId, next).catch(() => {
+      // best-effort: local cache already reflects the tap either way
+    });
   }
 
   return (
     <div className="feedback-widget">
-      {contentKind !== "chat_message" && (
-        <>
-          <button
-            type="button"
-            className={
-              vote === 1 ? "plain feedback-vote active" : "plain feedback-vote"
-            }
-            aria-label="Thumbs up"
-            aria-pressed={vote === 1}
-            onClick={() => void handleVote(1)}
-          >
-            <img
-              src={`${import.meta.env.BASE_URL}art/icons/thumbs_up.png`}
-              alt=""
-            />
-          </button>
-          <button
-            type="button"
-            className={
-              vote === -1 ? "plain feedback-vote active" : "plain feedback-vote"
-            }
-            aria-label="Thumbs down"
-            aria-pressed={vote === -1}
-            onClick={() => void handleVote(-1)}
-          >
-            <img
-              src={`${import.meta.env.BASE_URL}art/icons/thumbs_down.png`}
-              alt=""
-            />
-          </button>
-        </>
-      )}
+      <button
+        type="button"
+        className={
+          vote === 1 ? "plain feedback-vote active" : "plain feedback-vote"
+        }
+        aria-label="Thumbs up"
+        aria-pressed={vote === 1}
+        onClick={() => void handleVote(1)}
+      >
+        <img
+          src={`${import.meta.env.BASE_URL}art/icons/thumbs_up.png`}
+          alt=""
+        />
+      </button>
+      <button
+        type="button"
+        className={
+          vote === -1 ? "plain feedback-vote active" : "plain feedback-vote"
+        }
+        aria-label="Thumbs down"
+        aria-pressed={vote === -1}
+        onClick={() => void handleVote(-1)}
+      >
+        <img
+          src={`${import.meta.env.BASE_URL}art/icons/thumbs_down.png`}
+          alt=""
+        />
+      </button>
       <button
         type="button"
         className="plain feedback-vote"
@@ -111,7 +102,7 @@ function ReportPopup({
   onClose,
 }: {
   docId: string;
-  contentKind: ContentKind | "chat_message";
+  contentKind: ContentKind;
   contentId: string;
   onClose: () => void;
 }) {

@@ -1,5 +1,5 @@
 /** Per-device anonymous identity for content feedback (plan 0014). Learners
- * never have an account (design.md), so votes/reports/chat are attributed
+ * never have an account (design.md), so votes/reports are attributed
  * to a device id + a display name generated on first use — both plain
  * `localStorage` values, never a Supabase Auth identity. */
 

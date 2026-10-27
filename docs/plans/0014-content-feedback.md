@@ -1,5 +1,7 @@
 # Plan 0014: Content feedback (votes, reports, book chat)
 
+> **Status:** votes and reports are current. **The public chat was removed 2026-10-27** (switched off in the app since July 2026; its code, `chat_messages` and `chat_messages_public` are gone via migration `20261027000000_drop_chat.sql`). The chat decisions below are kept as history.
+
 Decided via grilling in-session 2026-07-20; implemented directly (no doc-reviewer round — scope was small enough to grill straight to code).
 
 ## What this is
