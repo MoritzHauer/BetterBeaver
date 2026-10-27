@@ -1,15 +1,32 @@
 # Content practices
 
-What to keep in mind when authoring units, tasks and questions. The mechanics live in the `/ingest` skill; this file is the **why**, so a decision made once does not have to be re-argued per lesson. Rules here were learned from shipped content: the Kyrgyz Book (plans 0007, 0008), the software-architecture Book ([0028](plans/0028-software-architecture-books.md)) and the learning-format review of [2026-09-11](learning-format-review-2026-09-11.md).
+What to keep in mind when authoring units, tasks and questions. The mechanics live in the `/ingest` skill; this file is the **why**, so a decision made once does not have to be re-argued per lesson. Rules here were learned from shipped content: the Kyrgyz Book (plans 0007, 0008), the software-architecture Book and the learning-format review of [2026-09-11](learning-format-review-2026-09-11.md).
 
-Normative elsewhere, not repeated here: the validator classes (`packages/schema/src/validate.ts`), the task-type contracts (`entities.ts`), and the own-words/licence rules of the Book you are authoring.
+Normative elsewhere, not repeated here: the validator classes (`packages/schema/src/validate.ts`) and the task-type contracts (`entities.ts`).
+
+## 0. Book plans and licensed sources
+
+**Each Book has a content plan, kept out of the repo.** It lives at `books.local/<book-slug>/plan.md` in the owner's checkout, git-ignored by `*.local` like `content.local/`. Before a Book's first unit its plan must say three things: what of each source may and may not be reproduced (with each source's licence), how the source splits into lessons and units (with section or line ranges and the curriculum objective ids each unit serves), and the Book's id patterns. The rules below hold for every Book; the plan adds only what is particular to its sources.
+
+- **Own words by default.** When a source grants no redistribution, structure is free but expression is not. Every learner-visible string is ours: notes, `definition` and `example`, unit and lesson `title`/`goal`, task `instructions`, Book and exam `description`s, questions and explanations. Read the section, then write with it closed; nothing is copied or closely paraphrased, and that includes a source's review lists and a curriculum's objective titles.
+- **Selection and arrangement count too.** Re-wording a list the source made up itself (its own nine rules as a nine-item list) can still copy it. Teach that idea in a structure of our own. Lists that are the field's common property (SOLID, the ISO 25010 characteristics) are exempt, and established public material (named patterns, ATAM, arc42, C4, 4+1) may be named and explained freely.
+- **Examples and figures are invented**, never the source's running example or its figures.
+- **Cite objective ids, never their titles.** A curriculum's ids and which topics it covers are facts; its wording is not ours. A goal reads "Kopplung und Kohäsion bewerten (LZ 03-04, 03-06)". The overlap check can't catch a copied five-word title, so this rule does.
+- **The overlap check is mechanical and blocking.** `scripts/overlap-check.py` flags any run of 8 or more consecutive words shared with a source, after case-folding and stripping punctuation, over every learner-visible field. 8, not fewer, because technical terms recur legitimately. It normalises the sources so it doesn't fail open (footnote digits glued to words removed, a glossary's explanation column taken on its own), and its self-test must flag a verbatim source sentence and pass a fresh one. A curriculum may be checked against the owner's local text extraction, which is never committed. §7 says where it runs.
+- **Verbatim only where a licence allows it, and then exactly.** A transcribed text keeps the source's wording **and its option order**, even against our affirmative-first rule (§5): reordering would change a text we claim to reproduce. Transcribe by parser where one exists, checked against the source's own answer key, and from the printed original when an extraction is lossy.
+- **Honour every licence condition where learners see it.** Attribution a licence requires goes into learner-visible text, the Book `description` and the exam's `description`; resource titles and `sourceRef`s show only on editor screens, so they don't count. A free-of-charge condition holds for as long as the content stays public; if the Library ever charges, that content stays free or leaves.
+- **Nothing implies endorsement.** A Book named after a registered mark or a certifying body opens its `description` with a non-affiliation sentence and, when a model helped write it, an AI-assistance sentence. Neither may be dropped, and the Book card's two-line clamp means the sentence saying what the Book is goes first.
+- **Model-written content is badged and checked like ours.** `generated: true` (§5) on every model-written question, and the overlap check plus a read for selection-and-arrangement copying before it ships, since a model writing from a source tends to reproduce its selections.
+- **Material without a public licence never leaves the owner's device.** It goes into a private Book (own domain, UUID ids, plan 0017), packed with `pack-bbbook.ts` and imported in Settings, and is never committed or uploaded.
+- **Exams sit in the Book they test**, after its lessons, not in a Book of their own: a second Book would duplicate the domain and give the same concepts two independent review states. For the same reason, a question that already ships in one Book is dropped from another rather than drilled twice.
+- **Don't invent a calibration.** Questions from a source that gives no ruleset or time limit become a practice unit, not an exam.
 
 ## 1. The unit is a sitting, not a chapter
 
 - One unit is **5–15 minutes**: roughly 7–13 words or concepts, at most 3 notes.
 - A source chapter that yields more becomes several units, split along its own sub-themes, not at an arbitrary count.
 - A unit may be **notes only** (an info unit): no tasks and no items, at least one note. Validator class (i) allows exactly that case; items without tasks are still an error.
-- The unit's `goal` says what the learner can do afterwards, in their language. For a curriculum Book it also cites the objective ids it serves, never their titles (0028 §3).
+- The unit's `goal` says what the learner can do afterwards, in their language. For a curriculum Book it also cites the objective ids it serves, never their titles (§0). A unit whose objectives are all outside the exam says so in its goal, e.g. "(R3, nicht prüfungsrelevant)" for CPSA-F, so a learner short on time can skip it; the Book plan's objective table decides, not the source's own side-note labels.
 
 ## 2. Definitions are answer options, so keep them short
 

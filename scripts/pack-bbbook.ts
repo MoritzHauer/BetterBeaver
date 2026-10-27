@@ -1,7 +1,7 @@
 // Packs a scratch content tree holding exactly one Book and one lexicon
 // domain into a `.bbbook` file — the private-Book import format the web app
 // accepts in Settings (plan 0017; `PrivateBookExportFile` in
-// apps/web/src/content/private-transfer.ts). Used by plan 0028 to load an
+// apps/web/src/content/private-transfer.ts). Used by /ingest's scratch-tree path to load an
 // unlisted Book into a fresh browser profile for review, without going
 // through the backend at all.
 //

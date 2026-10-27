@@ -1,6 +1,8 @@
 # Card authoring: what to cull, and who culls it
 
-A short survey, 2026-10-16, before L2–L9 of the software-architecture Book ([plan 0028](plans/0028-software-architecture-books.md)) are written. The question: what do established card-writing guides and published LLM card-generation workflows put between "drafted" and "shipped", and what of that is worth adding to `/ingest`? The answer became [`/card-review`](../.claude/skills/card-review/SKILL.md), an independent reviewer that keeps, rewrites, splits, moves or cuts every freshly drafted card before validation.
+> Note (2026-10-27): plan 0028 has since moved out of the repo into the owner's git-ignored `books.local/softwarearchitektur/plan.md`; its general rules are in [content-practices.md](content-practices.md) §0.
+
+A short survey, 2026-10-16, before L2–L9 of the software-architecture Book (plan 0028) are written. The question: what do established card-writing guides and published LLM card-generation workflows put between "drafted" and "shipped", and what of that is worth adding to `/ingest`? The answer became [`/card-review`](../.claude/skills/card-review/SKILL.md), an independent reviewer that keeps, rewrites, splits, moves or cuts every freshly drafted card before validation.
 
 ## What already existed
 

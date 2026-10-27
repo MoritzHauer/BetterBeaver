@@ -2284,7 +2284,7 @@ textarea {
  * character count, because the count that fits depends on the width and the
  * language — and the full text is never lost: BookScreen renders it whole.
  * Deliberately not a limit on the content itself: this Book's two
- * affiliation disclaimers are required by plan 0028 §2, so a content limit
+ * affiliation disclaimers are required (docs/content-practices.md §0), so a content limit
  * would either drop them or warn about them for ever. */
 .card-description {
   display: -webkit-box;
