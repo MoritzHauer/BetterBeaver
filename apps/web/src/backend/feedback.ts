@@ -1,8 +1,7 @@
 import { getSupabase } from "./supabase";
 import { getDeviceId, getDisplayName } from "../identity";
 
-/** Content feedback (plan 0014): votes, reports, and a public per-book
- * chat. Learners are account-free, so every write carries the device
+/** Content feedback (plan 0014): votes and reports. Learners are account-free, so every write carries the device
  * id/display name from `identity.ts` instead of a Supabase Auth user.
  * All functions no-op (or return empty) when the backend isn't configured,
  * matching the rest of `backend/` — feedback is best-effort, never
@@ -19,18 +18,10 @@ export interface FeedbackTarget {
   contentId: string;
 }
 
-export interface ChatMessage {
-  id: string;
-  doc_id: string;
-  display_name: string;
-  message: string;
-  created_at: string;
-}
-
 export interface FeedbackReport {
   id: string;
   doc_id: string;
-  content_kind: ContentKind | "chat_message";
+  content_kind: ContentKind;
   content_id: string;
   device_id: string;
   display_name: string;
@@ -96,7 +87,7 @@ export async function castVote(
 
 export async function submitReport(
   docId: string,
-  contentKind: ContentKind | "chat_message",
+  contentKind: ContentKind,
   contentId: string,
   category: ReportCategory,
   message?: string,
@@ -148,64 +139,6 @@ export async function setReportResolved(
     .from("feedback_reports")
     .update({ resolved })
     .eq("id", id);
-  if (error) {
-    throw new Error(error.message);
-  }
-}
-
-// ------------------------------------------------------------------- chat
-// One public thread per book (`docId` is the book doc id) — every
-// learner who opens it sees every message.
-
-export async function sendChatMessage(
-  docId: string,
-  message: string,
-): Promise<void> {
-  const trimmed = message.trim();
-  if (trimmed === "") {
-    return;
-  }
-  const supabase = getSupabase();
-  if (supabase === null) {
-    throw new Error("backend not configured");
-  }
-  const { error } = await supabase.from("chat_messages").insert({
-    doc_id: docId,
-    device_id: getDeviceId(),
-    display_name: getDisplayName(),
-    message: trimmed,
-  });
-  if (error) {
-    throw new Error(error.message);
-  }
-}
-
-/** Public read (via `chat_messages_public`, which strips `device_id`). */
-export async function listChatMessages(docId: string): Promise<ChatMessage[]> {
-  const supabase = getSupabase();
-  if (supabase === null) {
-    return [];
-  }
-  const { data, error } = await supabase
-    .from("chat_messages_public")
-    .select("*")
-    .eq("doc_id", docId)
-    .order("created_at", { ascending: true });
-  if (error) {
-    throw new Error(error.message);
-  }
-  return data as ChatMessage[];
-}
-
-/** Maintainer-only moderation: delete a chat message (RLS scopes this to
- * the doc's maintainers) — the only moderation action, reached via the
- * same report flow as any other content. */
-export async function deleteChatMessage(id: string): Promise<void> {
-  const supabase = getSupabase();
-  if (supabase === null) {
-    throw new Error("backend not configured");
-  }
-  const { error } = await supabase.from("chat_messages").delete().eq("id", id);
   if (error) {
     throw new Error(error.message);
   }

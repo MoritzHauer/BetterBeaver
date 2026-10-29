@@ -2,7 +2,7 @@
  * Datenschutzerklärung — the Art. 13 GDPR information duty, not a summary.
  * Every claim here is checked against the code: `content/source.ts` (catalog
  * fetch on launch), `backend/storage.ts` (assets), `backend/feedback.ts` +
- * `identity.ts` (device id, display name, public chat), `backend/supabase.ts`
+ * `identity.ts` (device id, display name), `backend/supabase.ts`
  * (magic-link author accounts), `offline.ts` (what offline mode does and does
  * not cover). Change any of those and this page has to change with them.
  *
@@ -69,30 +69,24 @@ export function PrivacyScreen({ onBack }: { onBack: () => void }) {
           still refresh the app itself from GitHub.
         </p>
 
-        <h2>Feedback, reports and chat</h2>
+        <h2>Feedback and reports</h2>
         <p>
           These are optional and only happen when you use them. Voting on
-          content, reporting content, or posting in a Book's chat sends to the
-          backend: a random id generated on this device, your display name
-          (auto-generated as "AnonymBeaver…", changeable in Settings), and what
-          you wrote. There is no account behind any of it.
+          content or reporting content sends to the backend: a random id
+          generated on this device, your display name (auto-generated as
+          "AnonymBeaver…", changeable in Settings), and what you wrote. There is
+          no account behind any of it.
         </p>
         <p>
-          <strong>
-            Chat messages and the display name attached to them are public
-          </strong>{" "}
-          — everyone using that Book can read them. Do not put anything in
-          either that you do not want published. Votes and reports are visible
-          only to the maintainers of that Book. Legal basis: Art. 6(1)(f) GDPR —
-          our legitimate interest in improving the content, acted on only when
-          you submit something.
+          Votes and reports are visible only to the maintainers of that Book.
+          Legal basis: Art. 6(1)(f) GDPR — our legitimate interest in improving
+          the content, acted on only when you submit something.
         </p>
         <p>
           Because the device id has no account behind it, we cannot tell which
           entries are yours. Clearing your browser's data for this site gives
-          this device a new id, but anything already posted stays. To get a chat
-          message removed, report it — the Book's maintainer can delete it — or
-          email us with the text and roughly when you posted it.
+          this device a new id, but anything already sent stays. To get a report
+          removed, email us with the text and roughly when you sent it.
         </p>
 
         <h2>Author accounts</h2>

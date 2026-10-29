@@ -474,7 +474,7 @@ export function SettingsScreen({
         <p className="status">
           No content updates and no connection to the database. Your downloaded
           Books, vocabulary and progress all keep working; the Library, content
-          editing, feedback and chat are hidden while this is on.
+          editing and feedback are hidden while this is on.
         </p>
       </section>
 
@@ -482,8 +482,7 @@ export function SettingsScreen({
         <section className="card">
           <h2>Feedback name</h2>
           <p className="status">
-            Shown next to your votes, reports, and chat messages — no account
-            needed.
+            Shown next to your votes and reports — no account needed.
           </p>
           <input
             type="text"

@@ -26,7 +26,6 @@ import { SettingsSheet } from "../components/SettingsSheet";
 import { UndoToast, useUndoSnapshot } from "../components/UndoToast";
 import { LockableProgress } from "../components/ProgressBar";
 import { FeedbackWidget } from "../components/FeedbackWidget";
-import { ChatThread } from "../components/ChatThread";
 import { BookWatermark } from "../components/BookWatermark";
 import { useEditSession } from "./edit/EditSessionContext";
 import { ProblemMarker, bookEditOps, withOptionalKey } from "./edit/inPlace";
@@ -37,8 +36,6 @@ import { optionsFrom } from "./entityPicker";
 // on each lesson card. Imported rather than re-declared — `SessionEditSheet`
 // already reaches across screens for the same component.
 import { GrowingTextarea } from "./UnitScreen";
-
-const CHAT_ENABLED = false;
 
 /** One practice-able task and where it lives, for the shuffle buttons (plan 0008). */
 export interface PracticeTarget {
@@ -289,8 +286,8 @@ export function BookScreen({
             );
           })()}
           {/* Reporting a problem in content you are editing is a loop, so
-              this and the chat block below are hidden in edit mode — and in
-              Preview and Diff, which are the same content. */}
+              this is hidden in edit mode — and in Preview and Diff, which
+              are the same content. */}
           {session === null && (
             <FeedbackWidget
               docId={`topic:${content.topic.id}`}
@@ -668,11 +665,6 @@ export function BookScreen({
             </>
           )}
         </>
-      )}
-      {/* ponytail: chat deactivated per owner call, not removed — code
-       * stays intact for later; flip this back to re-enable. */}
-      {CHAT_ENABLED && edit === null && (
-        <ChatThread docId={`topic:${content.topic.id}`} />
       )}
       {pendingDelete !== undefined && (
         <ConfirmSheet

@@ -4,11 +4,11 @@
  *
  * Two chokepoints enforce it, because every request in the app goes through
  * one of them: `getSupabase()` (all supabase-js traffic — authoring, feedback
- * votes/reports, chat) returns null, and `fetchRest()` (the anon-key catalog
+ * votes/reports) returns null, and `fetchRest()` (the anon-key catalog
  * reads behind update checks and the Library) throws. Every caller of
  * `getSupabase()` already null-checks it for the "backend not configured"
- * case, so the Library card, the authoring entry, the feedback widgets and
- * the topic chat all hide themselves for free.
+ * case, so the Library card, the authoring entry, and the feedback widgets
+ * all hide themselves for free.
  *
  * Not covered: the service worker's own app-shell refresh
  * (`registerType: "autoUpdate"` in vite.config.ts), which is outside the
